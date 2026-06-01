@@ -46,21 +46,31 @@ export type DocumentAsset = {
 
 export type RecentQuestion = {
   turnId: string;
-  sessionId: string;
-  question: string;
+  sessionId?: string | null;
+  question?: string | null;
   kbScope?: string[];
   createdAt?: string;
 };
 
 export type RecentCitation = {
   segmentId: string;
-  assetId: string;
-  kbId: string;
-  fileName?: string;
-  title?: string;
-  snippet?: string;
-  citationReason?: string;
+  assetId?: string | null;
+  kbId?: string | null;
+  fileName?: string | null;
+  title?: string | null;
+  snippet?: string | null;
+  citationReason?: string | null;
   openedAt?: string;
+};
+
+export type RecentQuestionList = {
+  items: RecentQuestion[];
+  nextCursor?: string | null;
+};
+
+export type RecentCitationList = {
+  items: RecentCitation[];
+  nextCursor?: string | null;
 };
 
 export type HomeSummary = {
@@ -74,7 +84,16 @@ export type HomeSummary = {
   recentQuestions?: RecentQuestion[];
   recentCitations?: RecentCitation[];
   recentIngestionTasks?: IngestionTaskSummary[];
+  helpLinks?: Array<{
+    title: string;
+    url: string;
+  }>;
   warnings?: string[];
+  state?: {
+    loading: boolean;
+    empty: boolean;
+    error: boolean;
+  };
 };
 
 export type SupportedFormat = {
