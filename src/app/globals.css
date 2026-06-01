@@ -1,12 +1,28 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #f7f9fc;
+  --background: #fffced;
   --foreground: #101828;
   --muted: #667085;
-  --line: #e4e7ec;
+  --line: #eee5c9;
   --brand: #2563eb;
   --brand-soft: #eff6ff;
+  --surface: #fffdf2;
+  --surface-hover: #fff7d8;
+}
+
+.dark {
+  --background: #1f2937;
+  --foreground: #d7dde7;
+  --muted: #a8b3c2;
+  --line: #475569;
+  --brand: #60a5fa;
+  --brand-soft: rgba(37, 99, 235, 0.16);
+  --surface: #2a3648;
+  --surface-hover: #334155;
+  color-scheme: dark;
 }
 
 * {
@@ -49,18 +65,18 @@ a {
 .panel {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--surface);
   box-shadow: 0 12px 30px rgba(16, 24, 40, 0.04);
 }
 
 .field {
   height: 44px;
   width: 100%;
-  border: 1px solid #d0d5dd;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--surface);
   padding: 0 14px;
-  color: #101828;
+  color: var(--foreground);
   outline: none;
   transition:
     border-color 160ms ease,

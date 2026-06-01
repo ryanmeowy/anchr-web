@@ -12,6 +12,8 @@ import type {
   PagedList,
   Preference,
   PreviewSegment,
+  RecentCitationList,
+  RecentQuestionList,
   ProviderList,
   SearchPage,
   SearchSetting,
@@ -79,8 +81,26 @@ async function request<T>(path: string, options: RequestOptions = {}) {
   return payload.data;
 }
 
+function normalizePreviewSegmentId(segmentId: string) {
+  return segmentId.replace(/%253A/gi, ":").replace(/%3A/gi, ":");
+}
+
+function activityQuery(limit: number, cursor?: string | null) {
+  const params = new URLSearchParams({ limit: String(limit) });
+
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+
+  return params.toString();
+}
+
 export const apiClient = {
   homeSummary: () => request<HomeSummary>("/api/v1/home/summary"),
+  recentQuestions: (limit = 10, cursor?: string | null) =>
+    request<RecentQuestionList>(`/api/v1/activity/recent-questions?${activityQuery(limit, cursor)}`),
+  recentCitations: (limit = 10, cursor?: string | null) =>
+    request<RecentCitationList>(`/api/v1/activity/recent-citations?${activityQuery(limit, cursor)}`),
   listKnowledgeBases: (page = 1, size = 20) =>
     request<PagedList<KnowledgeBase>>(`/api/v1/kbs?page=${page}&size=${size}`),
   createKnowledgeBase: (body: { name: string; description?: string }) =>
@@ -138,10 +158,10 @@ export const apiClient = {
       body,
     }),
   previewSegment: (segmentId: string) =>
-    request<PreviewSegment>(`/api/v1/preview/segments/${encodeURIComponent(segmentId)}`),
+    request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}`),
   previewNeighbors: (segmentId: string) =>
     request<{ items?: PreviewSegment["surroundingChunks"] }>(
-      `/api/v1/preview/segments/${encodeURIComponent(segmentId)}/neighbors?before=2&after=2`,
+      `/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}/neighbors?before=2&after=2`,
     ),
   providers: () => request<ProviderList>("/api/v1/settings/providers"),
   searchSetting: () => request<SearchSetting>("/api/v1/settings/search"),
