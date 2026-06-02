@@ -152,26 +152,29 @@ export function AskPage() {
 
   return (
     <div className="min-h-[calc(100vh-68px)] px-4 py-6 sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:py-8">
-      <div className="mx-auto grid max-w-[1340px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-14">
-        <section className="min-w-0 pt-3 lg:pt-10">
-          <div className="mx-auto max-w-[820px]">
+      <div className="mx-auto grid max-w-[1320px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start xl:gap-9">
+        <section className="min-w-0 pt-3 lg:pt-8">
+          <div className="mx-auto max-w-[920px]">
             <div className="text-center">
-              <h1 className="relative inline-flex items-start text-[34px] font-semibold leading-tight tracking-normal text-slate-950 dark:text-slate-200 sm:text-[40px] lg:text-[46px]">
-                向知识库提问
-                <Sparkles className="ml-2 mt-1 text-blue-500 sm:ml-3" size={30} fill="currentColor" strokeWidth={1.8} />
+              <h1 className="relative inline-flex flex-wrap items-baseline justify-center gap-x-3 text-[36px] font-extrabold leading-none tracking-[-0.035em] text-slate-950 dark:text-slate-100 sm:text-[50px] lg:text-[64px]">
+                <span>Welcome to</span>
+                <span className="bg-gradient-to-r from-[#4157ff] via-[#2f8cff] to-[#47e5e7] bg-clip-text text-transparent">
+                  Anchr
+                </span>
+                <Sparkles className="ml-1 mt-1 self-start text-blue-500 sm:ml-2" size={28} fill="currentColor" strokeWidth={1.8} />
               </h1>
               <p className="mt-4 text-[17px] text-slate-500 dark:text-slate-400">从你的知识库中获取可靠答案，并附上来源</p>
             </div>
 
-            <div className="mt-8 rounded-[18px] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[0_22px_60px_rgba(15,23,42,0.08)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:shadow-[0_22px_60px_rgba(0,0,0,0.26)] sm:mt-10 sm:p-5">
+            <div className="mt-8 rounded-[22px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-[0_26px_80px_rgba(15,23,42,0.11)] ring-1 ring-blue-500/5 dark:border-[var(--line)] dark:bg-[var(--surface)] dark:shadow-[0_26px_80px_rgba(0,0,0,0.34)] dark:ring-blue-400/10 sm:mt-10 sm:p-6">
               <textarea
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="询问公司制度库、技术文档库..."
-                className="min-h-[86px] w-full resize-none border-0 bg-transparent px-1 text-[18px] leading-8 text-slate-950 outline-none placeholder:text-slate-400 dark:text-slate-200 dark:placeholder:text-slate-500"
+                placeholder="ask something..." 
+                className="min-h-[132px] w-full resize-none border-0 bg-transparent px-1 text-[19px] leading-9 text-slate-950 outline-none placeholder:text-slate-400 dark:text-slate-200 dark:placeholder:text-slate-500 sm:min-h-[156px]"
               />
 
-              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-5 flex flex-col gap-4 border-t border-[var(--line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-wrap items-center gap-3">
                   <button
                     className="grid size-11 shrink-0 place-items-center rounded-[12px] border border-[var(--line)] text-slate-500 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:text-slate-400 dark:hover:bg-[var(--surface-hover)]"
@@ -287,7 +290,7 @@ export function AskPage() {
               </div>
             </div>
 
-            <div className="mt-9 flex flex-wrap justify-center gap-5">
+            <div className="mt-7 flex flex-wrap justify-center gap-3">
               {modeOptions.map((item) => {
                 const Icon = item.icon;
                 const active = activeMode === item.label;
@@ -298,13 +301,13 @@ export function AskPage() {
                     type="button"
                     onClick={() => setActiveMode(item.label)}
                     className={[
-                      "inline-flex h-12 min-w-[128px] items-center justify-center gap-3 rounded-full border px-5 text-[15px] font-medium transition",
+                      "inline-flex h-9 min-w-[96px] items-center justify-center gap-2 rounded-full border px-3 text-[13px] font-medium transition",
                       active
                         ? "border-blue-500 bg-blue-50 text-blue-600 dark:border-blue-400/70 dark:bg-blue-500/15 dark:text-blue-300"
                         : "border-[var(--line)] bg-[var(--surface)] text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]",
                     ].join(" ")}
                   >
-                    <Icon size={20} />
+                    <Icon size={16} />
                     {item.label}
                   </button>
                 );
@@ -353,7 +356,7 @@ export function AskPage() {
           </div>
         </section>
 
-        <aside className="space-y-5 pt-0 xl:pt-4">
+        <aside className="space-y-5 pt-0 xl:self-end">
           <FavoriteKnowledgeBases
             items={favoriteKbs}
             isLoading={homeQuery.isLoading}
@@ -388,16 +391,16 @@ function RecentQuestions({
   onToggleAll: () => void;
 }) {
   return (
-    <div className="mt-12 lg:mt-20">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-200">最近提问</h2>
+    <div className="mt-10 lg:mt-14">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-[15px] font-semibold text-slate-950 dark:text-slate-200">最近提问</h2>
         <button
           type="button"
           onClick={onToggleAll}
-          className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-300"
+          className="inline-flex items-center gap-0.5 text-xs font-medium leading-none text-[#0969da] dark:text-[#58a6ff]"
         >
           {isExpanded ? "收起" : "查看全部"}
-          <ChevronRight size={16} />
+          <ChevronRight size={11} />
         </button>
       </div>
 
@@ -411,23 +414,25 @@ function RecentQuestions({
             最近提问暂不可用。
           </div>
         ) : questions.length > 0 ? (
-          questions.slice(0, isExpanded ? 50 : 3).map((item) => (
-            <Link
-              key={item.turnId}
-              href="/ask"
-              className="grid grid-cols-1 gap-3 border-b border-[var(--line)] px-5 py-4 last:border-b-0 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:hover:bg-[var(--surface-hover)] sm:grid-cols-[1fr_auto] sm:items-center lg:grid-cols-[1fr_auto_auto] lg:gap-4"
-            >
-              <div className="flex min-w-0 items-center gap-4">
-                <MessageCircle className="shrink-0 text-slate-500 dark:text-slate-400" size={19} />
-                <span className="truncate text-[15px] font-medium text-slate-900 dark:text-slate-200">{item.question ?? "未命名问题"}</span>
-              </div>
-              <KnowledgeBaseNameLabels names={item.knowledgeBaseNames ?? item.kbScope ?? []} />
-              <div className="flex items-center justify-between gap-4 text-sm text-slate-500 dark:text-slate-400 sm:justify-end">
-                <span>{formatRelativeTime(item.createdAt)}</span>
-                <ChevronRight size={17} />
-              </div>
-            </Link>
-          ))
+          <div className={isExpanded ? "max-h-[360px] overflow-y-auto overscroll-contain" : ""}>
+            {questions.slice(0, isExpanded ? 50 : 3).map((item) => (
+              <Link
+                key={item.turnId}
+                href="/ask"
+                className="grid grid-cols-1 gap-2 border-b border-[var(--line)] px-4 py-3 last:border-b-0 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:hover:bg-[var(--surface-hover)] sm:grid-cols-[1fr_auto] sm:items-center lg:grid-cols-[1fr_auto_auto] lg:gap-3"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <MessageCircle className="shrink-0 text-slate-500 dark:text-slate-400" size={16} />
+                  <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-200">{item.question ?? "未命名问题"}</span>
+                </div>
+                <KnowledgeBaseNameLabels names={item.knowledgeBaseNames ?? item.kbScope ?? []} />
+                <div className="flex items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400 sm:justify-end">
+                  <span>{formatRelativeTime(item.createdAt)}</span>
+                  <ChevronRight size={15} />
+                </div>
+              </Link>
+            ))}
+          </div>
         ) : (
           <div className="px-5 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
             {summary?.state?.error ? "最近提问暂不可用。" : "暂无最近提问。"}
@@ -449,7 +454,7 @@ function KnowledgeBaseNameLabels({ names }: { names: string[] }) {
         <span
           key={`${item}-${index}`}
           className={[
-            "max-w-[120px] truncate rounded-[7px] px-2.5 py-1 text-xs font-medium",
+            "max-w-[104px] truncate rounded-[6px] px-2 py-0.5 text-[11px] font-medium",
             index % 2 === 0
               ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
               : "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
@@ -472,10 +477,13 @@ function FavoriteKnowledgeBases({
   onSelectKb: (kbId: string) => void;
 }) {
   return (
-    <div className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
-      <div className="flex items-center justify-between border-b border-[var(--line)] pb-4 dark:border-[var(--line)]">
-        <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-200">常用知识库</h2>
-        <Link href="/library" className="text-sm font-medium text-blue-600 dark:text-blue-300">管理</Link>
+    <div className="rounded-[12px] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
+      <div className="flex items-center justify-between border-b border-[var(--line)] pb-3 dark:border-[var(--line)]">
+        <h2 className="text-[15px] font-semibold text-slate-950 dark:text-slate-200">常用知识库</h2>
+        <Link href="/library" className="inline-flex items-center gap-0.5 text-xs font-medium leading-none text-[#0969da] dark:text-[#58a6ff]">
+          管理
+          <ChevronRight size={11} />
+        </Link>
       </div>
 
       {isLoading ? (
@@ -493,19 +501,19 @@ function FavoriteKnowledgeBases({
                 key={item.kbId}
                 type="button"
                 onClick={() => onSelectKb(item.kbId)}
-                className="flex w-full items-center gap-4 py-4 text-left"
+                className="flex w-full items-center gap-3 py-3 text-left"
               >
-                <span className={`grid size-12 shrink-0 place-items-center rounded-[10px] ${style.tile}`}>
-                  <Icon size={23} strokeWidth={2.2} />
+                <span className={`grid size-9 shrink-0 place-items-center rounded-[9px] ${style.tile}`}>
+                  <Icon size={18} strokeWidth={2.2} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-slate-950 dark:text-slate-200">{item.name}</span>
-                  <span className="mt-1 block truncate text-sm text-slate-500 dark:text-slate-400">
+                  <span className="block truncate text-sm font-semibold text-slate-950 dark:text-slate-200">{item.name}</span>
+                  <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">
                     文档 {formatNumber(item.documentCount)} <span className="px-1.5">·</span> 片段 {formatNumber(item.segmentCount)}
                   </span>
                 </span>
-                <span className="hidden shrink-0 items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-300 sm:inline-flex">
-                  <span className="size-2 rounded-full bg-emerald-500" />
+                <span className="hidden shrink-0 items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-300 sm:inline-flex">
+                  <span className="size-1.5 rounded-full bg-emerald-500" />
                   可用
                 </span>
               </button>
@@ -518,9 +526,9 @@ function FavoriteKnowledgeBases({
 
       <Link
         href="/library"
-        className="mt-1 flex h-11 items-center justify-center gap-2 border-t border-[var(--line)] pt-4 text-sm font-medium text-slate-500 hover:text-blue-600 dark:border-[var(--line)] dark:text-slate-400 dark:hover:text-blue-300"
+        className="mt-1 flex h-9 items-center justify-center gap-2 border-t border-[var(--line)] pt-3 text-xs font-medium text-slate-500 hover:text-blue-600 dark:border-[var(--line)] dark:text-slate-400 dark:hover:text-blue-300"
       >
-        <Plus size={18} />
+        <Plus size={15} />
         添加知识库
       </Link>
     </div>
@@ -541,16 +549,16 @@ function RecentCitations({
   onToggleAll: () => void;
 }) {
   return (
-    <div className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-200">最近引用</h2>
+    <div className="rounded-[12px] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-[15px] font-semibold text-slate-950 dark:text-slate-200">最近引用</h2>
         <button
           type="button"
           onClick={onToggleAll}
-          className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-300"
+          className="inline-flex items-center gap-0.5 text-xs font-medium leading-none text-[#0969da] dark:text-[#58a6ff]"
         >
           {isExpanded ? "收起" : "查看全部"}
-          <ChevronRight size={16} />
+          <ChevronRight size={11} />
         </button>
       </div>
 
@@ -561,25 +569,25 @@ function RecentCitations({
           最近引用暂不可用。
         </div>
       ) : items.length > 0 ? (
-        <div className="space-y-3">
+        <div className={["space-y-2", isExpanded ? "max-h-[420px] overflow-y-auto overscroll-contain pr-1" : ""].join(" ")}>
           {items.slice(0, isExpanded ? 50 : 3).map((item, index) => (
             <Link
               key={item.segmentId}
               href={`/preview/${item.segmentId}`}
-              className="block rounded-[8px] border border-[var(--line)] bg-[var(--surface)] p-3 hover:border-blue-200 hover:bg-blue-50/40 dark:border-[var(--line)] dark:bg-[var(--surface)] dark:hover:border-blue-400/40 dark:hover:bg-blue-500/10"
+              className="block rounded-[8px] border border-[var(--line)] bg-[var(--surface)] p-2.5 hover:border-blue-200 hover:bg-blue-50/40 dark:border-[var(--line)] dark:bg-[var(--surface)] dark:hover:border-blue-400/40 dark:hover:bg-blue-500/10"
             >
               <div className="mb-2 flex items-center gap-2">
                 <span className={`rounded-[5px] px-1.5 py-1 text-[11px] font-bold text-white ${citationBadgeColor(index)}`}>
                   {fileExtension(item.fileName)}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-slate-950 dark:text-slate-200">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-950 dark:text-slate-200">
                   {item.title || item.fileName || "引用片段"}
                 </span>
               </div>
-              <div className="line-clamp-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              <div className="line-clamp-2 text-xs leading-5 text-slate-600 dark:text-slate-300">
                 {item.snippet || item.citationReason || "暂无引用摘要。"}
               </div>
-              <div className="mt-2 text-right text-xs font-medium text-blue-600">[{index + 1}]</div>
+              <div className="mt-1.5 text-right text-[11px] font-medium text-blue-600">[{index + 1}]</div>
             </Link>
           ))}
         </div>

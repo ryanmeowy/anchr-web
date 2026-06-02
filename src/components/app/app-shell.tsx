@@ -45,20 +45,41 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAskPage = pathname === "/ask";
   const isLibraryPage = pathname === "/library";
-  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
-  });
+  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [themeHydrated, setThemeHydrated] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [sidebarHydrated, setSidebarHydrated] = useState(false);
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setTheme(getInitialTheme());
+      setThemeHydrated(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+      setSidebarHydrated(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!themeHydrated) return;
+
     document.documentElement.classList.toggle("dark", theme === "dark");
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme]);
+  }, [theme, themeHydrated]);
 
   useEffect(() => {
+    if (!sidebarHydrated) return;
+
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
-  }, [collapsed]);
+  }, [collapsed, sidebarHydrated]);
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--background)] text-slate-950 dark:bg-[var(--background)] dark:text-slate-200 lg:flex-row">

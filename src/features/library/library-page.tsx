@@ -712,8 +712,13 @@ function PanelHeader({ title, expanded, onToggle }: { title: string; expanded: b
   return (
     <div className="flex items-center justify-between">
       <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-100">{title}</h2>
-      <button type="button" onClick={onToggle} className="text-sm font-medium text-blue-600 dark:text-blue-300">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="inline-flex items-center gap-0.5 text-xs font-medium leading-none text-[#0969da] dark:text-[#58a6ff]"
+      >
         {expanded ? "收起" : "查看全部"}
+        <ChevronRight size={11} />
       </button>
     </div>
   );
