@@ -163,7 +163,7 @@ export function AskPage() {
               <p className="mt-4 text-[17px] text-slate-500 dark:text-slate-400">从你的知识库中获取可靠答案，并附上来源</p>
             </div>
 
-            <div className="mt-8 rounded-[18px] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[0_22px_60px_rgba(15,23,42,0.08)] dark:border-[#475569] dark:bg-[#2a3648] dark:shadow-[0_22px_60px_rgba(0,0,0,0.26)] sm:mt-10 sm:p-5">
+            <div className="mt-8 rounded-[18px] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[0_22px_60px_rgba(15,23,42,0.08)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:shadow-[0_22px_60px_rgba(0,0,0,0.26)] sm:mt-10 sm:p-5">
               <textarea
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
@@ -174,7 +174,7 @@ export function AskPage() {
               <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-wrap items-center gap-3">
                   <button
-                    className="grid size-11 shrink-0 place-items-center rounded-[12px] border border-[var(--line)] text-slate-500 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:text-slate-400 dark:hover:bg-[#334155]"
+                    className="grid size-11 shrink-0 place-items-center rounded-[12px] border border-[var(--line)] text-slate-500 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:text-slate-400 dark:hover:bg-[var(--surface-hover)]"
                     aria-label="添加附件"
                     type="button"
                   >
@@ -195,8 +195,8 @@ export function AskPage() {
                       className={[
                         "inline-flex h-11 w-full min-w-0 items-center gap-2 rounded-[12px] border bg-[var(--surface)] px-4 text-sm font-medium text-slate-700 transition sm:min-w-[168px] sm:max-w-[230px]",
                         isKbMenuOpen
-                          ? "border-blue-300 ring-4 ring-blue-50 dark:border-blue-400/60 dark:bg-[#2a3648] dark:text-slate-200 dark:ring-blue-500/15"
-                          : "border-[var(--line)] hover:border-slate-300 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-[#334155]",
+                          ? "border-blue-300 ring-4 ring-blue-50 dark:border-blue-400/60 dark:bg-[var(--surface)] dark:text-slate-200 dark:ring-blue-500/15"
+                          : "border-[var(--line)] hover:border-slate-300 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-[var(--surface-hover)]",
                       ].join(" ")}
                       aria-expanded={isKbMenuOpen}
                       aria-haspopup="listbox"
@@ -214,7 +214,7 @@ export function AskPage() {
 
                     {isKbMenuOpen ? (
                       <div
-                        className="absolute left-0 top-[calc(100%+8px)] z-20 w-[min(260px,calc(100vw-48px))] overflow-hidden rounded-[12px] border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.12)] dark:border-[#475569] dark:bg-[#2a3648] dark:shadow-[0_18px_45px_rgba(0,0,0,0.36)]"
+                        className="absolute left-0 top-[calc(100%+8px)] z-20 w-[min(260px,calc(100vw-48px))] overflow-hidden rounded-[12px] border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.12)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:shadow-[0_18px_45px_rgba(0,0,0,0.36)]"
                         role="listbox"
                       >
                         <button
@@ -225,7 +225,7 @@ export function AskPage() {
                           }}
                           className={[
                             "flex w-full items-center gap-3 rounded-[9px] px-3 py-2.5 text-left text-sm transition",
-                            !kbId ? "bg-blue-50 font-medium text-blue-600 dark:bg-blue-500/15 dark:text-blue-300" : "text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-300 dark:hover:bg-[#334155]",
+                            !kbId ? "bg-blue-50 font-medium text-blue-600 dark:bg-blue-500/15 dark:text-blue-300" : "text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]",
                           ].join(" ")}
                           role="option"
                           aria-selected={!kbId}
@@ -244,7 +244,7 @@ export function AskPage() {
                             }}
                             className={[
                               "flex w-full items-center gap-3 rounded-[9px] px-3 py-2.5 text-left text-sm transition",
-                              kbId === item.id ? "bg-blue-50 font-medium text-blue-600 dark:bg-blue-500/15 dark:text-blue-300" : "text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-300 dark:hover:bg-[#334155]",
+                              kbId === item.id ? "bg-blue-50 font-medium text-blue-600 dark:bg-blue-500/15 dark:text-blue-300" : "text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]",
                             ].join(" ")}
                             role="option"
                             aria-selected={kbId === item.id}
@@ -265,11 +265,11 @@ export function AskPage() {
                 <div className="flex shrink-0 items-center justify-end gap-3">
                   <button
                     type="button"
-                    className="inline-flex h-11 items-center gap-2 rounded-[12px] border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-medium text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-200 dark:hover:bg-[#334155]"
+                    className="inline-flex h-11 items-center gap-2 rounded-[12px] border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-medium text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]"
                   >
                     <Globe2 size={18} />
                     联网搜索
-                    <span className="ml-1 h-6 w-10 rounded-full bg-slate-200 p-0.5 dark:bg-[#475569]">
+                    <span className="ml-1 h-6 w-10 rounded-full bg-slate-200 p-0.5 dark:bg-[var(--line)]">
                       <span className="block size-5 rounded-full bg-[var(--surface)] shadow-sm dark:bg-slate-300" />
                     </span>
                   </button>
@@ -301,7 +301,7 @@ export function AskPage() {
                       "inline-flex h-12 min-w-[128px] items-center justify-center gap-3 rounded-full border px-5 text-[15px] font-medium transition",
                       active
                         ? "border-blue-500 bg-blue-50 text-blue-600 dark:border-blue-400/70 dark:bg-blue-500/15 dark:text-blue-300"
-                        : "border-[var(--line)] bg-[var(--surface)] text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-300 dark:hover:bg-[#334155]",
+                        : "border-[var(--line)] bg-[var(--surface)] text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]",
                     ].join(" ")}
                   >
                     <Icon size={20} />
@@ -318,7 +318,7 @@ export function AskPage() {
             ) : null}
 
             {answer ? (
-              <div className="mt-8 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
+              <div className="mt-8 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
                 <div className="flex items-center gap-2 text-sm font-semibold text-blue-600">
                   <Sparkles size={18} />
                   回答
@@ -401,7 +401,7 @@ function RecentQuestions({
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-[12px] border border-[var(--line)] bg-[var(--surface)] dark:border-[#475569] dark:bg-[#2a3648]">
+      <div className="overflow-hidden rounded-[12px] border border-[var(--line)] bg-[var(--surface)] dark:border-[var(--line)] dark:bg-[var(--surface)]">
         {isLoading ? (
           <div className="p-5">
             <LoadingBlock label="加载最近提问" />
@@ -415,7 +415,7 @@ function RecentQuestions({
             <Link
               key={item.turnId}
               href="/ask"
-              className="grid grid-cols-1 gap-3 border-b border-[var(--line)] px-5 py-4 last:border-b-0 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:hover:bg-[#334155] sm:grid-cols-[1fr_auto] sm:items-center lg:grid-cols-[1fr_auto_auto] lg:gap-4"
+              className="grid grid-cols-1 gap-3 border-b border-[var(--line)] px-5 py-4 last:border-b-0 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:hover:bg-[var(--surface-hover)] sm:grid-cols-[1fr_auto] sm:items-center lg:grid-cols-[1fr_auto_auto] lg:gap-4"
             >
               <div className="flex min-w-0 items-center gap-4">
                 <MessageCircle className="shrink-0 text-slate-500 dark:text-slate-400" size={19} />
@@ -472,8 +472,8 @@ function FavoriteKnowledgeBases({
   onSelectKb: (kbId: string) => void;
 }) {
   return (
-    <div className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
-      <div className="flex items-center justify-between border-b border-[var(--line)] pb-4 dark:border-[#475569]">
+    <div className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
+      <div className="flex items-center justify-between border-b border-[var(--line)] pb-4 dark:border-[var(--line)]">
         <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-200">常用知识库</h2>
         <Link href="/library" className="text-sm font-medium text-blue-600 dark:text-blue-300">管理</Link>
       </div>
@@ -483,7 +483,7 @@ function FavoriteKnowledgeBases({
           <LoadingBlock label="加载知识库" />
         </div>
       ) : items.length > 0 ? (
-        <div className="divide-y divide-[var(--line)] dark:divide-[#475569]">
+        <div className="divide-y divide-[var(--line)] dark:divide-[var(--line)]">
           {items.slice(0, 3).map((item, index) => {
             const style = kbIconStyles[index % kbIconStyles.length];
             const Icon = style.icon;
@@ -518,7 +518,7 @@ function FavoriteKnowledgeBases({
 
       <Link
         href="/library"
-        className="mt-1 flex h-11 items-center justify-center gap-2 border-t border-[var(--line)] pt-4 text-sm font-medium text-slate-500 hover:text-blue-600 dark:border-[#475569] dark:text-slate-400 dark:hover:text-blue-300"
+        className="mt-1 flex h-11 items-center justify-center gap-2 border-t border-[var(--line)] pt-4 text-sm font-medium text-slate-500 hover:text-blue-600 dark:border-[var(--line)] dark:text-slate-400 dark:hover:text-blue-300"
       >
         <Plus size={18} />
         添加知识库
@@ -541,7 +541,7 @@ function RecentCitations({
   onToggleAll: () => void;
 }) {
   return (
-    <div className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
+    <div className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-200">最近引用</h2>
         <button
@@ -557,7 +557,7 @@ function RecentCitations({
       {isLoading ? (
         <LoadingBlock label="加载最近引用" />
       ) : isError ? (
-        <div className="rounded-[8px] border border-dashed border-[var(--line)] px-4 py-8 text-center text-sm text-slate-500 dark:border-[#475569] dark:text-slate-400">
+        <div className="rounded-[8px] border border-dashed border-[var(--line)] px-4 py-8 text-center text-sm text-slate-500 dark:border-[var(--line)] dark:text-slate-400">
           最近引用暂不可用。
         </div>
       ) : items.length > 0 ? (
@@ -566,7 +566,7 @@ function RecentCitations({
             <Link
               key={item.segmentId}
               href={`/preview/${item.segmentId}`}
-              className="block rounded-[8px] border border-[var(--line)] bg-[var(--surface)] p-3 hover:border-blue-200 hover:bg-blue-50/40 dark:border-[#475569] dark:bg-[#2a3648] dark:hover:border-blue-400/40 dark:hover:bg-blue-500/10"
+              className="block rounded-[8px] border border-[var(--line)] bg-[var(--surface)] p-3 hover:border-blue-200 hover:bg-blue-50/40 dark:border-[var(--line)] dark:bg-[var(--surface)] dark:hover:border-blue-400/40 dark:hover:bg-blue-500/10"
             >
               <div className="mb-2 flex items-center gap-2">
                 <span className={`rounded-[5px] px-1.5 py-1 text-[11px] font-bold text-white ${citationBadgeColor(index)}`}>
@@ -584,7 +584,7 @@ function RecentCitations({
           ))}
         </div>
       ) : (
-        <div className="rounded-[8px] border border-dashed border-[var(--line)] px-4 py-8 text-center text-sm text-slate-500 dark:border-[#475569] dark:text-slate-400">
+        <div className="rounded-[8px] border border-dashed border-[var(--line)] px-4 py-8 text-center text-sm text-slate-500 dark:border-[var(--line)] dark:text-slate-400">
           暂无最近引用。
         </div>
       )}
