@@ -5,6 +5,7 @@ import {
   ChevronDown,
   MessageCircle,
   Moon,
+  PanelLeftClose,
   Search,
   Settings,
   Sun,
@@ -17,6 +18,7 @@ import { useEffect, useState } from "react";
 type ThemeMode = "light" | "dark";
 
 const THEME_STORAGE_KEY = "anchr.theme";
+const SIDEBAR_COLLAPSED_KEY = "anchr.sidebarCollapsed";
 
 function getInitialTheme(): ThemeMode {
   if (typeof window === "undefined") {
@@ -44,21 +46,64 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAskPage = pathname === "/ask";
   const isLibraryPage = pathname === "/library";
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  });
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+  }, [collapsed]);
+
   return (
     <div className="flex min-h-screen flex-col bg-[var(--background)] text-slate-950 dark:bg-[#1f2937] dark:text-slate-200 lg:flex-row">
-      <aside className="relative z-20 flex w-full flex-col border-b border-[var(--line)] bg-[var(--surface)] px-4 py-4 dark:border-[#475569] dark:bg-[#243044]/95 lg:fixed lg:inset-y-0 lg:left-0 lg:w-[248px] lg:border-b-0 lg:border-r lg:py-6">
-        <Link href="/ask" className="mb-4 flex items-center gap-3 px-2 lg:mb-10 lg:gap-4">
-          <LogoMark />
-          <span className="text-[24px] font-semibold tracking-normal text-[#0b1118] dark:text-slate-200 lg:text-[30px]">Anchr</span>
-        </Link>
+      <aside
+        className={[
+          "relative z-20 flex w-full flex-col border-b border-[var(--line)] bg-[var(--surface)] px-4 py-4 dark:border-[#475569] dark:bg-[#243044]/95",
+          "lg:fixed lg:inset-y-0 lg:left-0 lg:border-b-0 lg:border-r lg:py-6 lg:transition-[width] lg:duration-200 lg:ease-out",
+          collapsed ? "lg:w-[64px]" : "lg:w-[220px]",
+        ].join(" ")}
+      >
+        <div
+          className={[
+            "mb-4 flex items-center px-1 lg:mb-8",
+            collapsed ? "justify-center" : "justify-between",
+          ].join(" ")}
+        >
+          {collapsed ? (
+            <button
+              type="button"
+              onClick={() => setCollapsed(false)}
+              className="grid place-items-center rounded-[8px] hover:bg-[var(--surface-hover)] dark:hover:bg-[#334155]"
+              aria-label="展开侧边栏"
+              title="展开侧边栏"
+            >
+              <LogoMark />
+            </button>
+          ) : (
+            <>
+              <Link href="/ask" aria-label="Anchr 首页">
+                <LogoMark />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setCollapsed(true)}
+                className="grid size-9 place-items-center rounded-[8px] text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[#334155]"
+                aria-label="折叠侧边栏"
+                title="折叠侧边栏"
+              >
+                <PanelLeftClose size={18} />
+              </button>
+            </>
+          )}
+        </div>
 
-        <nav className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-2 lg:overflow-visible lg:pb-0">
+        <nav className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:space-y-1 lg:overflow-visible lg:pb-0">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -67,35 +112,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                title={collapsed ? item.label : undefined}
                 className={[
-                  "flex h-11 shrink-0 items-center gap-3 rounded-[8px] px-3 text-[15px] transition lg:h-12 lg:gap-4 lg:px-4 lg:text-[17px]",
+                  "flex h-10 shrink-0 items-center rounded-[8px] text-[14px] transition",
+                  collapsed ? "justify-center px-0" : "gap-3 px-3",
                   active
-                    ? "bg-blue-50 font-medium text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
+                    ? "bg-[var(--surface-hover)] font-medium text-slate-950 dark:bg-[#334155] dark:text-slate-50"
                     : "text-slate-700 hover:bg-[var(--surface-hover)] hover:text-slate-950 dark:text-slate-300 dark:hover:bg-[#334155] dark:hover:text-slate-50",
                 ].join(" ")}
               >
-                <Icon size={22} strokeWidth={1.8} />
-                {item.label}
+                <Icon size={18} strokeWidth={1.8} />
+                {!collapsed && <span>{item.label}</span>}
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-auto hidden border-t border-[var(--line)] pt-5 dark:border-[#475569] lg:block">
-          <div className="flex items-center gap-3 rounded-[8px] px-1 py-2">
-            <div className="grid size-12 shrink-0 place-items-center rounded-full border border-blue-200 bg-blue-50 text-lg font-semibold text-blue-600 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300">
-              W
+        <div className="mt-auto hidden border-t border-[var(--line)] pt-4 dark:border-[#475569] lg:block">
+          <div
+            className={[
+              "flex items-center rounded-[8px] py-1.5",
+              collapsed ? "justify-center" : "gap-3 px-1",
+            ].join(" ")}
+            title={collapsed ? "wang.li" : undefined}
+          >
+            <div className="grid size-9 shrink-0 place-items-center rounded-full border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-600 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300">
+              R
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-200">wang.li</div>
-              <div className="truncate text-xs text-slate-500 dark:text-slate-400">企业工作区</div>
-            </div>
-            <ChevronDown size={18} className="text-slate-500 dark:text-slate-400" />
+            {!collapsed && (
+              <div className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 dark:text-slate-200">
+                ryan
+              </div>
+            )}
           </div>
         </div>
       </aside>
 
-      <main className="min-h-screen flex-1 lg:ml-[248px]">
+      <main
+        className={[
+          "min-h-screen flex-1 transition-[margin] duration-200 ease-out",
+          collapsed ? "lg:ml-[64px]" : "lg:ml-[220px]",
+        ].join(" ")}
+      >
         {isAskPage ? (
           <header className="sticky top-0 z-10 flex h-[68px] items-center justify-end bg-[var(--background)] px-4 backdrop-blur dark:bg-[#1f2937]/90 sm:px-6 lg:h-[82px] lg:px-10">
             <ThemeSwitcher theme={theme} onChange={setTheme} />
@@ -132,32 +190,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function ThemeSwitcher({ theme, onChange }: { theme: ThemeMode; onChange: (theme: ThemeMode) => void }) {
   return (
-    <div className="inline-flex h-11 items-center rounded-[12px] border border-[var(--line)] bg-[var(--surface)] p-1 shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
+    <div className="inline-flex h-9 items-center rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-0.5 shadow-[0_4px_14px_rgba(15,23,42,0.05)] dark:border-[#475569] dark:bg-[#2a3648]">
       <button
         className={[
-          "grid size-9 place-items-center rounded-[9px] transition",
+          "grid size-7 place-items-center rounded-[8px] transition",
           theme === "light"
-            ? "bg-[var(--surface)] text-blue-600 shadow-sm dark:bg-[#2a3648]"
+            ? "bg-white text-blue-600 shadow-[0_1px_5px_rgba(15,23,42,0.12)] dark:bg-[#334155] dark:text-blue-300"
             : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[#334155]",
         ].join(" ")}
         aria-label="浅色主题"
         type="button"
         onClick={() => onChange("light")}
       >
-        <Sun size={20} />
+        <Sun size={16} strokeWidth={1.9} />
       </button>
       <button
         className={[
-          "grid size-9 place-items-center rounded-[9px] transition",
+          "grid size-7 place-items-center rounded-[8px] transition",
           theme === "dark"
-            ? "bg-slate-800 text-blue-300 shadow-sm"
+            ? "bg-[#334155] text-blue-300 shadow-[0_1px_5px_rgba(0,0,0,0.18)]"
             : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[#334155]",
         ].join(" ")}
         aria-label="深色主题"
         type="button"
         onClick={() => onChange("dark")}
       >
-        <Moon size={19} />
+        <Moon size={15} strokeWidth={1.9} />
       </button>
     </div>
   );
@@ -167,7 +225,7 @@ function LogoMark() {
   return (
     <svg
       aria-hidden="true"
-      className="size-11 shrink-0 lg:size-[56px]"
+      className="size-9 shrink-0 lg:size-8"
       viewBox="0 0 76 76"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"

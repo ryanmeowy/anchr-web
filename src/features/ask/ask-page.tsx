@@ -20,6 +20,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
@@ -47,8 +48,11 @@ const kbIconStyles = [
 ];
 
 export function AskPage() {
+  const searchParams = useSearchParams();
+  const initialKbId = searchParams.get("kbId") ?? "";
+  const initialKbName = searchParams.get("kbName") ?? "";
   const [query, setQuery] = useState("");
-  const [kbId, setKbId] = useState("");
+  const [kbId, setKbId] = useState(initialKbId);
   const [sessionId, setSessionId] = useState("");
   const [answer, setAnswer] = useState("");
   const [citations, setCitations] = useState<AnswerCitation[]>([]);
@@ -88,6 +92,11 @@ export function AskPage() {
     const options = kbs.map((item) => ({ id: item.id, name: item.name }));
     const existingIds = new Set(options.map((item) => item.id));
 
+    if (initialKbId && initialKbName && !existingIds.has(initialKbId)) {
+      options.push({ id: initialKbId, name: initialKbName });
+      existingIds.add(initialKbId);
+    }
+
     favoriteKbs.forEach((item) => {
       if (!existingIds.has(item.kbId)) {
         options.push({ id: item.kbId, name: item.name });
@@ -95,7 +104,7 @@ export function AskPage() {
     });
 
     return options;
-  }, [favoriteKbs, kbs]);
+  }, [favoriteKbs, initialKbId, initialKbName, kbs]);
 
   const selectedKbIds = useMemo(() => {
     if (kbId) {
@@ -142,7 +151,7 @@ export function AskPage() {
   });
 
   return (
-    <div className="min-h-[calc(100vh-68px)] bg-[var(--background)] px-4 py-6 dark:bg-[#1f2937] sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:py-8">
+    <div className="min-h-[calc(100vh-68px)] px-4 py-6 sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:py-8">
       <div className="mx-auto grid max-w-[1340px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-14">
         <section className="min-w-0 pt-3 lg:pt-10">
           <div className="mx-auto max-w-[820px]">
@@ -184,7 +193,7 @@ export function AskPage() {
                       type="button"
                       onClick={() => setIsKbMenuOpen((open) => !open)}
                       className={[
-                        "inline-flex h-11 w-full min-w-0 items-center gap-2 rounded-[12px] border bg-[var(--surface)] px-4 text-sm font-medium text-slate-700 shadow-sm transition sm:min-w-[168px] sm:max-w-[230px]",
+                        "inline-flex h-11 w-full min-w-0 items-center gap-2 rounded-[12px] border bg-[var(--surface)] px-4 text-sm font-medium text-slate-700 transition sm:min-w-[168px] sm:max-w-[230px]",
                         isKbMenuOpen
                           ? "border-blue-300 ring-4 ring-blue-50 dark:border-blue-400/60 dark:bg-[#2a3648] dark:text-slate-200 dark:ring-blue-500/15"
                           : "border-[var(--line)] hover:border-slate-300 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-[#334155]",
@@ -412,7 +421,7 @@ function RecentQuestions({
                 <MessageCircle className="shrink-0 text-slate-500 dark:text-slate-400" size={19} />
                 <span className="truncate text-[15px] font-medium text-slate-900 dark:text-slate-200">{item.question ?? "未命名问题"}</span>
               </div>
-              <KbScopeLabels scope={item.kbScope ?? []} />
+              <KnowledgeBaseNameLabels names={item.knowledgeBaseNames ?? item.kbScope ?? []} />
               <div className="flex items-center justify-between gap-4 text-sm text-slate-500 dark:text-slate-400 sm:justify-end">
                 <span>{formatRelativeTime(item.createdAt)}</span>
                 <ChevronRight size={17} />
@@ -429,14 +438,14 @@ function RecentQuestions({
   );
 }
 
-function KbScopeLabels({ scope }: { scope: string[] }) {
-  if (scope.length === 0) {
+function KnowledgeBaseNameLabels({ names }: { names: string[] }) {
+  if (names.length === 0) {
     return null;
   }
 
   return (
     <div className="hidden max-w-[270px] flex-wrap justify-end gap-2 md:flex">
-      {scope.slice(0, 2).map((item, index) => (
+      {names.slice(0, 2).map((item, index) => (
         <span
           key={`${item}-${index}`}
           className={[

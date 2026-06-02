@@ -33,7 +33,7 @@ const coverStyles = [
 ];
 
 const coverIcons = [ShieldCheck, Code2, Box, Star];
-const KB_PAGE_SIZE = 10;
+const KB_PAGE_SIZE = 6;
 type ViewMode = "grid" | "list";
 
 export function LibraryPage() {
@@ -88,7 +88,7 @@ export function LibraryPage() {
   }, [kbsQuery.data?.items, keyword]);
 
   return (
-    <div className="min-h-[calc(100vh-68px)] bg-[var(--background)] px-4 pb-8 dark:bg-[#1f2937] sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:pb-10">
+    <div className="min-h-[calc(100vh-68px)] px-4 pb-8 sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:pb-10">
       <div className="mx-auto grid max-w-[1320px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-8">
         <main className="min-w-0">
           <div className="mb-7 lg:mb-9">
@@ -346,53 +346,59 @@ function getVisiblePages(page: number, totalPages: number) {
   return Array.from({ length: end - start + 1 }, (_, index) => start + index);
 }
 
+function askHrefForKb(item: KnowledgeBase) {
+  const params = new URLSearchParams({ kbId: item.id, kbName: item.name });
+
+  return `/ask?${params.toString()}`;
+}
+
 function KnowledgeBaseCard({ item, index }: { item: KnowledgeBase; index: number }) {
   const CoverIcon = coverIcons[index % coverIcons.length];
   const lastUpdated = item.updatedAt ?? item.lastIngestedAt ?? item.createdAt;
 
   return (
-    <article className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-[104px_minmax(0,1fr)] sm:gap-6">
-        <div className={`relative h-36 rounded-[7px] bg-gradient-to-br ${coverStyles[index % coverStyles.length]} shadow-[0_14px_30px_rgba(15,23,42,0.18)] sm:h-[148px]`}>
-          <div className="absolute inset-x-0 top-10 grid place-items-center">
-            <CoverIcon size={44} strokeWidth={2.2} />
+    <article className="rounded-[12px] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[86px_minmax(0,1fr)] sm:gap-5">
+        <div className={`relative h-30 rounded-[7px] bg-gradient-to-br ${coverStyles[index % coverStyles.length]} shadow-[0_12px_24px_rgba(15,23,42,0.16)] sm:h-[122px]`}>
+          <div className="absolute inset-x-0 top-8 grid place-items-center">
+            <CoverIcon size={36} strokeWidth={2.2} />
           </div>
-          <div className="absolute bottom-8 left-7 h-1 w-10 rounded-full bg-white/18" />
-          <div className="absolute bottom-5 left-7 h-1 w-16 rounded-full bg-white/14" />
+          <div className="absolute bottom-7 left-6 h-1 w-9 rounded-full bg-white/18" />
+          <div className="absolute bottom-4 left-6 h-1 w-13 rounded-full bg-white/14" />
         </div>
 
         <div className="min-w-0">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="truncate text-[19px] font-semibold text-slate-950 dark:text-slate-100">{item.name}</h3>
-            <span className="shrink-0 rounded-[7px] bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+            <h3 className="truncate text-[17px] font-semibold text-slate-950 dark:text-slate-100">{item.name}</h3>
+            <span className="shrink-0 rounded-[7px] bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
               {item.status === "ACTIVE" ? "可问答" : statusText(item.status)}
             </span>
           </div>
-          <p className="mt-3 line-clamp-2 min-h-12 text-[15px] leading-6 text-slate-600 dark:text-slate-300">
+          <p className="mt-2 line-clamp-2 min-h-10 text-sm leading-5 text-slate-600 dark:text-slate-300">
             {item.description || "暂无描述"}
           </p>
 
-          <div className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-500 dark:text-slate-400">
-            <span className="inline-flex items-center gap-2">
-              <FileText size={15} />
+          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1.5">
+              <FileText size={14} />
               文档 {formatNumber(item.documentCount)}
             </span>
-            <span className="inline-flex items-center gap-2">
-              <Database size={15} />
+            <span className="inline-flex items-center gap-1.5">
+              <Database size={14} />
               片段 {formatNumber(item.segmentCount)}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="mt-5 flex flex-col gap-3 border-t border-[var(--line)] pt-4 dark:border-[#475569] sm:flex-row sm:items-center sm:justify-between">
-        <span className="text-sm text-slate-500 dark:text-slate-400">更新于 {formatDateTime(lastUpdated)}</span>
+      <div className="mt-4 flex flex-col gap-3 border-t border-[var(--line)] pt-3 dark:border-[#475569] sm:flex-row sm:items-center sm:justify-between">
+        <span className="text-xs text-slate-500 dark:text-slate-400">更新于 {formatDateTime(lastUpdated)}</span>
         <Link
-          href="/ask"
-          className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-medium text-slate-800 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-200 dark:hover:bg-[#334155]"
+          href={askHrefForKb(item)}
+          className="inline-flex h-9 items-center gap-2 rounded-[9px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-slate-800 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-200 dark:hover:bg-[#334155]"
         >
           进入提问
-          <ArrowRight size={16} />
+          <ArrowRight size={15} />
         </Link>
       </div>
     </article>
@@ -424,7 +430,7 @@ function KnowledgeBaseListRow({ item, index }: { item: KnowledgeBase; index: num
       <span className="text-sm text-slate-500 dark:text-slate-400">{formatDateTime(lastUpdated)}</span>
       <div className="flex justify-end">
         <Link
-          href="/ask"
+          href={askHrefForKb(item)}
           className="inline-flex h-9 items-center gap-2 rounded-[9px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-slate-800 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-200 dark:hover:bg-[#334155]"
         >
           提问
@@ -681,9 +687,17 @@ function QuestionRow({ item }: { item: RecentQuestion }) {
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-slate-950 dark:text-slate-100">{item.question || "未命名问题"}</div>
           <div className="mt-2 flex flex-wrap gap-2">
-            {(item.kbScope ?? []).slice(0, 2).map((scope, index) => (
-              <span key={`${scope}-${index}`} className="rounded-[6px] bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                {scope}
+            {(item.knowledgeBaseNames ?? item.kbScope ?? []).slice(0, 2).map((name, index) => (
+              <span
+                key={`${name}-${index}`}
+                className={[
+                  "rounded-[6px] px-2 py-0.5 text-xs",
+                  index % 2 === 0
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                    : "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
+                ].join(" ")}
+              >
+                {name}
               </span>
             ))}
           </div>

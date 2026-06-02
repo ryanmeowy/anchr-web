@@ -49,6 +49,7 @@ export type RecentQuestion = {
   sessionId?: string | null;
   question?: string | null;
   kbScope?: string[];
+  knowledgeBaseNames?: string[];
   createdAt?: string;
 };
 
