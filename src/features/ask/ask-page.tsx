@@ -421,7 +421,7 @@ function RecentQuestions({
                 <MessageCircle className="shrink-0 text-slate-500 dark:text-slate-400" size={19} />
                 <span className="truncate text-[15px] font-medium text-slate-900 dark:text-slate-200">{item.question ?? "未命名问题"}</span>
               </div>
-              <KbScopeLabels scope={item.kbScope ?? []} />
+              <KnowledgeBaseNameLabels names={item.knowledgeBaseNames ?? item.kbScope ?? []} />
               <div className="flex items-center justify-between gap-4 text-sm text-slate-500 dark:text-slate-400 sm:justify-end">
                 <span>{formatRelativeTime(item.createdAt)}</span>
                 <ChevronRight size={17} />
@@ -438,14 +438,14 @@ function RecentQuestions({
   );
 }
 
-function KbScopeLabels({ scope }: { scope: string[] }) {
-  if (scope.length === 0) {
+function KnowledgeBaseNameLabels({ names }: { names: string[] }) {
+  if (names.length === 0) {
     return null;
   }
 
   return (
     <div className="hidden max-w-[270px] flex-wrap justify-end gap-2 md:flex">
-      {scope.slice(0, 2).map((item, index) => (
+      {names.slice(0, 2).map((item, index) => (
         <span
           key={`${item}-${index}`}
           className={[

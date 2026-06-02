@@ -190,32 +190,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function ThemeSwitcher({ theme, onChange }: { theme: ThemeMode; onChange: (theme: ThemeMode) => void }) {
   return (
-    <div className="inline-flex h-11 items-center rounded-[12px] border border-[var(--line)] bg-[var(--surface)] p-1 shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
+    <div className="inline-flex h-9 items-center rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-0.5 shadow-[0_4px_14px_rgba(15,23,42,0.05)] dark:border-[#475569] dark:bg-[#2a3648]">
       <button
         className={[
-          "grid size-9 place-items-center rounded-[9px] transition",
+          "grid size-7 place-items-center rounded-[8px] transition",
           theme === "light"
-            ? "bg-[var(--surface)] text-blue-600 shadow-sm dark:bg-[#2a3648]"
+            ? "bg-white text-blue-600 shadow-[0_1px_5px_rgba(15,23,42,0.12)] dark:bg-[#334155] dark:text-blue-300"
             : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[#334155]",
         ].join(" ")}
         aria-label="浅色主题"
         type="button"
         onClick={() => onChange("light")}
       >
-        <Sun size={20} />
+        <Sun size={16} strokeWidth={1.9} />
       </button>
       <button
         className={[
-          "grid size-9 place-items-center rounded-[9px] transition",
+          "grid size-7 place-items-center rounded-[8px] transition",
           theme === "dark"
-            ? "bg-slate-800 text-blue-300 shadow-sm"
+            ? "bg-[#334155] text-blue-300 shadow-[0_1px_5px_rgba(0,0,0,0.18)]"
             : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[#334155]",
         ].join(" ")}
         aria-label="深色主题"
         type="button"
         onClick={() => onChange("dark")}
       >
-        <Moon size={19} />
+        <Moon size={15} strokeWidth={1.9} />
       </button>
     </div>
   );
