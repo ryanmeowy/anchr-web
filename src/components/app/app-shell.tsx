@@ -137,11 +137,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             title={collapsed ? "wang.li" : undefined}
           >
             <div className="grid size-9 shrink-0 place-items-center rounded-full border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-600 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300">
-              W
+              R
             </div>
             {!collapsed && (
               <div className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 dark:text-slate-200">
-                wang.li
+                ryan
               </div>
             )}
           </div>
