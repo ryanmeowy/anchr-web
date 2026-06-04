@@ -264,16 +264,83 @@ export type Preference = {
   density?: string;
 };
 
+export type ConversationCitation = {
+  fileName?: string;
+  pageNo?: number;
+  snippet?: string;
+  hitType?: string;
+  assetId?: string;
+  segmentId?: string;
+};
+
+export type ConversationSession = {
+  sessionId: string;
+  userId?: string;
+  title?: string | null;
+  status?: string;
+  lastMessagePreview?: string | null;
+  kbScope?: string[];
+  createdAt?: number;
+  updatedAt?: number;
+  expiresAt?: number;
+};
+
+export type ConversationSessionList = {
+  items: ConversationSession[];
+  nextCursor?: string | null;
+};
+
+export type ConversationTurn = {
+  turnId: string;
+  sessionId: string;
+  query?: string;
+  rewrittenQuery?: string;
+  answer?: string;
+  kbScope?: string[];
+  answerMode?: string;
+  citations?: ConversationCitation[];
+  resultCards?: Array<{
+    assetId?: string;
+    assetType?: string;
+    fileName?: string;
+    title?: string;
+    score?: number;
+    hitCount?: number;
+    primaryHit?: {
+      segmentId?: string;
+      snippet?: string;
+      score?: number;
+      pageNo?: number;
+      anchor?: unknown;
+      hitType?: string;
+    };
+    additionalHits?: Array<{
+      segmentId?: string;
+      snippet?: string;
+      score?: number;
+      pageNo?: number;
+      anchor?: unknown;
+      hitType?: string;
+    }>;
+  }>;
+  createdAt?: number;
+};
+
+export type ConversationMessageList = {
+  sessionId: string;
+  turns: ConversationTurn[];
+};
+
 export type ConversationMessage = {
   sessionId?: string;
   turnId?: string;
+  title?: string | null;
+  rewrittenQuery?: string;
   answer?: string;
-  citations?: Array<{
-    fileName?: string;
-    pageNo?: number;
-    snippet?: string;
-    hitType?: string;
-    assetId?: string;
-    segmentId?: string;
-  }>;
+  kbScope?: string[];
+  answerMode?: string;
+  retrievalStage?: string;
+  citations?: ConversationCitation[];
+  suggestedQuestions?: string[];
+  createdAt?: number;
 };

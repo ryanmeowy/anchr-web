@@ -149,7 +149,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="mt-auto hidden border-t border-[var(--line)] pt-4 dark:border-[var(--line)] lg:block">
+        {isAskPage && !collapsed ? (
+          <div
+            id="ask-conversations-slot"
+            className="-mx-1 mt-4 hidden min-h-0 flex-1 flex-col border-t border-[var(--line)] pt-4 dark:border-[var(--line)] lg:flex"
+          />
+        ) : null}
+
+        <div className={["mt-auto hidden border-t border-[var(--line)] pt-4 dark:border-[var(--line)] lg:block", isAskPage ? "lg:hidden" : ""].join(" ")}>
           <div
             className={[
               "flex items-center rounded-[8px] py-1.5",

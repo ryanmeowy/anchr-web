@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
+import { LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatNumber, statusText } from "@/lib/format";
 import type { KnowledgeBase, RecentCitation, RecentQuestion } from "@/lib/types";
@@ -50,6 +50,7 @@ export function LibraryPage() {
   const kbsQuery = useQuery({
     queryKey: ["kbs", kbPage, KB_PAGE_SIZE],
     queryFn: () => apiClient.listKnowledgeBases(kbPage, KB_PAGE_SIZE),
+    refetchOnWindowFocus: false,
   });
 
   const citationsQuery = useQuery({
@@ -162,7 +163,9 @@ export function LibraryPage() {
 
           {kbsQuery.isLoading ? <LoadingBlock label="正在加载知识库" /> : null}
           {kbsQuery.isError ? (
-            <ErrorBlock message={(kbsQuery.error as Error).message} onRetry={() => kbsQuery.refetch()} />
+            <div className="panel flex min-h-36 items-center justify-center px-6 text-center text-sm text-slate-500 dark:text-slate-400">
+              知识库暂不可用
+            </div>
           ) : null}
 
           {!kbsQuery.isLoading && !kbsQuery.isError && viewMode === "grid" ? (
