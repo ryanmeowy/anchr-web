@@ -19,7 +19,7 @@ import {
   Star,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatNumber, statusText } from "@/lib/format";
@@ -46,10 +46,20 @@ export function LibraryPage() {
   const [showAllQuestions, setShowAllQuestions] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [kbPage, setKbPage] = useState(1);
+  const deferredKeyword = useDeferredValue(keyword);
+  const searchKeyword = deferredKeyword.trim();
+  const isSearching = searchKeyword.length > 0;
 
   const kbsQuery = useQuery({
     queryKey: ["kbs", kbPage, KB_PAGE_SIZE],
     queryFn: () => apiClient.listKnowledgeBases(kbPage, KB_PAGE_SIZE),
+    refetchOnWindowFocus: false,
+  });
+
+  const searchQuery = useQuery({
+    queryKey: ["kbs", "search", searchKeyword, 50],
+    queryFn: () => apiClient.searchKnowledgeBases(searchKeyword, 50),
+    enabled: isSearching,
     refetchOnWindowFocus: false,
   });
 
@@ -76,17 +86,14 @@ export function LibraryPage() {
 
   const totalKbs = kbsQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalKbs / KB_PAGE_SIZE));
-
-  const items = useMemo(() => {
-    const value = keyword.trim().toLowerCase();
-    const list = kbsQuery.data?.items ?? [];
-
-    if (!value) {
-      return list;
-    }
-
-    return list.filter((item) => `${item.name} ${item.description ?? ""}`.toLowerCase().includes(value));
-  }, [kbsQuery.data?.items, keyword]);
+  const items = useMemo(
+    () => (isSearching ? searchQuery.data ?? [] : kbsQuery.data?.items ?? []),
+    [isSearching, kbsQuery.data?.items, searchQuery.data],
+  );
+  const isListLoading = isSearching ? searchQuery.isLoading : kbsQuery.isLoading;
+  const isListError = isSearching ? searchQuery.isError : kbsQuery.isError;
+  const listError = isSearching ? searchQuery.error : kbsQuery.error;
+  const listIsFetching = isSearching ? searchQuery.isFetching : kbsQuery.isFetching;
 
   return (
     <div className="min-h-[calc(100vh-68px)] px-4 pb-8 sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:pb-10">
@@ -107,11 +114,8 @@ export function LibraryPage() {
                   setKbPage(1);
                 }}
                 className="min-w-0 flex-1 bg-transparent text-[17px] text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500"
-                placeholder="询问或搜索所有知识库..."
+                placeholder="搜索知识库"
               />
-              <span className="hidden h-8 items-center rounded-[8px] border border-[var(--line)] bg-[var(--background)] px-3 text-sm font-medium text-slate-500 dark:border-[var(--line)] dark:bg-[var(--background)] dark:text-slate-400 md:inline-flex">
-                ⌘K
-              </span>
               <button
                 type="button"
                 className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-blue-600 text-white shadow-[0_10px_22px_rgba(37,99,235,0.28)] hover:bg-blue-700 sm:size-11"
@@ -161,55 +165,26 @@ export function LibraryPage() {
             </div>
           </div>
 
-          {kbsQuery.isLoading ? <LoadingBlock label="正在加载知识库" /> : null}
-          {kbsQuery.isError ? (
+          {isListLoading ? <LoadingBlock label={isSearching ? "正在搜索知识库" : "正在加载知识库"} /> : null}
+          {isListError ? (
             <div className="panel flex min-h-36 items-center justify-center px-6 text-center text-sm text-slate-500 dark:text-slate-400">
-              知识库暂不可用
+              {isSearching ? `知识库搜索失败：${(listError as Error)?.message ?? "请稍后重试"}` : "知识库暂不可用"}
             </div>
           ) : null}
 
-          {!kbsQuery.isLoading && !kbsQuery.isError && viewMode === "grid" ? (
+          {!isListLoading && !isListError && items.length === 0 && isSearching ? (
+            <div className="panel flex min-h-36 items-center justify-center px-6 text-center text-sm text-slate-500 dark:text-slate-400">
+              没有找到匹配的知识库
+            </div>
+          ) : null}
+
+          {!isListLoading && !isListError && viewMode === "grid" && (!isSearching || items.length > 0) ? (
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               {items.map((item, index) => (
                 <KnowledgeBaseCard key={item.id} item={item} index={index} />
               ))}
-              <CreateKnowledgeBaseCard
-                expanded={showCreateForm}
-                name={name}
-                description={description}
-                pending={createMutation.isPending}
-                error={createMutation.error as Error | null}
-                onExpand={() => setShowCreateForm(true)}
-                onCancel={() => {
-                  setShowCreateForm(false);
-                  setName("");
-                  setDescription("");
-                }}
-                onNameChange={setName}
-                onDescriptionChange={setDescription}
-                onCreate={() => {
-                  if (name.trim()) {
-                    createMutation.mutate({ name: name.trim(), description: description.trim() });
-                  }
-                }}
-              />
-            </div>
-          ) : null}
-
-          {!kbsQuery.isLoading && !kbsQuery.isError && viewMode === "list" ? (
-            <div className="overflow-x-auto rounded-[14px] border border-[var(--line)] bg-[var(--surface)] shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
-              <div className="grid min-w-[760px] grid-cols-[minmax(0,1fr)_92px_112px_136px_112px] gap-4 border-b border-[var(--line)] px-5 py-3 text-xs font-medium text-slate-500 dark:border-[var(--line)] dark:text-slate-400">
-                <span>知识库</span>
-                <span>文档</span>
-                <span>片段</span>
-                <span>更新时间</span>
-                <span className="text-right">操作</span>
-              </div>
-              <div className="min-w-[760px] divide-y divide-[var(--line)] dark:divide-[var(--line)]">
-                {items.map((item, index) => (
-                  <KnowledgeBaseListRow key={item.id} item={item} index={index} />
-                ))}
-                <CreateKnowledgeBaseListRow
+              {!isSearching ? (
+                <CreateKnowledgeBaseCard
                   expanded={showCreateForm}
                   name={name}
                   description={description}
@@ -229,17 +204,56 @@ export function LibraryPage() {
                     }
                   }}
                 />
+              ) : null}
+            </div>
+          ) : null}
+
+          {!isListLoading && !isListError && viewMode === "list" && (!isSearching || items.length > 0) ? (
+            <div className="overflow-x-auto rounded-[14px] border border-[var(--line)] bg-[var(--surface)] shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
+              <div className="grid min-w-[760px] grid-cols-[minmax(0,1fr)_92px_112px_136px_112px] gap-4 border-b border-[var(--line)] px-5 py-3 text-xs font-medium text-slate-500 dark:border-[var(--line)] dark:text-slate-400">
+                <span>知识库</span>
+                <span>文档</span>
+                <span>片段</span>
+                <span>更新时间</span>
+                <span className="text-right">操作</span>
+              </div>
+              <div className="min-w-[760px] divide-y divide-[var(--line)] dark:divide-[var(--line)]">
+                {items.map((item, index) => (
+                  <KnowledgeBaseListRow key={item.id} item={item} index={index} />
+                ))}
+                {!isSearching ? (
+                  <CreateKnowledgeBaseListRow
+                    expanded={showCreateForm}
+                    name={name}
+                    description={description}
+                    pending={createMutation.isPending}
+                    error={createMutation.error as Error | null}
+                    onExpand={() => setShowCreateForm(true)}
+                    onCancel={() => {
+                      setShowCreateForm(false);
+                      setName("");
+                      setDescription("");
+                    }}
+                    onNameChange={setName}
+                    onDescriptionChange={setDescription}
+                    onCreate={() => {
+                      if (name.trim()) {
+                        createMutation.mutate({ name: name.trim(), description: description.trim() });
+                      }
+                    }}
+                  />
+                ) : null}
               </div>
             </div>
           ) : null}
 
-          {!kbsQuery.isLoading && !kbsQuery.isError ? (
+          {!isSearching && !kbsQuery.isLoading && !kbsQuery.isError ? (
             <KnowledgeBasePagination
               page={kbPage}
               total={totalKbs}
               pageSize={KB_PAGE_SIZE}
               totalPages={totalPages}
-              isFetching={kbsQuery.isFetching}
+              isFetching={listIsFetching}
               onPageChange={setKbPage}
             />
           ) : null}

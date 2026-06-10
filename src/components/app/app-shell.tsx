@@ -184,8 +184,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ].join(" ")}
       >
         {isSimpleHeaderPage ? (
-          <header className="sticky top-0 z-10 flex h-[68px] items-center justify-end bg-[var(--background)] px-4 backdrop-blur dark:bg-[#0d1117]/90 sm:px-6 lg:h-[82px] lg:px-10">
-            <ThemeSwitcher theme={theme} onChange={setTheme} />
+          <header className="sticky top-0 z-10 bg-[var(--background)] px-4 sm:px-6 lg:px-10">
+            <div className="mx-auto flex h-[68px] max-w-[1320px] items-center justify-end lg:h-[82px]">
+              <ThemeSwitcher theme={theme} onChange={setTheme} />
+            </div>
           </header>
         ) : (
           <header className="sticky top-0 z-10 flex h-[68px] items-center justify-end gap-4 border-b border-[var(--line)] bg-[var(--background)] px-4 backdrop-blur dark:border-[var(--line)] dark:bg-[#0d1117]/80 sm:px-6 lg:h-[74px] lg:gap-5 lg:px-8">

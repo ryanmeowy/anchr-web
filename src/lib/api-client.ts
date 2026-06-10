@@ -197,6 +197,11 @@ export const apiClient = {
     request<RecentCitationList>(`/api/v1/activity/recent-citations?${activityQuery(limit, cursor)}`),
   listKnowledgeBases: (page = 1, size = 20) =>
     request<PagedList<KnowledgeBase>>(`/api/v1/kbs?page=${page}&size=${size}`),
+  searchKnowledgeBases: (query: string, limit = 50) => {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+
+    return request<KnowledgeBase[]>(`/api/v1/kbs/search?${params.toString()}`);
+  },
   createKnowledgeBase: (body: { name: string; description?: string }) =>
     request<KnowledgeBase>("/api/v1/kbs", { method: "POST", body }),
   listDocuments: (kbId: string, page = 1, size = 20) =>
