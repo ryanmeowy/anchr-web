@@ -45,6 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAskPage = pathname === "/ask";
   const isLibraryPage = pathname === "/library";
+  const isSimpleHeaderPage = isAskPage || isLibraryPage || pathname === "/imports";
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [themeHydrated, setThemeHydrated] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -182,11 +183,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           collapsed ? "lg:ml-[64px]" : "lg:ml-[220px]",
         ].join(" ")}
       >
-        {isAskPage ? (
-          <header className="sticky top-0 z-10 flex h-[68px] items-center justify-end bg-[var(--background)] px-4 backdrop-blur dark:bg-[#0d1117]/90 sm:px-6 lg:h-[82px] lg:px-10">
-            <ThemeSwitcher theme={theme} onChange={setTheme} />
-          </header>
-        ) : isLibraryPage ? (
+        {isSimpleHeaderPage ? (
           <header className="sticky top-0 z-10 flex h-[68px] items-center justify-end bg-[var(--background)] px-4 backdrop-blur dark:bg-[#0d1117]/90 sm:px-6 lg:h-[82px] lg:px-10">
             <ThemeSwitcher theme={theme} onChange={setTheme} />
           </header>

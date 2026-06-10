@@ -209,6 +209,10 @@ export const apiClient = {
     request<IngestionTaskList>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks?limit=${size}`,
     ),
+  getIngestionTask: (kbId: string, taskId: string) =>
+    request<IngestionTask>(
+      `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks/${encodeURIComponent(taskId)}`,
+    ),
   createUrlIngestionTask: (kbId: string, body: { sourceUrl: string; fileName: string; fileType: string; dedupeStrategy: string }) =>
     request<IngestionTask>(`/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks`, {
       method: "POST",
@@ -236,6 +240,11 @@ export const apiClient = {
   retryFailedIngestionTask: (kbId: string, taskId: string) =>
     request<IngestionTask>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks/${encodeURIComponent(taskId)}/retry-failed`,
+      { method: "POST" },
+    ),
+  retryIngestionTaskItem: (kbId: string, taskId: string, itemId: string) =>
+    request<IngestionTask>(
+      `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks/${encodeURIComponent(taskId)}/items/${encodeURIComponent(itemId)}/retry`,
       { method: "POST" },
     ),
   encryptedSts: () => request<string>("/api/v1/auth/sts"),

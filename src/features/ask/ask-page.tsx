@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
+  Check,
   ChevronDown,
   Database,
   Edit3,
@@ -43,7 +44,7 @@ export function AskPage() {
   const initialKbId = searchParams.get("kbId") ?? "";
   const initialKbName = searchParams.get("kbName") ?? "";
   const [query, setQuery] = useState("");
-  const [kbId, setKbId] = useState(initialKbId);
+  const [selectedKbIdsValue, setSelectedKbIdsValue] = useState<string[] | null>(initialKbId ? [initialKbId] : null);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [conversations, setConversations] = useState<ConversationSession[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -81,27 +82,29 @@ export function AskPage() {
     return options;
   }, [initialKbId, initialKbName, kbs]);
 
-  const selectedKbIds = useMemo(() => {
-    if (kbId) {
-      return [kbId];
-    }
-
-    return kbs.slice(0, 3).map((item) => item.id);
-  }, [kbId, kbs]);
+  const selectedKbIds = useMemo(
+    () => selectedKbIdsValue ?? kbs.slice(0, 3).map((item) => item.id),
+    [kbs, selectedKbIdsValue],
+  );
 
   const selectedKbLabel = useMemo(() => {
-    if (!kbId) {
+    if (selectedKbIds.length === 0) {
+      return "选择知识库";
+    }
+    if (selectedKbIds.length === kbOptions.length && kbOptions.length > 0) {
       return "全部知识库";
     }
+    if (selectedKbIds.length === 1) {
+      return kbOptions.find((item) => item.id === selectedKbIds[0])?.name ?? "已选知识库";
+    }
 
-    return kbOptions.find((item) => item.id === kbId)?.name ?? "已选知识库";
-  }, [kbId, kbOptions]);
+    return `${selectedKbIds.length} 个知识库`;
+  }, [kbOptions, selectedKbIds]);
 
   const activeMessages = activeSessionId ? (messagesBySession[activeSessionId] ?? []) : [];
   const hasLoadedActiveMessages = activeSessionId
     ? Object.prototype.hasOwnProperty.call(messagesBySession, activeSessionId)
     : false;
-  const activeConversation = activeSessionId ? conversations.find((item) => item.sessionId === activeSessionId) : undefined;
   const isStreamingActiveSession = Boolean(activeSessionId && streamingSessionId === activeSessionId);
   const lastActiveMessageContent = activeMessages.at(-1)?.content;
   const canSubmit = Boolean(query.trim()) && !streamingSessionId && (Boolean(activeSessionId) || selectedKbIds.length > 0);
@@ -494,27 +497,6 @@ export function AskPage() {
       {conversationSlot ? createPortal(conversationList, conversationSlot) : null}
       <div className="flex h-[calc(100vh-68px)] min-h-[560px] overflow-hidden lg:h-[calc(100vh-82px)]">
         <section className="flex min-w-0 flex-1 flex-col bg-[var(--background)]">
-          <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--line)] bg-[var(--surface)] px-4 dark:border-[var(--line)] dark:bg-[var(--surface)] sm:px-6">
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-slate-950 dark:text-slate-100">
-                {activeConversation?.title || "新对话"}
-              </div>
-              <div className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-                {activeSessionId ? "历史消息会自动保存" : "选择知识库后直接开始提问"}
-              </div>
-            </div>
-            <KnowledgeBasePicker
-              kbOptions={kbOptions}
-              selectedKbId={kbId}
-              selectedLabel={selectedKbLabel}
-              isOpen={isKbMenuOpen}
-              isLoading={kbsQuery.isLoading}
-              onToggle={() => setIsKbMenuOpen((open) => !open)}
-              onClose={() => setIsKbMenuOpen(false)}
-              onSelect={setKbId}
-            />
-          </header>
-
           <div className="muted-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10">
             <div className="mx-auto flex min-h-full max-w-[860px] flex-col">
               {messageError ? (
@@ -536,7 +518,7 @@ export function AskPage() {
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-[var(--line)] bg-[var(--background)] px-4 py-4 dark:border-[var(--line)] sm:px-6 lg:px-10">
+          <div className="shrink-0 bg-[var(--background)] px-4 py-4 sm:px-6 lg:px-10">
             <div className="mx-auto max-w-[860px]">
               {streamError ? (
                 <div className="mb-3 rounded-[8px] bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
@@ -556,11 +538,17 @@ export function AskPage() {
                   placeholder="给 Anchr 发送消息"
                   className="max-h-[180px] min-h-[48px] w-full resize-none border-0 bg-transparent px-3 py-3 text-[15px] leading-7 text-slate-950 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
-                <div className="flex items-center justify-between gap-3 border-t border-[var(--line)] px-2 py-2 dark:border-[var(--line)]">
-                  <div className="flex min-w-0 items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <Database size={15} />
-                    <span className="truncate">{selectedKbLabel}</span>
-                  </div>
+                <div className="flex items-center justify-between gap-3 px-2 py-2">
+                  <KnowledgeBaseMultiPicker
+                    kbOptions={kbOptions}
+                    selectedKbIds={selectedKbIds}
+                    selectedLabel={selectedKbLabel}
+                    isOpen={isKbMenuOpen}
+                    isLoading={kbsQuery.isLoading}
+                    onToggle={() => setIsKbMenuOpen((open) => !open)}
+                    onClose={() => setIsKbMenuOpen(false)}
+                    onChange={setSelectedKbIdsValue}
+                  />
                   <button
                     type="button"
                     onClick={() => void handleSubmit()}
@@ -688,25 +676,40 @@ function ConversationListItem({
   );
 }
 
-function KnowledgeBasePicker({
+function KnowledgeBaseMultiPicker({
   kbOptions,
-  selectedKbId,
+  selectedKbIds,
   selectedLabel,
   isOpen,
   isLoading,
   onToggle,
   onClose,
-  onSelect,
+  onChange,
 }: {
   kbOptions: Array<{ id: string; name: string }>;
-  selectedKbId: string;
+  selectedKbIds: string[];
   selectedLabel: string;
   isOpen: boolean;
   isLoading: boolean;
   onToggle: () => void;
   onClose: () => void;
-  onSelect: (kbId: string) => void;
+  onChange: (kbIds: string[]) => void;
 }) {
+  const allSelected = kbOptions.length > 0 && selectedKbIds.length === kbOptions.length;
+
+  function toggleAll() {
+    onChange(allSelected ? [] : kbOptions.map((item) => item.id));
+  }
+
+  function toggleOne(kbId: string) {
+    if (selectedKbIds.includes(kbId)) {
+      onChange(selectedKbIds.filter((item) => item !== kbId));
+      return;
+    }
+
+    onChange([...selectedKbIds, kbId]);
+  }
+
   return (
     <div
       className="relative"
@@ -719,36 +722,33 @@ function KnowledgeBasePicker({
       <button
         type="button"
         onClick={onToggle}
-        className="inline-flex h-9 max-w-[210px] items-center gap-2 rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200"
+        className="inline-flex h-9 max-w-[260px] items-center gap-2 rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
-        <Database size={16} />
-        <span className="hidden truncate sm:block">{selectedLabel}</span>
-        <ChevronDown size={15} />
+        <Database size={16} className="shrink-0" />
+        <span className="truncate">{selectedLabel}</span>
+        <ChevronDown size={15} className="shrink-0" />
       </button>
 
       {isOpen ? (
         <div
-          className="absolute right-0 top-[calc(100%+8px)] z-30 w-[260px] overflow-hidden rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.16)] dark:border-[var(--line)] dark:bg-[var(--surface)]"
+          className="absolute bottom-[calc(100%+8px)] left-0 z-30 w-[280px] overflow-hidden rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.16)] dark:border-[var(--line)] dark:bg-[var(--surface)]"
           role="listbox"
         >
           <button
             type="button"
-            onClick={() => {
-              onSelect("");
-              onClose();
-            }}
+            onClick={toggleAll}
             className={[
               "flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm",
-              !selectedKbId
+              allSelected
                 ? "bg-blue-50 font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                 : "text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-300",
             ].join(" ")}
             role="option"
-            aria-selected={!selectedKbId}
+            aria-selected={allSelected}
           >
-            <Database size={16} />
+            <SelectionBox checked={allSelected} />
             全部知识库
           </button>
 
@@ -759,20 +759,18 @@ function KnowledgeBasePicker({
               <button
                 key={item.id}
                 type="button"
-                onClick={() => {
-                  onSelect(item.id);
-                  onClose();
-                }}
+                onClick={() => toggleOne(item.id)}
                 className={[
                   "flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm",
-                  selectedKbId === item.id
+                  selectedKbIds.includes(item.id)
                     ? "bg-blue-50 font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                     : "text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-300",
                 ].join(" ")}
                 role="option"
-                aria-selected={selectedKbId === item.id}
+                aria-selected={selectedKbIds.includes(item.id)}
               >
-                <Folder size={16} />
+                <SelectionBox checked={selectedKbIds.includes(item.id)} />
+                <Folder size={16} className="shrink-0" />
                 <span className="truncate">{item.name}</span>
               </button>
             ))
@@ -782,6 +780,22 @@ function KnowledgeBasePicker({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function SelectionBox({ checked }: { checked: boolean }) {
+  return (
+    <span
+      className={[
+        "grid size-4 shrink-0 place-items-center rounded-[5px] border",
+        checked
+          ? "border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-500"
+          : "border-[var(--line)] bg-[var(--surface)] text-transparent",
+      ].join(" ")}
+      aria-hidden="true"
+    >
+      <Check size={12} strokeWidth={2.4} />
+    </span>
   );
 }
 

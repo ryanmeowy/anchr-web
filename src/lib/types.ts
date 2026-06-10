@@ -135,18 +135,23 @@ export type IngestionTaskList = {
 
 export type IngestionTask = IngestionTaskSummary & {
   finishedAt?: string;
-  items?: Array<{
-    itemId: string;
-    assetId?: string;
-    fileName?: string;
-    sourceUrl?: string;
-    stage: string;
-    status: string;
-    progress: number;
-    dedupeResult?: string;
-    errorCode?: string;
-    errorMessage?: string;
-  }>;
+  items?: IngestionTaskItem[];
+};
+
+export type IngestionTaskItem = {
+  itemId: string;
+  assetId?: string | null;
+  fileName?: string | null;
+  fileHash?: string | null;
+  sourceUrl?: string | null;
+  stage: string;
+  status: string;
+  progress: number;
+  dedupeResult?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  updatedAt?: string;
+  finishedAt?: string | null;
 };
 
 export type UploadIngestionItem = {
