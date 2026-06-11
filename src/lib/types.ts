@@ -237,36 +237,73 @@ export type PreviewSegment = {
   };
 };
 
-export type Provider = {
-  providerKey: string;
-  providerName: string;
-  providerType: string;
-  selected: boolean;
+// ── capability config ──────────────────────────────────────────────────
+
+export type CapabilityConfig = {
+  baseUrl: string;
+  modelName?: string;
+  extraConfig?: Record<string, unknown>;
+  apiKeyMasked: string;
   enabled: boolean;
-  baseUrl?: string;
-  model?: string;
-  embeddingModel?: string;
+};
+
+export type CapabilityConfigUpdateRequest = {
+  baseUrl: string;
+  apiKey?: string;
+  modelName?: string;
+  extraConfig?: Record<string, unknown>;
+};
+
+export type CapabilityConnectionTestRequest = {
+  capability: string;
+  baseUrl: string;
+  apiKey: string;
+  modelName?: string;
+};
+
+export type CapabilityConnectionTestResult = {
+  success: boolean;
+  latencyMs: number;
+  message: string;
   dimension?: number;
-  connected?: boolean;
 };
 
-export type ProviderList = {
-  providers: Provider[];
+export type CapabilityParams = {
+  params: ParamItem[];
 };
 
-export type SearchSetting = {
-  rerankEnabled?: boolean;
-  resultLimit?: number;
-  minScore?: number;
+export type ParamItem = {
+  key: string;
+  label: string;
 };
 
-export type Preference = {
-  answerMode?: string;
-  citationPolicy?: string;
-  language?: string;
-  theme?: string;
-  fontSize?: string;
-  density?: string;
+// ── storage config ─────────────────────────────────────────────────────
+
+export type StorageConfig = {
+  endpoint: string;
+  bucket: string;
+  region?: string;
+  prefix?: string;
+  roleArn?: string;
+  accessKeyMasked: string;
+  secretKeyMasked: string;
+  enabled: boolean;
+};
+
+export type StorageConfigUpdateRequest = {
+  endpoint: string;
+  accessKey?: string;
+  secretKey?: string;
+  bucket: string;
+  region?: string;
+  prefix?: string;
+  roleArn?: string;
+};
+
+export type StorageConnectionTestResult = {
+  success: boolean;
+  latencyMs: number;
+  message: string;
 };
 
 export type ConversationCitation = {

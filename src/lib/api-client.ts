@@ -2,6 +2,11 @@
 
 import type {
   ApiResult,
+  CapabilityConfig,
+  CapabilityConfigUpdateRequest,
+  CapabilityConnectionTestRequest,
+  CapabilityConnectionTestResult,
+  CapabilityParams,
   ConversationCitation,
   ConversationMessage,
   ConversationMessageList,
@@ -14,13 +19,13 @@ import type {
   IngestionTask,
   KnowledgeBase,
   PagedList,
-  Preference,
   PreviewSegment,
   RecentCitationList,
   RecentQuestionList,
-  ProviderList,
   SearchPage,
-  SearchSetting,
+  StorageConfig,
+  StorageConfigUpdateRequest,
+  StorageConnectionTestResult,
   UploadIngestionItem,
 } from "./types";
 
@@ -337,7 +342,38 @@ export const apiClient = {
     request<{ items?: PreviewSegment["surroundingChunks"] }>(
       `/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}/neighbors?before=2&after=2`,
     ),
-  providers: () => request<ProviderList>("/api/v1/settings/providers"),
-  searchSetting: () => request<SearchSetting>("/api/v1/settings/search"),
-  preferences: () => request<Preference>("/api/v1/settings/preferences"),
+  // ── settings: capability config ──────────────────────────────────────
+
+  getEmbeddingConfig: () =>
+    request<CapabilityConfig>("/api/v1/settings/embedding"),
+  updateEmbeddingConfig: (body: CapabilityConfigUpdateRequest) =>
+    request<CapabilityConfig>("/api/v1/settings/embedding", { method: "PATCH", body }),
+  getEmbeddingParams: () =>
+    request<CapabilityParams>("/api/v1/settings/embedding/params"),
+
+  getGenerationConfig: () =>
+    request<CapabilityConfig>("/api/v1/settings/generation"),
+  updateGenerationConfig: (body: CapabilityConfigUpdateRequest) =>
+    request<CapabilityConfig>("/api/v1/settings/generation", { method: "PATCH", body }),
+  getGenerationParams: () =>
+    request<CapabilityParams>("/api/v1/settings/generation/params"),
+
+  getRerankConfig: () =>
+    request<CapabilityConfig>("/api/v1/settings/rerank"),
+  updateRerankConfig: (body: CapabilityConfigUpdateRequest) =>
+    request<CapabilityConfig>("/api/v1/settings/rerank", { method: "PATCH", body }),
+  getRerankParams: () =>
+    request<CapabilityParams>("/api/v1/settings/rerank/params"),
+
+  testConnection: (body: CapabilityConnectionTestRequest) =>
+    request<CapabilityConnectionTestResult>("/api/v1/settings/test-connection", { method: "POST", body }),
+
+  // ── settings: storage ────────────────────────────────────────────────
+
+  getStorageConfig: () =>
+    request<StorageConfig>("/api/v1/settings/storage"),
+  updateStorageConfig: (body: StorageConfigUpdateRequest) =>
+    request<StorageConfig>("/api/v1/settings/storage", { method: "PATCH", body }),
+  testStorage: (body: { endpoint: string; accessKey: string; secretKey: string; bucket: string }) =>
+    request<StorageConnectionTestResult>("/api/v1/settings/storage/test", { method: "POST", body }),
 };
