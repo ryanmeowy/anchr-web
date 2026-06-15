@@ -448,21 +448,8 @@ export function ImportsPage() {
 
         <aside className="space-y-5">
           <div className="panel p-5">
-            <div className="mb-5 flex items-center justify-between gap-4">
+            <div className="mb-5">
               <h2 className="text-lg font-semibold text-slate-950 dark:text-slate-200">本次导入</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setFiles([]);
-                  setSourceUrl("");
-                  setUrlTitle("");
-                  setCurrentTaskId("");
-                  setDedupeStrategy(defaultDedupeStrategy);
-                }}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300"
-              >
-                重置
-              </button>
             </div>
 
             <div className="space-y-4">
