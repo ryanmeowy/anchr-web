@@ -279,10 +279,7 @@ export function ImportsPage() {
     <div className="min-h-[calc(100vh-68px)] px-4 pb-8 sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:pb-10">
       <div className="mx-auto max-w-[1320px]">
         <div className="mb-7 lg:mb-9">
-          <div className="flex items-center gap-3">
-            <h1 className="text-[26px] font-semibold tracking-normal text-slate-950 dark:text-slate-200 lg:text-[30px]">导入资料</h1>
-            <Info size={22} className="text-slate-500 dark:text-slate-400" />
-          </div>
+          <h1 className="text-[26px] font-semibold tracking-normal text-slate-950 dark:text-slate-200 lg:text-[30px]">导入资料</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">将资料导入知识库，开始检索与问答</p>
         </div>
       </div>
