@@ -43,10 +43,9 @@ const CONFIG_STATUS_DOT_CLASS =
 const CONFIG_ENABLE_BUTTON_CLASS =
   "inline-flex h-6 w-[54px] shrink-0 items-center justify-center whitespace-nowrap rounded-[6px] bg-emerald-100 px-0 font-sans text-xs font-medium leading-none tracking-normal text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-emerald-500/30" as const;
 
-function chunk<T>(arr: T[], size: number): T[][] {
-  const result: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) result.push(arr.slice(i, i + size));
-  return result;
+function splitParenLabel(label: string) {
+  const match = label.match(/^(.*?)(\s*[(（].*[)）])$/);
+  return match ? [match[1].trim(), match[2].trim()] : [label];
 }
 
 type CapabilityName = "GENERATION" | "EMBEDDING" | "RERANK" | "MULTI_EMBEDDING";
@@ -368,23 +367,23 @@ function ConfigEditor({
               ) : paramItems.length === 0 ? (
                 <div className="text-xs text-slate-400">无</div>
               ) : (
-                <table className="w-full">
-                  <tbody>
-                    {chunk(paramItems, 2).map((row, ri) => (
-                      <tr key={ri}>
-                        {row.map((p) => (
-                          <td key={p.key} className="pb-2 pr-4">
-                            <span className="mr-2 inline-block whitespace-nowrap text-right text-xs text-slate-500 dark:text-slate-400" style={{ minWidth: "5rem" }}>{p.label}</span>
-                            <input className="field inline-block h-8 text-sm" style={{ width: "130px" }}
-                              value={extra[p.key] ?? ""} placeholder={p.key}
-                              onChange={(e) => { setExtra((prev) => ({ ...prev, [p.key]: e.target.value })); setSaved(false); }} />
-                          </td>
+                <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+                  {paramItems.map((p) => (
+                    <label key={p.key} className="grid grid-cols-[5rem_minmax(0,130px)] items-center gap-2">
+                      <span className="text-right text-xs leading-tight text-slate-500 dark:text-slate-400">
+                        {splitParenLabel(p.label).map((part) => (
+                          <span key={part} className="block whitespace-nowrap">{part}</span>
                         ))}
-                        {row.length < 2 && <td />}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      </span>
+                      <input
+                        className="field h-8 text-sm"
+                        value={extra[p.key] ?? ""}
+                        placeholder={p.key}
+                        onChange={(e) => { setExtra((prev) => ({ ...prev, [p.key]: e.target.value })); setSaved(false); }}
+                      />
+                    </label>
+                  ))}
+                </div>
               )}
             </div>
           )}

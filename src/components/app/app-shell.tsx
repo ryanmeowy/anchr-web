@@ -157,24 +157,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
         ) : null}
 
-        <div className={["mt-auto hidden border-t border-[var(--line)] pt-4 dark:border-[var(--line)] lg:block", isAskPage ? "lg:hidden" : ""].join(" ")}>
-          <div
-            className={[
-              "flex items-center rounded-[8px] py-1.5",
-              collapsed ? "justify-center" : "gap-3 px-1",
-            ].join(" ")}
-            title={collapsed ? "wang.li" : undefined}
-          >
-            <div className="grid size-9 shrink-0 place-items-center rounded-full border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-600 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300">
-              R
-            </div>
-            {!collapsed && (
-              <div className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 dark:text-slate-200">
-                ryan
-              </div>
-            )}
-          </div>
-        </div>
       </aside>
 
       <main
