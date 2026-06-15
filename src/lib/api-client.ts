@@ -365,6 +365,13 @@ export const apiClient = {
   getRerankParams: () =>
     request<CapabilityParams>("/api/v1/settings/rerank/params"),
 
+  getMultiEmbeddingConfig: () =>
+    request<CapabilityConfig>("/api/v1/settings/multi-embedding"),
+  updateMultiEmbeddingConfig: (body: CapabilityConfigUpdateRequest) =>
+    request<CapabilityConfig>("/api/v1/settings/multi-embedding", { method: "PATCH", body }),
+  getMultiEmbeddingParams: () =>
+    request<CapabilityParams>("/api/v1/settings/multi-embedding/params"),
+
   testConnection: (body: CapabilityConnectionTestRequest) =>
     request<CapabilityConnectionTestResult>("/api/v1/settings/test-connection", { method: "POST", body }),
 

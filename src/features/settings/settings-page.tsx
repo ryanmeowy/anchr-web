@@ -60,6 +60,8 @@ function CapabilityPanel({
           return apiClient.getGenerationConfig();
         case "RERANK":
           return apiClient.getRerankConfig();
+        case "MULTI_EMBEDDING":
+          return apiClient.getMultiEmbeddingConfig();
         default:
           return apiClient.getEmbeddingConfig();
       }
@@ -113,6 +115,8 @@ function CapabilityPanel({
           return apiClient.updateGenerationConfig(body);
         case "RERANK":
           return apiClient.updateRerankConfig(body);
+        case "MULTI_EMBEDDING":
+          return apiClient.updateMultiEmbeddingConfig(body);
         default:
           return apiClient.updateEmbeddingConfig(body);
       }
@@ -686,6 +690,13 @@ export function SettingsPage() {
             title="重排序模型"
             description="配置搜索结果重排序的模型连接参数。"
             icon={Globe}
+          />
+
+          <CapabilityPanel
+            capability="MULTI_EMBEDDING"
+            title="多模态嵌入模型"
+            description="配置图片向量化的模型连接参数。"
+            icon={Waypoints}
           />
 
           <StoragePanel />
