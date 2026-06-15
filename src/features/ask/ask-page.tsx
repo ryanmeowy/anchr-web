@@ -147,6 +147,24 @@ export function AskPage() {
   }, []);
 
   useEffect(() => {
+    if (!openMenuSessionId) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest("[data-conversation-menu]")) {
+        return;
+      }
+
+      setOpenMenuSessionId(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [openMenuSessionId]);
+
+  useEffect(() => {
     if (!activeSessionId || hasLoadedActiveMessages) {
       return;
     }
@@ -595,6 +613,8 @@ function ConversationListItem({
   onCancelRename: () => void;
   onDelete: () => void;
 }) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   if (renaming) {
     return (
       <form
@@ -642,7 +662,11 @@ function ConversationListItem({
 
       <button
         type="button"
-        onClick={onToggleMenu}
+        data-conversation-menu
+        onClick={() => {
+          setConfirmingDelete(false);
+          onToggleMenu();
+        }}
         className={[
           "absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-[7px] text-slate-500 transition",
           menuOpen ? "bg-[var(--surface)] opacity-100 shadow-sm" : "opacity-0 hover:bg-[var(--surface)] group-hover:opacity-100",
@@ -653,23 +677,48 @@ function ConversationListItem({
       </button>
 
       {menuOpen ? (
-        <div className="absolute right-1 top-[calc(100%-4px)] z-20 w-32 overflow-hidden rounded-[8px] border border-[var(--line)] bg-[var(--surface)] p-1 shadow-[0_12px_34px_rgba(15,23,42,0.14)] dark:border-[var(--line)] dark:bg-[var(--surface)]">
-          <button
-            type="button"
-            onClick={onStartRename}
-            className="flex h-9 w-full items-center gap-2 rounded-[6px] px-2 text-sm text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-200"
-          >
-            <Edit3 size={15} />
-            重命名
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="flex h-9 w-full items-center gap-2 rounded-[6px] px-2 text-sm text-rose-600 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/15"
-          >
-            <Trash2 size={15} />
-            删除
-          </button>
+        <div
+          data-conversation-menu
+          className="absolute right-1 top-[calc(100%-4px)] z-20 w-32 overflow-hidden rounded-[8px] border border-[var(--line)] bg-[var(--surface)] p-1 shadow-[0_12px_34px_rgba(15,23,42,0.14)] dark:border-[var(--line)] dark:bg-[var(--surface)]"
+        >
+          {confirmingDelete ? (
+            <>
+              <button
+                type="button"
+                onClick={onDelete}
+                className="flex h-9 w-full items-center gap-2 rounded-[6px] px-2 text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/15"
+              >
+                <Trash2 size={15} />
+                确认删除
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(false)}
+                className="flex h-9 w-full items-center gap-2 rounded-[6px] px-2 text-sm text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-200"
+              >
+                取消
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onStartRename}
+                className="flex h-9 w-full items-center gap-2 rounded-[6px] px-2 text-sm text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-200"
+              >
+                <Edit3 size={15} />
+                重命名
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                className="flex h-9 w-full items-center gap-2 rounded-[6px] px-2 text-sm text-rose-600 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/15"
+              >
+                <Trash2 size={15} />
+                删除
+              </button>
+            </>
+          )}
         </div>
       ) : null}
     </div>
