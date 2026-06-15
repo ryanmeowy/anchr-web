@@ -154,6 +154,17 @@ export type IngestionTaskItem = {
   finishedAt?: string | null;
 };
 
+export type StsToken = {
+  endpoint: string;
+  bucket: string;
+  region: string;
+  prefix: string;
+  accessKeyId: string;
+  accessKeySecret: string;
+  securityToken: string;
+  expiration: string;
+};
+
 export type UploadIngestionItem = {
   fileName: string;
   title?: string;

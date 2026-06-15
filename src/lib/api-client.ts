@@ -26,6 +26,7 @@ import type {
   StorageConfig,
   StorageConfigUpdateRequest,
   StorageConnectionTestResult,
+  StsToken,
   UploadIngestionItem,
 } from "./types";
 
@@ -195,7 +196,6 @@ function consumeSseChunk(chunk: string, callbacks: StreamMessageCallbacks) {
 }
 
 export const apiClient = {
-  homeSummary: () => request<HomeSummary>("/api/v1/home/summary"),
   recentQuestions: (limit = 10, cursor?: string | null) =>
     request<RecentQuestionList>(`/api/v1/activity/recent-questions?${activityQuery(limit, cursor)}`),
   recentCitations: (limit = 10, cursor?: string | null) =>
@@ -257,7 +257,7 @@ export const apiClient = {
       `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks/${encodeURIComponent(taskId)}/items/${encodeURIComponent(itemId)}/retry`,
       { method: "POST" },
     ),
-  encryptedSts: () => request<string>("/api/v1/auth/sts"),
+  getStsToken: () => request<StsToken>("/api/v1/auth/sts"),
   searchKnowledgeBase: (body: { query: string; kbIds: string[]; limit: number; withAnswer: boolean }) =>
     request<SearchPage>("/api/v1/search/kb", { method: "POST", body }),
   listConversations: (limit = 50, cursor?: string | null) =>

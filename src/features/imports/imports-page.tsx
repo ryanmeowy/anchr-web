@@ -23,13 +23,11 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatFileSize, statusText } from "@/lib/format";
 import { buildDisplayNameFromUrl, inferFileType, uploadFilesToOss } from "@/lib/ingestion-files";
-import { getSecuritySettings, getStorageSettings } from "@/lib/local-settings";
 import type { IngestionTask, IngestionTaskItem, KnowledgeBase, SupportedFormat } from "@/lib/types";
 
 const RECENT_TASK_LIMIT = 10;
@@ -50,14 +48,7 @@ type RecentImportItem = {
   item: IngestionTaskItem;
 };
 
-type MissingConfigDialog = {
-  title: string;
-  message: string;
-  missing: string[];
-};
-
 export function ImportsPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [kbId, setKbId] = useState("");
@@ -69,7 +60,6 @@ export function ImportsPage() {
   const [dedupeStrategy, setDedupeStrategy] = useState("SKIP");
   const [currentTaskId, setCurrentTaskId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [missingConfigDialog, setMissingConfigDialog] = useState<MissingConfigDialog | null>(null);
 
   const kbsQuery = useQuery({
     queryKey: ["kbs"],
@@ -163,19 +153,10 @@ export function ImportsPage() {
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      const storageSettings = getStorageSettings();
-      const securitySettings = getSecuritySettings();
       validateUploadInput(files, capabilitiesQuery.data?.maxFileSizeBytes, capabilitiesQuery.data?.maxFilesPerBatch);
-      validateOssConfigOrThrow(storageSettings.ossBucket, storageSettings.ossEndpoint, securitySettings.encryptKey, securitySettings.encryptIv);
 
-      const encryptedCredential = await apiClient.encryptedSts();
-      const items = await uploadFilesToOss(files, encryptedCredential, {
-        bucket: storageSettings.ossBucket.trim(),
-        endpoint: storageSettings.ossEndpoint.trim(),
-        keyPrefix: storageSettings.ossPrefix.trim(),
-        encryptKey: securitySettings.encryptKey.trim(),
-        encryptIv: securitySettings.encryptIv.trim(),
-      }, supportedFormats);
+      const stsToken = await apiClient.getStsToken();
+      const items = await uploadFilesToOss(files, stsToken, supportedFormats);
 
       return apiClient.createUploadIngestionTask(selectedKbId, {
         dedupeStrategy,
@@ -229,22 +210,7 @@ export function ImportsPage() {
   }
 
   function handleUploadClick() {
-    const missingConfig = getMissingOssConfig();
-    if (missingConfig.length > 0) {
-      setMissingConfigDialog({
-        title: "需要先配置对象存储",
-        message: "文件上传依赖浏览器直传 OSS 的本地配置。请完成配置后再返回导入资料。",
-        missing: missingConfig,
-      });
-      return;
-    }
-
     uploadMutation.mutate();
-  }
-
-  function handleConfirmMissingConfig() {
-    setMissingConfigDialog(null);
-    router.push("/settings");
   }
 
   return (
@@ -518,50 +484,6 @@ export function ImportsPage() {
         </aside>
       </div>
 
-      {missingConfigDialog ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[8px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="grid size-10 shrink-0 place-items-center rounded-[8px] bg-amber-50 text-amber-600">
-                  <AlertCircle size={21} />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-slate-950 dark:text-slate-200">{missingConfigDialog.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{missingConfigDialog.message}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMissingConfigDialog(null)}
-                className="grid size-8 shrink-0 place-items-center rounded-[8px] text-slate-500 hover:bg-[var(--surface-hover)]"
-                aria-label="关闭"
-              >
-                <X size={17} />
-              </button>
-            </div>
-            <div className="mt-4 rounded-[8px] bg-[var(--background)] px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
-              缺少：{missingConfigDialog.missing.join("、")}
-            </div>
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setMissingConfigDialog(null)}
-                className="h-10 rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-medium text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-200"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmMissingConfig}
-                className="h-10 rounded-[8px] bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                确定
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -935,35 +857,6 @@ function isFinishedTaskStatus(status: string) {
 
 function canRetryTask(task: { status: string; failureCount: number }) {
   return task.failureCount > 0 && task.status !== "RUNNING";
-}
-
-function validateOssConfigOrThrow(bucket: string, endpoint: string, encryptKey: string, encryptIv: string) {
-  const missing = getMissingOssConfigFromValues(bucket, endpoint, encryptKey, encryptIv);
-  if (missing.length > 0) {
-    throw new Error(`请先配置 ${missing.join("、")}。`);
-  }
-}
-
-function getMissingOssConfig() {
-  const storageSettings = getStorageSettings();
-  const securitySettings = getSecuritySettings();
-
-  return getMissingOssConfigFromValues(
-    storageSettings.ossBucket,
-    storageSettings.ossEndpoint,
-    securitySettings.encryptKey,
-    securitySettings.encryptIv,
-  );
-}
-
-function getMissingOssConfigFromValues(bucket: string, endpoint: string, encryptKey: string, encryptIv: string) {
-  const missing: string[] = [];
-  if (!bucket.trim()) missing.push("OSS Bucket");
-  if (!endpoint.trim()) missing.push("OSS Endpoint");
-  if (!encryptKey.trim()) missing.push("APP_ENCRYPT_KEY");
-  if (!encryptIv.trim()) missing.push("APP_ENCRYPT_IV");
-
-  return missing;
 }
 
 function flattenRecentItems(tasks: IngestionTask[]) {
