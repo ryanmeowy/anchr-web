@@ -325,7 +325,7 @@ function ConfigEditor({
       {capability === "MULTI_EMBEDDING" && (
         <div className="mb-4 inline-flex items-center gap-2 rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-slate-600 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-slate-300">
           <Info size={16} className="text-blue-500" />
-          当前仅支持百炼平台多模态模型
+          当前仅支持百炼平台
         </div>
       )}
 
@@ -536,6 +536,10 @@ function StoragePanel() {
           <p className="text-sm text-slate-500 dark:text-slate-400">配置对象存储的连接参数。</p>
         </div>
         {saved ? <span className="ml-auto text-sm font-medium text-emerald-600 dark:text-emerald-400">已保存</span> : null}
+      </div>
+      <div className="mb-4 inline-flex items-center gap-2 rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-slate-600 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-slate-300">
+        <Info size={16} className="text-blue-500" />
+        当前仅支持阿里云 OSS
       </div>
       <div className="space-y-4">
         <label className="block">
