@@ -251,6 +251,7 @@ export type PreviewSegment = {
 // ── capability config ──────────────────────────────────────────────────
 
 export type CapabilityConfig = {
+  id: number;
   baseUrl: string;
   modelName?: string;
   extraConfig?: Record<string, unknown>;
@@ -268,8 +269,9 @@ export type CapabilityConfigUpdateRequest = {
 export type CapabilityConnectionTestRequest = {
   capability: string;
   baseUrl: string;
-  apiKey: string;
+  apiKey?: string;
   modelName?: string;
+  configId?: number;
 };
 
 export type CapabilityConnectionTestResult = {
@@ -291,6 +293,7 @@ export type ParamItem = {
 // ── storage config ─────────────────────────────────────────────────────
 
 export type StorageConfig = {
+  id: number;
   endpoint: string;
   bucket: string;
   region?: string;

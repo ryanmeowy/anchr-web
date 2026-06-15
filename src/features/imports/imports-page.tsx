@@ -129,6 +129,27 @@ export function ImportsPage() {
   const defaultDedupeStrategy = capabilitiesQuery.data?.defaultDedupeStrategy ?? "SKIP";
   const dedupeOptions = capabilitiesQuery.data?.dedupeStrategies ?? [defaultDedupeStrategy];
 
+  // check required configs
+  const storageConfigQuery = useQuery({
+    queryKey: ["settings", "storage"],
+    queryFn: apiClient.getStorageConfig,
+  });
+  const embeddingConfigQuery = useQuery({
+    queryKey: ["settings", "embedding"],
+    queryFn: () => apiClient.getCapabilityConfig("EMBEDDING"),
+  });
+  const multiEmbeddingConfigQuery = useQuery({
+    queryKey: ["settings", "multi-embedding"],
+    queryFn: () => apiClient.getCapabilityConfig("MULTI_EMBEDDING"),
+  });
+
+  const hasStorage = storageConfigQuery.data != null;
+  const hasEmbedding =
+    (embeddingConfigQuery.data?.length ?? 0) > 0 ||
+    (multiEmbeddingConfigQuery.data?.length ?? 0) > 0;
+  const missingConfigs = !hasStorage || !hasEmbedding ? { storage: !hasStorage, embedding: !hasEmbedding } : null;
+  const configsLoading = storageConfigQuery.isLoading || embeddingConfigQuery.isLoading || multiEmbeddingConfigQuery.isLoading;
+
   const createUrlMutation = useMutation({
     mutationFn: () => {
       const trimmedUrl = sourceUrl.trim();
@@ -211,6 +232,47 @@ export function ImportsPage() {
 
   function handleUploadClick() {
     uploadMutation.mutate();
+  }
+
+  if (configsLoading) {
+    return (
+      <div className="flex min-h-[calc(100vh-68px)] items-center justify-center">
+        <Loader2 size={24} className="animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  if (missingConfigs) {
+    return (
+      <div className="flex min-h-[calc(100vh-68px)] items-center justify-center px-4">
+        <div className="w-full max-w-[420px] rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-6 text-center shadow-[0_18px_48px_rgba(15,23,42,0.12)] dark:border-[var(--line)] dark:bg-[var(--surface)]">
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-500/15">
+            <Info size={24} className="text-amber-600 dark:text-amber-400" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-950 dark:text-slate-100">需要先完成配置</h2>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            上传文件前需要配置以下内容：
+          </p>
+          <ul className="mt-3 space-y-1.5 text-sm text-slate-600 dark:text-slate-300">
+            <li className="flex items-center justify-center gap-2">
+              <span className={missingConfigs.storage ? "text-rose-500" : "text-emerald-500"}>●</span>
+              <span className="w-28 text-left">对象存储</span>
+            </li>
+            <li className="flex items-center justify-center gap-2">
+              <span className={missingConfigs.embedding ? "text-rose-500" : "text-emerald-500"}>●</span>
+              <span className="w-28 text-left">Embedding模型</span>
+            </li>
+          </ul>
+          <button
+            type="button"
+            onClick={() => window.location.href = "/settings"}
+            className="mt-5 inline-flex h-11 items-center gap-2 rounded-[8px] bg-blue-600 px-5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(37,99,235,0.28)] hover:bg-blue-700"
+          >
+            前往设置
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

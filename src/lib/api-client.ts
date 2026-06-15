@@ -33,7 +33,7 @@ import type {
 const TOKEN_KEY = "anchr.accessToken";
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   token?: string | null;
 };
@@ -344,33 +344,22 @@ export const apiClient = {
     ),
   // ── settings: capability config ──────────────────────────────────────
 
-  getEmbeddingConfig: () =>
-    request<CapabilityConfig>("/api/v1/settings/embedding"),
-  updateEmbeddingConfig: (body: CapabilityConfigUpdateRequest) =>
-    request<CapabilityConfig>("/api/v1/settings/embedding", { method: "PATCH", body }),
-  getEmbeddingParams: () =>
-    request<CapabilityParams>("/api/v1/settings/embedding/params"),
-
-  getGenerationConfig: () =>
-    request<CapabilityConfig>("/api/v1/settings/generation"),
-  updateGenerationConfig: (body: CapabilityConfigUpdateRequest) =>
-    request<CapabilityConfig>("/api/v1/settings/generation", { method: "PATCH", body }),
-  getGenerationParams: () =>
-    request<CapabilityParams>("/api/v1/settings/generation/params"),
-
-  getRerankConfig: () =>
-    request<CapabilityConfig>("/api/v1/settings/rerank"),
-  updateRerankConfig: (body: CapabilityConfigUpdateRequest) =>
-    request<CapabilityConfig>("/api/v1/settings/rerank", { method: "PATCH", body }),
-  getRerankParams: () =>
-    request<CapabilityParams>("/api/v1/settings/rerank/params"),
-
-  getMultiEmbeddingConfig: () =>
-    request<CapabilityConfig>("/api/v1/settings/multi-embedding"),
-  updateMultiEmbeddingConfig: (body: CapabilityConfigUpdateRequest) =>
-    request<CapabilityConfig>("/api/v1/settings/multi-embedding", { method: "PATCH", body }),
-  getMultiEmbeddingParams: () =>
-    request<CapabilityParams>("/api/v1/settings/multi-embedding/params"),
+  getCapabilityConfig: (capability: string) =>
+    request<CapabilityConfig[]>(`/api/v1/settings/${encodeURIComponent(capability)}`),
+  getAllCapabilityConfigs: (capability: string) =>
+    request<CapabilityConfig[]>(`/api/v1/settings/${encodeURIComponent(capability)}/all`),
+  createCapabilityConfig: (capability: string, body: CapabilityConfigUpdateRequest) =>
+    request<CapabilityConfig>(`/api/v1/settings/${encodeURIComponent(capability)}`, { method: "POST", body }),
+  updateCapabilityConfig: (capability: string, id: number, body: CapabilityConfigUpdateRequest) =>
+    request<CapabilityConfig>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}`, { method: "PATCH", body }),
+  selectCapabilityConfig: (capability: string, id: number) =>
+    request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}/select`, { method: "PUT" }),
+  reindexCapability: () =>
+    request<null>("/api/v1/ingestion/reindex", { method: "POST" }),
+  deleteCapabilityConfig: (capability: string, id: number) =>
+    request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}`, { method: "DELETE" }),
+  getCapabilityParams: (capability: string) =>
+    request<CapabilityParams>(`/api/v1/settings/${encodeURIComponent(capability)}/params`),
 
   testConnection: (body: CapabilityConnectionTestRequest) =>
     request<CapabilityConnectionTestResult>("/api/v1/settings/test-connection", { method: "POST", body }),
@@ -378,9 +367,9 @@ export const apiClient = {
   // ── settings: storage ────────────────────────────────────────────────
 
   getStorageConfig: () =>
-    request<StorageConfig>("/api/v1/settings/storage"),
+    request<StorageConfig | null>("/api/v1/settings/storage"),
   updateStorageConfig: (body: StorageConfigUpdateRequest) =>
     request<StorageConfig>("/api/v1/settings/storage", { method: "PATCH", body }),
-  testStorage: (body: { endpoint: string; accessKey: string; secretKey: string; bucket: string }) =>
+  testStorage: (body: { endpoint: string; accessKey?: string; secretKey?: string; bucket: string; configId?: number }) =>
     request<StorageConnectionTestResult>("/api/v1/settings/storage/test", { method: "POST", body }),
 };

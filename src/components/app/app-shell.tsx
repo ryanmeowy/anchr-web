@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAskPage = pathname === "/ask";
   const isLibraryPage = pathname === "/library";
-  const isSimpleHeaderPage = isAskPage || isLibraryPage || pathname === "/imports";
+  const isSimpleHeaderPage = isAskPage || isLibraryPage || pathname === "/imports" || pathname === "/settings";
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [themeHydrated, setThemeHydrated] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
