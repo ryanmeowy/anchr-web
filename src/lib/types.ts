@@ -175,19 +175,64 @@ export type UploadIngestionItem = {
   fileHash?: string;
 };
 
+export type SearchAssetType = "PDF" | "IMAGE" | "TXT" | "MARKDOWN";
+export type SearchHitType = "TEXT" | "IMAGE" | "MIXED";
+export type SearchStrategy = "KB_RRF" | "KB_RRF_RERANK";
+export type SearchAnswerMode = "STRICT";
+
+export type SearchRequest = {
+  query: string;
+  topK?: number;
+  limit?: number;
+  strategy?: SearchStrategy;
+  kbIds?: string[];
+  assetTypes?: SearchAssetType[];
+  hitTypes?: SearchHitType[];
+  dateRange?: {
+    from?: number;
+    to?: number;
+  };
+  cursor?: string;
+  sort?: string;
+  withAnswer?: boolean;
+  answerMode?: SearchAnswerMode;
+};
+
 export type SearchResult = {
   segmentId?: string;
   kbId?: string;
   assetId?: string;
   sourceRef?: string;
   segmentType?: string;
-  assetType?: string;
+  assetType: SearchAssetType;
   content?: string;
   snippet?: string;
   pageNo?: number;
   score?: number;
   thumbnail?: string;
   ocrSummary?: string;
+  resultType?: SearchHitType;
+  explain?: {
+    strategyEffective?: string;
+    hitSources?: string[];
+    segments?: {
+      keyword?: boolean;
+      ocr?: boolean;
+      tag?: boolean;
+      vector?: boolean;
+    };
+  };
+  anchor?: {
+    pageNo?: number | null;
+    chunkOrder?: number | null;
+  };
+  totalHits?: number;
+  topChunks?: Array<{
+    segmentId: string;
+    snippet?: string;
+    pageNo?: number | null;
+    chunkOrder?: number | null;
+  }>;
 };
 
 export type SearchAnswer = {
@@ -206,8 +251,14 @@ export type SearchAnswer = {
 export type SearchPage = {
   items: SearchResult[];
   total: number;
-  nextCursor?: string;
-  answer?: SearchAnswer;
+  nextCursor?: string | null;
+  facets?: {
+    assetType?: Array<{
+      value: SearchAssetType;
+      count: number;
+    }>;
+  } | null;
+  answer?: SearchAnswer | null;
 };
 
 export type PreviewSegment = {
