@@ -322,7 +322,7 @@ function ConfigEditor({
         )}
       </div>
 
-      {capability === "MULTI_EMBEDDING" && (
+      {(capability === "MULTI_EMBEDDING" || capability === "RERANK") && (
         <div className="mb-4 inline-flex items-center gap-2 rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-slate-600 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-slate-300">
           <Info size={16} className="text-blue-500" />
           当前仅支持百炼平台
