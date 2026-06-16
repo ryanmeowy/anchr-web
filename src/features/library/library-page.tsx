@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
-  BookMarked,
   Box,
   ChevronLeft,
   ChevronRight,
@@ -97,15 +96,17 @@ export function LibraryPage() {
 
   return (
     <div className="min-h-[calc(100vh-68px)] px-4 pb-8 sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:pb-10">
+      <div className="mx-auto max-w-[1320px]">
+        <div className="mb-7 lg:mb-9">
+          <h1 className="text-[26px] font-semibold tracking-normal text-slate-950 dark:text-slate-200 lg:text-[30px]">知识库</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">从多个知识库中检索并获得可靠的答案</p>
+        </div>
+      </div>
+
       <div className="mx-auto grid max-w-[1320px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-8">
         <main className="min-w-0">
           <div className="mb-7 lg:mb-9">
-            <div className="mb-5 flex items-center gap-3 lg:mb-8">
-              <h1 className="text-[26px] font-semibold tracking-normal text-slate-950 dark:text-slate-200 lg:text-[30px]">知识库</h1>
-              <BookMarked size={22} className="text-slate-500 dark:text-slate-400" />
-            </div>
-
-            <div className="flex h-[64px] items-center gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] px-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)] dark:border-[var(--line)] dark:bg-[var(--surface)] sm:h-[72px] sm:gap-4 sm:px-5">
+            <div className="flex h-[46px] items-center gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] px-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)] dark:border-[var(--line)] dark:bg-[var(--surface)] sm:h-[52px] sm:gap-4 sm:px-5">
               <Search size={23} className="shrink-0 text-slate-500 dark:text-slate-400" />
               <input
                 value={keyword}
@@ -259,7 +260,7 @@ export function LibraryPage() {
           ) : null}
         </main>
 
-        <aside className="space-y-5 pt-0 xl:pt-[78px]">
+        <aside className="space-y-5 pt-0">
           <RecentCitationPanel
             items={citationsQuery.data?.items ?? []}
             isLoading={citationsQuery.isLoading}

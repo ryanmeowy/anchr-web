@@ -204,14 +204,16 @@ export function SearchPage() {
 
   return (
     <div className="min-h-[calc(100vh-68px)] px-4 pb-8 sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:pb-10">
+      <div className="mx-auto max-w-[1320px]">
+        <div className="mb-7 lg:mb-9">
+          <h1 className="text-[26px] font-semibold tracking-normal text-slate-950 dark:text-slate-200 lg:text-[30px]">搜索知识库</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">在知识库中检索证据，并生成带引用的回答。</p>
+        </div>
+      </div>
+
       <div className="mx-auto grid max-w-[1320px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-8">
         <main className="min-w-0">
           <div className="mb-7 lg:mb-9">
-            <div className="mb-5 flex items-center gap-3 lg:mb-8">
-              <h1 className="text-[26px] font-semibold tracking-normal text-slate-950 dark:text-slate-200 lg:text-[30px]">搜索知识库</h1>
-              <Search size={22} className="text-slate-500 dark:text-slate-400" />
-            </div>
-
             <div className="flex items-center gap-3">
               <div className="flex h-[46px] min-w-0 flex-1 items-center gap-3 rounded-[11px] border border-blue-200 bg-[var(--surface)] py-0 pl-4 pr-[3px] shadow-[0_18px_40px_rgba(37,99,235,0.10)] ring-1 ring-blue-500/10 dark:border-blue-500/35 dark:bg-[var(--surface)] dark:ring-blue-400/10 sm:h-[52px] sm:gap-4 sm:pl-5 sm:pr-1">
                 <Search size={23} className="shrink-0 text-slate-500 dark:text-slate-400" />
@@ -270,7 +272,7 @@ export function SearchPage() {
           ) : null}
         </main>
 
-        <aside className="space-y-5 pt-0 xl:pt-[78px]">
+        <aside className="space-y-5 pt-0">
           <SearchFilters
             kbs={kbItems}
             kbsLoading={kbsQuery.isLoading}
@@ -546,20 +548,8 @@ function SearchFilters({
 
   return (
     <section className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5">
         <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-100">筛选范围</h2>
-        <button
-          type="button"
-          onClick={() => {
-            onSelectedKbIdChange("");
-            onSelectedAssetTypesChange([]);
-            onDateFromChange("");
-            onDateToChange("");
-          }}
-          className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
-        >
-          重置
-        </button>
       </div>
 
       <div className="space-y-6">
