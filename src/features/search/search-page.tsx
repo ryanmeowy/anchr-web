@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   Calendar,
@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Copy,
   Database,
   ExternalLink,
   FileImage,
@@ -23,18 +24,25 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
+import { FileTypeIcon } from "@/components/shared/file-type-icon";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode, type UIEvent } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
 import { formatNumber } from "@/lib/format";
-import type { KnowledgeBase, RecentQuestion, SearchAssetType, SearchPage as SearchPageData, SearchResult } from "@/lib/types";
+import type { KnowledgeBase, RecentSearch, SearchAssetType, SearchPage as SearchPageData, SearchResult } from "@/lib/types";
 
 const SEARCH_LIMIT = 10;
 const SEARCH_TOP_K = 50;
-const ASSET_TYPES: SearchAssetType[] = ["PDF", "IMAGE", "TXT", "MARKDOWN"];
+const RECENT_SEARCH_PAGE_SIZE = 5;
+const RECENT_SEARCH_COLLAPSED_SIZE = 3;
 
-const ASSET_TYPE_META: Record<SearchAssetType, { icon: React.ComponentType<{ size?: number; className?: string }>; badgeClass: string }> = {
+const UNKNOWN_ASSET_TYPE_META = {
+  icon: FileType,
+  badgeClass: "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-500/20",
+};
+
+const ASSET_TYPE_META: Record<string, { icon: React.ComponentType<{ size?: number; className?: string }>; badgeClass: string }> = {
   PDF: {
     icon: FileText,
     badgeClass: "bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/20",
@@ -47,18 +55,39 @@ const ASSET_TYPE_META: Record<SearchAssetType, { icon: React.ComponentType<{ siz
     icon: FileType,
     badgeClass: "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-500/20",
   },
+  MD: {
+    icon: Hash,
+    badgeClass: "bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/20",
+  },
   MARKDOWN: {
     icon: Hash,
     badgeClass: "bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/20",
   },
 };
 
+const SOURCE_TYPE_LABEL: Record<string, string> = {
+  PDF: "PDF",
+  IMAGE: "图片",
+  TXT: "TXT",
+  MD: "Markdown",
+  MARKDOWN: "Markdown",
+};
+
 type SearchTab = "answer" | "results";
 type SearchMutationVariables = {
   query: string;
+  filters: SearchFiltersValue;
   cursor?: string | null;
   append?: boolean;
   startedAt: number;
+};
+
+type SearchFiltersValue = {
+  kbIds: string[];
+  assetTypes: SearchAssetType[];
+  dateFrom: string;
+  dateTo: string;
+  withAnswer: boolean;
 };
 
 type ResultGroup = {
@@ -70,7 +99,8 @@ type ResultGroup = {
 export function SearchPage() {
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
-  const [selectedKbId, setSelectedKbId] = useState("");
+  const [submittedFilters, setSubmittedFilters] = useState<SearchFiltersValue | null>(null);
+  const [selectedKbIds, setSelectedKbIds] = useState<string[]>([]);
   const [isKbMenuOpen, setIsKbMenuOpen] = useState(false);
   const [selectedAssetTypes, setSelectedAssetTypes] = useState<SearchAssetType[]>([]);
   const [dateFrom, setDateFrom] = useState("");
@@ -85,9 +115,11 @@ export function SearchPage() {
     refetchOnWindowFocus: false,
   });
 
-  const recentQuestionsQuery = useQuery({
-    queryKey: ["activity", "recent-questions", 5],
-    queryFn: () => apiClient.recentQuestions(5),
+  const recentSearchQuery = useInfiniteQuery({
+    queryKey: ["activity", "recent-search", RECENT_SEARCH_PAGE_SIZE],
+    queryFn: ({ pageParam }) => apiClient.recentSearch(RECENT_SEARCH_PAGE_SIZE, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
   const capabilitiesQuery = useQuery({
@@ -97,31 +129,33 @@ export function SearchPage() {
 
   const kbItems = useMemo(() => kbsQuery.data?.items ?? [], [kbsQuery.data?.items]);
   const kbById = useMemo(() => new Map(kbItems.map((item) => [item.id, item])), [kbItems]);
-  const selectedKb = useMemo(
-    () => kbItems.find((item) => item.id === selectedKbId),
-    [kbItems, selectedKbId],
-  );
-  const selectedKbLabel = selectedKb?.name ?? "全部知识库";
-  const selectedKbKey = selectedKbId;
-  const selectedAssetTypeKey = selectedAssetTypes.join(",");
+  const selectedKbLabel = useMemo(() => formatSelectedKbLabel(selectedKbIds, kbById), [kbById, selectedKbIds]);
   const supportedAssetTypes = useMemo(
     () =>
       (capabilitiesQuery.data?.supportedFormats ?? [])
-        .filter((item) => item.enabled && isSearchAssetType(item.fileType))
+        .filter((item) => item.enabled)
         .map((item) => item.fileType as SearchAssetType),
     [capabilitiesQuery.data?.supportedFormats],
   );
 
-  const buildDateRange = useCallback(() => {
-    const from = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : undefined;
-    const to = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : undefined;
+  const buildSubmittedFilters = useCallback((withAnswer: boolean): SearchFiltersValue => ({
+    kbIds: selectedKbIds,
+    assetTypes: selectedAssetTypes,
+    dateFrom,
+    dateTo,
+    withAnswer,
+  }), [dateFrom, dateTo, selectedAssetTypes, selectedKbIds]);
+
+  const buildDateRange = useCallback((filters: SearchFiltersValue) => {
+    const from = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`).getTime() : undefined;
+    const to = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59.999`).getTime() : undefined;
 
     if (from === undefined && to === undefined) {
       return undefined;
     }
 
     return { from, to };
-  }, [dateFrom, dateTo]);
+  }, []);
 
   const searchMutation = useMutation<SearchPageData, Error, SearchMutationVariables>({
     mutationFn: (variables) =>
@@ -130,12 +164,12 @@ export function SearchPage() {
         topK: SEARCH_TOP_K,
         limit: SEARCH_LIMIT,
         strategy: "KB_RRF_RERANK",
-        kbIds: selectedKbId ? [selectedKbId] : [],
-        assetTypes: selectedAssetTypes.length > 0 ? selectedAssetTypes : undefined,
-        dateRange: buildDateRange(),
+        kbIds: variables.filters.kbIds,
+        assetTypes: variables.filters.assetTypes.length > 0 ? variables.filters.assetTypes : undefined,
+        dateRange: buildDateRange(variables.filters),
         cursor: variables.cursor ?? undefined,
         sort: "score",
-        withAnswer: true,
+        withAnswer: variables.filters.withAnswer,
         answerMode: "STRICT",
       }),
     onSuccess: (data, variables) => {
@@ -155,7 +189,7 @@ export function SearchPage() {
     },
   });
 
-  const executeSearch = useCallback((searchText: string, cursor?: string | null, append = false) => {
+  const executeSearch = useCallback((searchText: string, filters: SearchFiltersValue, cursor?: string | null, append = false) => {
     const trimmed = searchText.trim();
     if (!trimmed) {
       return;
@@ -163,20 +197,12 @@ export function SearchPage() {
 
     searchMutation.mutate({
       query: trimmed,
+      filters,
       cursor,
       append,
       startedAt: performance.now(),
     });
   }, [searchMutation]);
-
-  useEffect(() => {
-    if (!submittedQuery) {
-      return;
-    }
-
-    executeSearch(submittedQuery);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedKbKey, selectedAssetTypeKey, dateFrom, dateTo]);
 
   const handleSubmit = () => {
     const trimmed = query.trim();
@@ -184,20 +210,63 @@ export function SearchPage() {
       return;
     }
 
-    setActiveTab("answer");
+    const filters = buildSubmittedFilters(true);
     setSubmittedQuery(trimmed);
-    executeSearch(trimmed);
+    setSubmittedFilters(filters);
+    setActiveTab("answer");
+    executeSearch(trimmed, filters);
   };
 
   const handleLoadMore = () => {
-    if (!submittedQuery || !searchData?.nextCursor || searchMutation.isPending) {
+    if (!submittedQuery || !submittedFilters || !searchData?.nextCursor || searchMutation.isPending) {
       return;
     }
 
-    executeSearch(submittedQuery, searchData.nextCursor, true);
+    executeSearch(submittedQuery, submittedFilters, searchData.nextCursor, true);
+  };
+
+  const handleTabChange = (tab: SearchTab) => {
+    if (tab === "answer" && submittedQuery && submittedFilters?.withAnswer === false && !searchMutation.isPending) {
+      const filters = { ...submittedFilters, withAnswer: true };
+      setSubmittedFilters(filters);
+      setActiveTab("answer");
+      executeSearch(submittedQuery, filters);
+      return;
+    }
+
+    setActiveTab(tab);
+  };
+
+  const handleRecentSearchSelect = (item: RecentSearch) => {
+    const nextKbIds = item.kbIds ?? [];
+    const nextAssetTypes = (item.assetTypes ?? []) as SearchAssetType[];
+    const nextDateFrom = dateKeyFromTimestamp(item.dateRange?.from);
+    const nextDateTo = dateKeyFromTimestamp(item.dateRange?.to);
+    const nextWithAnswer = item.withAnswer !== false;
+    const filters: SearchFiltersValue = {
+      kbIds: nextKbIds,
+      assetTypes: nextAssetTypes,
+      dateFrom: nextDateFrom,
+      dateTo: nextDateTo,
+      withAnswer: nextWithAnswer,
+    };
+
+    setQuery(item.query);
+    setSelectedKbIds(nextKbIds);
+    setSelectedAssetTypes(nextAssetTypes);
+    setDateFrom(nextDateFrom);
+    setDateTo(nextDateTo);
+    setSubmittedQuery(item.query);
+    setSubmittedFilters(filters);
+    setActiveTab(nextWithAnswer ? "answer" : "results");
+    executeSearch(item.query, filters);
   };
 
   const resultGroups = useMemo(() => groupResults(searchData?.items ?? [], kbById), [kbById, searchData?.items]);
+  const recentSearchItems = useMemo(
+    () => recentSearchQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [recentSearchQuery.data?.pages],
+  );
   const isAppending = Boolean(searchMutation.isPending && searchMutation.variables?.append);
   const isSearching = Boolean(searchMutation.isPending && !searchMutation.variables?.append);
   const hasSearched = Boolean(submittedQuery);
@@ -238,7 +307,7 @@ export function SearchPage() {
                   {isSearching ? <Loader2 size={21} className="animate-spin" /> : <ArrowRight size={22} />}
                 </button>
               </div>
-              <SearchTabs activeTab={activeTab} onChange={setActiveTab} />
+              <SearchTabs activeTab={activeTab} onChange={handleTabChange} />
             </div>
           </div>
 
@@ -257,7 +326,16 @@ export function SearchPage() {
           ) : null}
 
           {hasSearched && !isSearching && activeTab === "answer" ? (
-            <AnswerPanel data={searchData} query={submittedQuery} onRegenerate={() => executeSearch(submittedQuery)} />
+            <AnswerPanel
+              data={searchData}
+              onRegenerate={() => {
+                if (submittedQuery && submittedFilters) {
+                  const filters = { ...submittedFilters, withAnswer: true };
+                  setSubmittedFilters(filters);
+                  executeSearch(submittedQuery, filters);
+                }
+              }}
+            />
           ) : null}
 
           {hasSearched && !isSearching && activeTab === "results" ? (
@@ -276,12 +354,12 @@ export function SearchPage() {
           <SearchFilters
             kbs={kbItems}
             kbsLoading={kbsQuery.isLoading}
-            selectedKbId={selectedKbId}
+            selectedKbIds={selectedKbIds}
             selectedKbLabel={selectedKbLabel}
             isKbMenuOpen={isKbMenuOpen}
             onKbMenuToggle={() => setIsKbMenuOpen((open) => !open)}
             onKbMenuClose={() => setIsKbMenuOpen(false)}
-            onSelectedKbIdChange={setSelectedKbId}
+            onSelectedKbIdsChange={setSelectedKbIds}
             sourceTypes={supportedAssetTypes}
             sourceTypesLoading={capabilitiesQuery.isLoading}
             sourceTypesError={capabilitiesQuery.isError}
@@ -292,7 +370,15 @@ export function SearchPage() {
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />
-          <RecentQuestionsPanel items={recentQuestionsQuery.data?.items ?? []} isLoading={recentQuestionsQuery.isLoading} isError={recentQuestionsQuery.isError} />
+          <RecentSearchPanel
+            items={recentSearchItems}
+            isLoading={recentSearchQuery.isLoading}
+            isError={recentSearchQuery.isError}
+            hasNextPage={recentSearchQuery.hasNextPage}
+            isFetchingNextPage={recentSearchQuery.isFetchingNextPage}
+            onLoadMore={() => recentSearchQuery.fetchNextPage()}
+            onSelect={handleRecentSearchSelect}
+          />
         </aside>
       </div>
     </div>
@@ -339,9 +425,20 @@ function EmptySearchState() {
   );
 }
 
-function AnswerPanel({ data, query, onRegenerate }: { data: SearchPageData | null; query: string; onRegenerate: () => void }) {
+function AnswerPanel({ data, onRegenerate }: { data: SearchPageData | null; onRegenerate: () => void }) {
   const answer = data?.answer?.answer?.trim();
   const citations = data?.answer?.citations ?? [];
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!answer) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(answer);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
 
   if (!answer) {
     return (
@@ -352,44 +449,56 @@ function AnswerPanel({ data, query, onRegenerate }: { data: SearchPageData | nul
   }
 
   return (
-    <section className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
-      <div className="mb-4 flex flex-col gap-3 border-b border-[var(--line)] pb-4 dark:border-[var(--line)] sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <span className="grid size-9 place-items-center rounded-[10px] bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
-            <Sparkles size={19} />
-          </span>
-          <div>
-            <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-100">基于证据生成</h2>
-            <p className="mt-1 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">{query}</p>
+    <section className="rounded-[14px] border border-blue-100 bg-[var(--surface)] p-5 shadow-[0_18px_48px_rgba(59,130,246,0.08)] ring-1 ring-blue-500/5 dark:border-blue-500/20 dark:bg-[var(--surface)] dark:ring-blue-400/10">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">
+          <Sparkles size={20} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-100">基于 {formatNumber(citations.length)} 条证据生成</h2>
+            <Check size={17} className="text-emerald-500" />
+          </div>
+          <div className="mt-5 whitespace-pre-wrap text-[15px] leading-8 text-slate-900 dark:text-slate-100">
+            {renderHighlightedText(answer)}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onRegenerate}
-          className="inline-flex h-9 items-center justify-center gap-2 rounded-[9px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]"
-        >
-          <RefreshCcw size={15} />
-          重新生成
-        </button>
       </div>
 
-      <div className="whitespace-pre-wrap text-[15px] leading-8 text-slate-900 dark:text-slate-100">{answer}</div>
-
       {citations.length > 0 ? (
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap items-center gap-2 pl-0 sm:pl-12">
+          <span className="text-sm font-medium text-slate-500 dark:text-slate-400">来源:</span>
           {citations.map((item) => (
             <Link
               key={`${item.citationIndex}-${item.segmentId}`}
               href={`/preview/${item.segmentId}`}
-              className="inline-flex max-w-full items-center gap-2 rounded-[8px] border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-500/25 dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-500/20"
+              className="inline-flex max-w-full items-center gap-2 rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]"
             >
-              <span>[{item.citationIndex}]</span>
+              <span className="font-bold text-blue-600 dark:text-blue-300">[{item.citationIndex}]</span>
               <span className="truncate">{item.fileName ?? "引用来源"}</span>
-              {item.pageNo ? <span className="shrink-0">P{item.pageNo}</span> : null}
             </Link>
           ))}
         </div>
       ) : null}
+
+      <div className="mt-7 flex flex-wrap items-center gap-3 pl-0 sm:pl-12">
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-[9px] border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-medium text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]"
+        >
+          {copied ? <Check size={16} /> : <Copy size={16} />}
+          {copied ? "已复制" : "复制回答"}
+        </button>
+        <button
+          type="button"
+          onClick={onRegenerate}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-[9px] border border-[var(--line)] bg-[var(--surface)] px-4 text-sm font-medium text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]"
+        >
+          <RefreshCcw size={16} />
+          重新生成
+        </button>
+      </div>
     </section>
   );
 }
@@ -465,10 +574,11 @@ function ResultGroupCard({ group }: { group: ResultGroup }) {
 
 function ResultRow({ item }: { item: SearchResult }) {
   const assetType = item.assetType;
-  const meta = ASSET_TYPE_META[assetType];
+  const meta = ASSET_TYPE_META[assetType] ?? UNKNOWN_ASSET_TYPE_META;
   const Icon = meta.icon;
   const href = item.segmentId ? `/preview/${item.segmentId}` : "/search";
   const position = formatResultPosition(item);
+  const assetTypeLabel = SOURCE_TYPE_LABEL[assetType] ?? assetType;
 
   return (
     <Link href={href} className="block px-4 py-4 transition hover:bg-[var(--surface-hover)] dark:hover:bg-[var(--surface-hover)]">
@@ -477,7 +587,7 @@ function ResultRow({ item }: { item: SearchResult }) {
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className={`inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-[11px] font-bold ring-1 ${meta.badgeClass}`}>
               <Icon size={13} />
-              {assetType}
+              {assetTypeLabel}
             </span>
             <h4 className="min-w-0 truncate text-[15px] font-semibold text-slate-950 dark:text-slate-100">
               {displaySourceName(item.sourceRef, item.assetId)}
@@ -510,12 +620,12 @@ function ResultRow({ item }: { item: SearchResult }) {
 function SearchFilters({
   kbs,
   kbsLoading,
-  selectedKbId,
+  selectedKbIds,
   selectedKbLabel,
   isKbMenuOpen,
   onKbMenuToggle,
   onKbMenuClose,
-  onSelectedKbIdChange,
+  onSelectedKbIdsChange,
   sourceTypes,
   sourceTypesLoading,
   sourceTypesError,
@@ -528,12 +638,12 @@ function SearchFilters({
 }: {
   kbs: KnowledgeBase[];
   kbsLoading: boolean;
-  selectedKbId: string;
+  selectedKbIds: string[];
   selectedKbLabel: string;
   isKbMenuOpen: boolean;
   onKbMenuToggle: () => void;
   onKbMenuClose: () => void;
-  onSelectedKbIdChange: (id: string) => void;
+  onSelectedKbIdsChange: (ids: string[]) => void;
   sourceTypes: SearchAssetType[];
   sourceTypesLoading: boolean;
   sourceTypesError: boolean;
@@ -556,13 +666,13 @@ function SearchFilters({
         <FilterSection title="知识库">
           <SearchKnowledgeBasePicker
             items={kbs}
-            selectedKbId={selectedKbId}
+            selectedKbIds={selectedKbIds}
             selectedLabel={selectedKbLabel}
             isOpen={isKbMenuOpen}
             isLoading={kbsLoading}
             onToggle={onKbMenuToggle}
             onClose={onKbMenuClose}
-            onSelect={onSelectedKbIdChange}
+            onChange={onSelectedKbIdsChange}
           />
         </FilterSection>
 
@@ -576,9 +686,8 @@ function SearchFilters({
             <div className="text-sm text-slate-500 dark:text-slate-400">暂无支持的来源类型。</div>
           ) : null}
           {!sourceTypesLoading && !sourceTypesError && sourceTypes.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {sourceTypes.map((assetType) => {
-              const Icon = ASSET_TYPE_META[assetType].icon;
               const checked = selectedAssetTypes.length === 0 || selectedAssetTypes.includes(assetType);
 
               return (
@@ -587,15 +696,15 @@ function SearchFilters({
                   type="button"
                   onClick={() => onSelectedAssetTypesChange(toggleWithinAllSelection(selectedAssetTypes, assetType, sourceTypes))}
                   className={[
-                    "flex h-9 items-center justify-center gap-1.5 rounded-[8px] border px-2 text-xs font-semibold transition",
+                    "flex min-h-12 flex-col items-center justify-center gap-1 rounded-[8px] px-1.5 py-2 text-center transition",
                     checked
-                      ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200"
-                      : "border-[var(--line)] bg-[var(--surface)] text-slate-600 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]",
+                      ? "border-blue-300 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/15"
+                      : "bg-[var(--background)] hover:bg-[var(--surface-hover)] dark:bg-[#0d1117] dark:hover:bg-[var(--surface-hover)]",
                   ].join(" ")}
                   aria-pressed={checked}
                 >
-                  <Icon size={14} />
-                  {assetType}
+                  <FileTypeIcon fileName={assetType} sourceType={assetType} compact />
+                  <span className="max-w-full truncate text-xs font-medium text-slate-600 dark:text-slate-300">{SOURCE_TYPE_LABEL[assetType]}</span>
                 </button>
               );
               })}
@@ -633,23 +742,34 @@ function FilterSection({ title, action, children }: { title: string; action?: st
 
 function SearchKnowledgeBasePicker({
   items,
-  selectedKbId,
+  selectedKbIds,
   selectedLabel,
   isOpen,
   isLoading,
   onToggle,
   onClose,
-  onSelect,
+  onChange,
 }: {
   items: KnowledgeBase[];
-  selectedKbId: string;
+  selectedKbIds: string[];
   selectedLabel: string;
   isOpen: boolean;
   isLoading: boolean;
   onToggle: () => void;
   onClose: () => void;
-  onSelect: (kbId: string) => void;
+  onChange: (kbIds: string[]) => void;
 }) {
+  const selectedSet = useMemo(() => new Set(selectedKbIds), [selectedKbIds]);
+
+  const toggleKb = (kbId: string) => {
+    if (selectedSet.has(kbId)) {
+      onChange(selectedKbIds.filter((id) => id !== kbId));
+      return;
+    }
+
+    onChange([...selectedKbIds, kbId]);
+  };
+
   return (
     <div
       className="relative"
@@ -675,6 +795,7 @@ function SearchKnowledgeBasePicker({
         <div
           className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.16)] dark:border-[var(--line)] dark:bg-[var(--surface)]"
           role="listbox"
+          aria-multiselectable="true"
         >
           {isLoading ? (
             <div className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400">加载知识库...</div>
@@ -683,21 +804,20 @@ function SearchKnowledgeBasePicker({
               <button
                 type="button"
                 onClick={() => {
-                  onSelect("");
-                  onClose();
+                  onChange([]);
                 }}
                 className={[
                   "flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm",
-                  selectedKbId === ""
+                  selectedKbIds.length === 0
                     ? "bg-blue-50 font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                     : "text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-300",
                 ].join(" ")}
                 role="option"
-                aria-selected={selectedKbId === ""}
+                aria-selected={selectedKbIds.length === 0}
               >
                 <Database size={16} className="shrink-0" />
                 <span className="min-w-0 flex-1 truncate">全部知识库</span>
-                {selectedKbId === "" ? <Check size={14} className="shrink-0" /> : null}
+                {selectedKbIds.length === 0 ? <Check size={14} className="shrink-0" /> : null}
               </button>
 
               {items.length > 0 ? (
@@ -705,22 +825,19 @@ function SearchKnowledgeBasePicker({
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => {
-                      onSelect(item.id);
-                      onClose();
-                    }}
+                    onClick={() => toggleKb(item.id)}
                     className={[
                       "flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-sm",
-                      selectedKbId === item.id
+                      selectedSet.has(item.id)
                         ? "bg-blue-50 font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                         : "text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-300",
                     ].join(" ")}
                     role="option"
-                    aria-selected={selectedKbId === item.id}
+                    aria-selected={selectedSet.has(item.id)}
                   >
                     <Folder size={16} className="shrink-0" />
                     <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                    {selectedKbId === item.id ? <Check size={14} className="shrink-0" /> : null}
+                    {selectedSet.has(item.id) ? <Check size={14} className="shrink-0" /> : null}
                   </button>
                 ))
               ) : (
@@ -972,38 +1089,112 @@ function CalendarDayButton({
   );
 }
 
-function RecentQuestionsPanel({ items, isLoading, isError }: { items: RecentQuestion[]; isLoading: boolean; isError: boolean }) {
+function RecentSearchPanel({
+  items,
+  isLoading,
+  isError,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+  onSelect,
+}: {
+  items: RecentSearch[];
+  isLoading: boolean;
+  isError: boolean;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
+  onSelect: (item: RecentSearch) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleItems = expanded ? items : items.slice(0, RECENT_SEARCH_COLLAPSED_SIZE);
+
+  const handleExpand = () => {
+    setExpanded(true);
+    if (hasNextPage && !isFetchingNextPage) {
+      onLoadMore();
+    }
+  };
+
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (!expanded || !hasNextPage || isFetchingNextPage) {
+      return;
+    }
+
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 24) {
+      onLoadMore();
+    }
+  };
+
   return (
     <section className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-100">最近相关问题</h2>
-        <Link href="/ask" className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200">
-          查看全部
-        </Link>
+        <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-100">最近搜索</h2>
+        {!expanded && items.length > RECENT_SEARCH_COLLAPSED_SIZE ? (
+          <button
+            type="button"
+            onClick={handleExpand}
+            className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
+          >
+            查看全部
+          </button>
+        ) : null}
       </div>
 
-      {isLoading ? <LoadingBlock label="加载最近问题" /> : null}
-      {isError ? <div className="py-5 text-sm text-slate-500 dark:text-slate-400">最近问题暂不可用。</div> : null}
+      {isLoading ? <LoadingBlock label="加载最近搜索" /> : null}
+      {isError ? <div className="py-5 text-sm text-slate-500 dark:text-slate-400">最近搜索暂不可用。</div> : null}
       {!isLoading && !isError ? (
-        <div className="divide-y divide-[var(--line)] dark:divide-[var(--line)]">
-          {items.length > 0 ? items.map((item) => <RecentQuestionRow key={item.turnId} item={item} />) : (
-            <div className="py-5 text-sm text-slate-500 dark:text-slate-400">暂无最近问题。</div>
+        <div
+          onScroll={handleScroll}
+          className={[
+            "divide-y divide-[var(--line)] dark:divide-[var(--line)]",
+            expanded ? "h-[360px] overflow-y-auto pr-1" : "",
+          ].join(" ")}
+        >
+          {visibleItems.length > 0 ? visibleItems.map((item, index) => (
+            <RecentSearchRow
+              key={`${item.query}-${item.searchedAt ?? index}`}
+              item={item}
+              onSelect={() => onSelect(item)}
+            />
+          )) : (
+            <div className="py-5 text-sm text-slate-500 dark:text-slate-400">暂无最近搜索。</div>
           )}
+          {expanded && isFetchingNextPage ? (
+            <div className="flex items-center justify-center gap-2 py-3 text-xs text-slate-500 dark:text-slate-400">
+              <Loader2 size={14} className="animate-spin" />
+              加载更多
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
   );
 }
 
-function RecentQuestionRow({ item }: { item: RecentQuestion }) {
+function RecentSearchRow({ item, onSelect }: { item: RecentSearch; onSelect: () => void }) {
+  const scope = item.knowledgeBaseNames?.length
+    ? item.knowledgeBaseNames
+    : item.kbIds;
+
   return (
-    <Link href="/ask" className="grid grid-cols-[1fr_auto] gap-3 py-3">
+    <button
+      type="button"
+      onClick={onSelect}
+      className="grid w-full grid-cols-[1fr_auto] gap-3 py-3 text-left transition hover:bg-[var(--surface-hover)] dark:hover:bg-[var(--surface-hover)]"
+    >
       <span className="flex min-w-0 items-center gap-3">
         <MessageCircle size={17} className="shrink-0 text-slate-500 dark:text-slate-400" />
-        <span className="truncate text-sm text-slate-700 dark:text-slate-300">{item.question || "未命名问题"}</span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm text-slate-700 dark:text-slate-300">{item.query || "未命名搜索"}</span>
+          <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">
+            {scope.length > 0 ? scope.slice(0, 2).join(" / ") : "全部知识库"} · 命中 {formatNumber(item.total)}
+          </span>
+        </span>
       </span>
-      <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{formatRelativeTime(item.createdAt)}</span>
-    </Link>
+      <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{formatRelativeTime(item.searchedAt)}</span>
+    </button>
   );
 }
 
@@ -1025,6 +1216,18 @@ function groupResults(results: SearchResult[], kbById: Map<string, KnowledgeBase
   return Array.from(groups.values());
 }
 
+function formatSelectedKbLabel(selectedKbIds: string[], kbById: Map<string, KnowledgeBase>) {
+  if (selectedKbIds.length === 0) {
+    return "全部知识库";
+  }
+
+  if (selectedKbIds.length === 1) {
+    return kbById.get(selectedKbIds[0])?.name ?? "1 个知识库";
+  }
+
+  return `已选 ${selectedKbIds.length} 个知识库`;
+}
+
 function toggleWithinAllSelection<T>(selected: T[], value: T, allValues: T[]) {
   if (selected.length === 0) {
     return allValues.filter((item) => item !== value);
@@ -1041,10 +1244,6 @@ function toggleWithinAllSelection<T>(selected: T[], value: T, allValues: T[]) {
   return next;
 }
 
-function isSearchAssetType(value: string): value is SearchAssetType {
-  return (ASSET_TYPES as string[]).includes(value);
-}
-
 function formatDateRangeLabel(from: string, to: string) {
   if (from && to) {
     return `${from} 至 ${to}`;
@@ -1059,6 +1258,14 @@ function formatDateRangeLabel(from: string, to: string) {
   }
 
   return "全部时间";
+}
+
+function dateKeyFromTimestamp(value?: number | null) {
+  if (!value) {
+    return "";
+  }
+
+  return toDateKey(new Date(value));
 }
 
 type CalendarDay = {

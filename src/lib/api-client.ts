@@ -21,7 +21,9 @@ import type {
   PagedList,
   PreviewSegment,
   RecentCitationList,
+  RecentDocumentList,
   RecentQuestionList,
+  RecentSearchList,
   SearchRequest,
   SearchPage,
   StorageConfig,
@@ -201,6 +203,10 @@ export const apiClient = {
     request<RecentQuestionList>(`/api/v1/activity/recent-questions?${activityQuery(limit, cursor)}`),
   recentCitations: (limit = 10, cursor?: string | null) =>
     request<RecentCitationList>(`/api/v1/activity/recent-citations?${activityQuery(limit, cursor)}`),
+  recentSearch: (limit = 10, cursor?: string | null) =>
+    request<RecentSearchList>(`/api/v1/activity/recent-search?${activityQuery(limit, cursor)}`),
+  recentDocument: (limit = 10, cursor?: string | null) =>
+    request<RecentDocumentList>(`/api/v1/activity/recent-document?${activityQuery(limit, cursor)}`),
   listKnowledgeBases: (page = 1, size = 20) =>
     request<PagedList<KnowledgeBase>>(`/api/v1/kbs?page=${page}&size=${size}`),
   searchKnowledgeBases: (query: string, limit = 50) => {

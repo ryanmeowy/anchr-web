@@ -64,6 +64,33 @@ export type RecentCitation = {
   openedAt?: string;
 };
 
+export type RecentSearch = {
+  query: string;
+  kbIds: string[];
+  knowledgeBaseNames?: string[];
+  total: number;
+  searchedAt?: string;
+  assetTypes?: string[];
+  dateRange?: {
+    from?: number | null;
+    to?: number | null;
+  } | null;
+  withAnswer?: boolean | null;
+  answerMode?: string | null;
+};
+
+export type RecentDocument = {
+  taskId: string;
+  kbId: string;
+  knowledgeBaseName?: string | null;
+  status: string;
+  totalCount: number;
+  successCount: number;
+  failureCount: number;
+  runningCount: number;
+  importedAt?: string;
+};
+
 export type RecentQuestionList = {
   items: RecentQuestion[];
   nextCursor?: string | null;
@@ -71,6 +98,16 @@ export type RecentQuestionList = {
 
 export type RecentCitationList = {
   items: RecentCitation[];
+  nextCursor?: string | null;
+};
+
+export type RecentSearchList = {
+  items: RecentSearch[];
+  nextCursor?: string | null;
+};
+
+export type RecentDocumentList = {
+  items: RecentDocument[];
   nextCursor?: string | null;
 };
 
@@ -175,7 +212,7 @@ export type UploadIngestionItem = {
   fileHash?: string;
 };
 
-export type SearchAssetType = "PDF" | "IMAGE" | "TXT" | "MARKDOWN";
+export type SearchAssetType = string;
 export type SearchHitType = "TEXT" | "IMAGE" | "MIXED";
 export type SearchStrategy = "KB_RRF" | "KB_RRF_RERANK";
 export type SearchAnswerMode = "STRICT";

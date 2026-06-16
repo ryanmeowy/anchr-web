@@ -39,6 +39,7 @@ export function statusText(status?: string) {
     PENDING: "等待中",
     RUNNING: "处理中",
     SUCCESS: "成功",
+    COMPLETED: "已完成",
     PARTIAL_SUCCESS: "部分成功",
     FAILED: "失败",
     PARSED: "已解析",
