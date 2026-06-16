@@ -135,18 +135,34 @@ export type IngestionTaskList = {
 
 export type IngestionTask = IngestionTaskSummary & {
   finishedAt?: string;
-  items?: Array<{
-    itemId: string;
-    assetId?: string;
-    fileName?: string;
-    sourceUrl?: string;
-    stage: string;
-    status: string;
-    progress: number;
-    dedupeResult?: string;
-    errorCode?: string;
-    errorMessage?: string;
-  }>;
+  items?: IngestionTaskItem[];
+};
+
+export type IngestionTaskItem = {
+  itemId: string;
+  assetId?: string | null;
+  fileName?: string | null;
+  fileHash?: string | null;
+  sourceUrl?: string | null;
+  stage: string;
+  status: string;
+  progress: number;
+  dedupeResult?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  updatedAt?: string;
+  finishedAt?: string | null;
+};
+
+export type StsToken = {
+  endpoint: string;
+  bucket: string;
+  region: string;
+  prefix: string;
+  accessKeyId: string;
+  accessKeySecret: string;
+  securityToken: string;
+  expiration: string;
 };
 
 export type UploadIngestionItem = {
@@ -159,19 +175,64 @@ export type UploadIngestionItem = {
   fileHash?: string;
 };
 
+export type SearchAssetType = "PDF" | "IMAGE" | "TXT" | "MARKDOWN";
+export type SearchHitType = "TEXT" | "IMAGE" | "MIXED";
+export type SearchStrategy = "KB_RRF" | "KB_RRF_RERANK";
+export type SearchAnswerMode = "STRICT";
+
+export type SearchRequest = {
+  query: string;
+  topK?: number;
+  limit?: number;
+  strategy?: SearchStrategy;
+  kbIds?: string[];
+  assetTypes?: SearchAssetType[];
+  hitTypes?: SearchHitType[];
+  dateRange?: {
+    from?: number;
+    to?: number;
+  };
+  cursor?: string;
+  sort?: string;
+  withAnswer?: boolean;
+  answerMode?: SearchAnswerMode;
+};
+
 export type SearchResult = {
   segmentId?: string;
   kbId?: string;
   assetId?: string;
   sourceRef?: string;
   segmentType?: string;
-  assetType?: string;
+  assetType: SearchAssetType;
   content?: string;
   snippet?: string;
   pageNo?: number;
   score?: number;
   thumbnail?: string;
   ocrSummary?: string;
+  resultType?: SearchHitType;
+  explain?: {
+    strategyEffective?: string;
+    hitSources?: string[];
+    segments?: {
+      keyword?: boolean;
+      ocr?: boolean;
+      tag?: boolean;
+      vector?: boolean;
+    };
+  };
+  anchor?: {
+    pageNo?: number | null;
+    chunkOrder?: number | null;
+  };
+  totalHits?: number;
+  topChunks?: Array<{
+    segmentId: string;
+    snippet?: string;
+    pageNo?: number | null;
+    chunkOrder?: number | null;
+  }>;
 };
 
 export type SearchAnswer = {
@@ -190,8 +251,14 @@ export type SearchAnswer = {
 export type SearchPage = {
   items: SearchResult[];
   total: number;
-  nextCursor?: string;
-  answer?: SearchAnswer;
+  nextCursor?: string | null;
+  facets?: {
+    assetType?: Array<{
+      value: SearchAssetType;
+      count: number;
+    }>;
+  } | null;
+  answer?: SearchAnswer | null;
 };
 
 export type PreviewSegment = {
@@ -232,48 +299,155 @@ export type PreviewSegment = {
   };
 };
 
-export type Provider = {
-  providerKey: string;
-  providerName: string;
-  providerType: string;
-  selected: boolean;
+// ── capability config ──────────────────────────────────────────────────
+
+export type CapabilityConfig = {
+  id: number;
+  baseUrl: string;
+  modelName?: string;
+  extraConfig?: Record<string, unknown>;
+  apiKeyMasked: string;
   enabled: boolean;
-  baseUrl?: string;
-  model?: string;
-  embeddingModel?: string;
+};
+
+export type CapabilityConfigUpdateRequest = {
+  baseUrl: string;
+  apiKey?: string;
+  modelName?: string;
+  extraConfig?: Record<string, unknown>;
+};
+
+export type CapabilityConnectionTestRequest = {
+  capability: string;
+  baseUrl: string;
+  apiKey?: string;
+  modelName?: string;
+  configId?: number;
+};
+
+export type CapabilityConnectionTestResult = {
+  success: boolean;
+  latencyMs: number;
+  message: string;
   dimension?: number;
-  connected?: boolean;
 };
 
-export type ProviderList = {
-  providers: Provider[];
+export type CapabilityParams = {
+  params: ParamItem[];
 };
 
-export type SearchSetting = {
-  rerankEnabled?: boolean;
-  resultLimit?: number;
-  minScore?: number;
+export type ParamItem = {
+  key: string;
+  label: string;
 };
 
-export type Preference = {
+// ── storage config ─────────────────────────────────────────────────────
+
+export type StorageConfig = {
+  id: number;
+  endpoint: string;
+  bucket: string;
+  region?: string;
+  prefix?: string;
+  roleArn?: string;
+  accessKeyMasked: string;
+  secretKeyMasked: string;
+  enabled: boolean;
+};
+
+export type StorageConfigUpdateRequest = {
+  endpoint: string;
+  accessKey?: string;
+  secretKey?: string;
+  bucket: string;
+  region?: string;
+  prefix?: string;
+  roleArn?: string;
+};
+
+export type StorageConnectionTestResult = {
+  success: boolean;
+  latencyMs: number;
+  message: string;
+};
+
+export type ConversationCitation = {
+  fileName?: string;
+  pageNo?: number;
+  snippet?: string;
+  hitType?: string;
+  assetId?: string;
+  segmentId?: string;
+};
+
+export type ConversationSession = {
+  sessionId: string;
+  userId?: string;
+  title?: string | null;
+  status?: string;
+  lastMessagePreview?: string | null;
+  kbScope?: string[];
+  createdAt?: number;
+  updatedAt?: number;
+  expiresAt?: number;
+};
+
+export type ConversationSessionList = {
+  items: ConversationSession[];
+  nextCursor?: string | null;
+};
+
+export type ConversationTurn = {
+  turnId: string;
+  sessionId: string;
+  query?: string;
+  rewrittenQuery?: string;
+  answer?: string;
+  kbScope?: string[];
   answerMode?: string;
-  citationPolicy?: string;
-  language?: string;
-  theme?: string;
-  fontSize?: string;
-  density?: string;
+  citations?: ConversationCitation[];
+  resultCards?: Array<{
+    assetId?: string;
+    assetType?: string;
+    fileName?: string;
+    title?: string;
+    score?: number;
+    hitCount?: number;
+    primaryHit?: {
+      segmentId?: string;
+      snippet?: string;
+      score?: number;
+      pageNo?: number;
+      anchor?: unknown;
+      hitType?: string;
+    };
+    additionalHits?: Array<{
+      segmentId?: string;
+      snippet?: string;
+      score?: number;
+      pageNo?: number;
+      anchor?: unknown;
+      hitType?: string;
+    }>;
+  }>;
+  createdAt?: number;
+};
+
+export type ConversationMessageList = {
+  sessionId: string;
+  turns: ConversationTurn[];
 };
 
 export type ConversationMessage = {
   sessionId?: string;
   turnId?: string;
+  title?: string | null;
+  rewrittenQuery?: string;
   answer?: string;
-  citations?: Array<{
-    fileName?: string;
-    pageNo?: number;
-    snippet?: string;
-    hitType?: string;
-    assetId?: string;
-    segmentId?: string;
-  }>;
+  kbScope?: string[];
+  answerMode?: string;
+  retrievalStage?: string;
+  citations?: ConversationCitation[];
+  suggestedQuestions?: string[];
+  createdAt?: number;
 };

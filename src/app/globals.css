@@ -14,14 +14,14 @@
 }
 
 .dark {
-  --background: #1f2937;
-  --foreground: #d7dde7;
-  --muted: #a8b3c2;
-  --line: #475569;
-  --brand: #60a5fa;
-  --brand-soft: rgba(37, 99, 235, 0.16);
-  --surface: #2a3648;
-  --surface-hover: #334155;
+  --background: #0d1117;
+  --foreground: #f0f6fc;
+  --muted: #8b949e;
+  --line: #30363d;
+  --brand: #58a6ff;
+  --brand-soft: rgba(56, 139, 253, 0.16);
+  --surface: #161b22;
+  --surface-hover: #21262d;
   color-scheme: dark;
 }
 

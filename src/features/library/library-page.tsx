@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
-  BookMarked,
   Box,
   ChevronLeft,
   ChevronRight,
@@ -19,8 +18,8 @@ import {
   Star,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
+import { useDeferredValue, useMemo, useState } from "react";
+import { LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatNumber, statusText } from "@/lib/format";
 import type { KnowledgeBase, RecentCitation, RecentQuestion } from "@/lib/types";
@@ -46,10 +45,21 @@ export function LibraryPage() {
   const [showAllQuestions, setShowAllQuestions] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [kbPage, setKbPage] = useState(1);
+  const deferredKeyword = useDeferredValue(keyword);
+  const searchKeyword = deferredKeyword.trim();
+  const isSearching = searchKeyword.length > 0;
 
   const kbsQuery = useQuery({
     queryKey: ["kbs", kbPage, KB_PAGE_SIZE],
     queryFn: () => apiClient.listKnowledgeBases(kbPage, KB_PAGE_SIZE),
+    refetchOnWindowFocus: false,
+  });
+
+  const searchQuery = useQuery({
+    queryKey: ["kbs", "search", searchKeyword, 50],
+    queryFn: () => apiClient.searchKnowledgeBases(searchKeyword, 50),
+    enabled: isSearching,
+    refetchOnWindowFocus: false,
   });
 
   const citationsQuery = useQuery({
@@ -75,29 +85,28 @@ export function LibraryPage() {
 
   const totalKbs = kbsQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalKbs / KB_PAGE_SIZE));
-
-  const items = useMemo(() => {
-    const value = keyword.trim().toLowerCase();
-    const list = kbsQuery.data?.items ?? [];
-
-    if (!value) {
-      return list;
-    }
-
-    return list.filter((item) => `${item.name} ${item.description ?? ""}`.toLowerCase().includes(value));
-  }, [kbsQuery.data?.items, keyword]);
+  const items = useMemo(
+    () => (isSearching ? searchQuery.data ?? [] : kbsQuery.data?.items ?? []),
+    [isSearching, kbsQuery.data?.items, searchQuery.data],
+  );
+  const isListLoading = isSearching ? searchQuery.isLoading : kbsQuery.isLoading;
+  const isListError = isSearching ? searchQuery.isError : kbsQuery.isError;
+  const listError = isSearching ? searchQuery.error : kbsQuery.error;
+  const listIsFetching = isSearching ? searchQuery.isFetching : kbsQuery.isFetching;
 
   return (
     <div className="min-h-[calc(100vh-68px)] px-4 pb-8 sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:pb-10">
+      <div className="mx-auto max-w-[1320px]">
+        <div className="mb-7 lg:mb-9">
+          <h1 className="text-[26px] font-semibold tracking-normal text-slate-950 dark:text-slate-200 lg:text-[30px]">知识库</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">从多个知识库中检索并获得可靠的答案</p>
+        </div>
+      </div>
+
       <div className="mx-auto grid max-w-[1320px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-8">
         <main className="min-w-0">
           <div className="mb-7 lg:mb-9">
-            <div className="mb-5 flex items-center gap-3 lg:mb-8">
-              <h1 className="text-[26px] font-semibold tracking-normal text-slate-950 dark:text-slate-200 lg:text-[30px]">知识库</h1>
-              <BookMarked size={22} className="text-slate-500 dark:text-slate-400" />
-            </div>
-
-            <div className="flex h-[64px] items-center gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] px-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)] dark:border-[#475569] dark:bg-[#2a3648] sm:h-[72px] sm:gap-4 sm:px-5">
+            <div className="flex h-[46px] items-center gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] px-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)] dark:border-[var(--line)] dark:bg-[var(--surface)] sm:h-[52px] sm:gap-4 sm:px-5">
               <Search size={23} className="shrink-0 text-slate-500 dark:text-slate-400" />
               <input
                 value={keyword}
@@ -106,11 +115,8 @@ export function LibraryPage() {
                   setKbPage(1);
                 }}
                 className="min-w-0 flex-1 bg-transparent text-[17px] text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500"
-                placeholder="询问或搜索所有知识库..."
+                placeholder="搜索知识库"
               />
-              <span className="hidden h-8 items-center rounded-[8px] border border-[var(--line)] bg-[var(--background)] px-3 text-sm font-medium text-slate-500 dark:border-[#475569] dark:bg-[#1f2937] dark:text-slate-400 md:inline-flex">
-                ⌘K
-              </span>
               <button
                 type="button"
                 className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-blue-600 text-white shadow-[0_10px_22px_rgba(37,99,235,0.28)] hover:bg-blue-700 sm:size-11"
@@ -127,7 +133,7 @@ export function LibraryPage() {
               <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">从多个知识库中检索并获得可靠的答案</p>
             </div>
             <div className="flex items-center gap-3">
-              <div className="inline-flex h-10 rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-1 dark:border-[#475569] dark:bg-[#2a3648]">
+              <div className="inline-flex h-10 rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-1 dark:border-[var(--line)] dark:bg-[var(--surface)]">
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
@@ -135,7 +141,7 @@ export function LibraryPage() {
                     "grid size-8 place-items-center rounded-[8px] transition",
                     viewMode === "grid"
                       ? "bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
-                      : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[#334155]",
+                      : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[var(--surface-hover)]",
                   ].join(" ")}
                   aria-label="网格视图"
                   aria-pressed={viewMode === "grid"}
@@ -149,7 +155,7 @@ export function LibraryPage() {
                     "grid size-8 place-items-center rounded-[8px] transition",
                     viewMode === "list"
                       ? "bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
-                      : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[#334155]",
+                      : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[var(--surface-hover)]",
                   ].join(" ")}
                   aria-label="列表视图"
                   aria-pressed={viewMode === "list"}
@@ -160,53 +166,26 @@ export function LibraryPage() {
             </div>
           </div>
 
-          {kbsQuery.isLoading ? <LoadingBlock label="正在加载知识库" /> : null}
-          {kbsQuery.isError ? (
-            <ErrorBlock message={(kbsQuery.error as Error).message} onRetry={() => kbsQuery.refetch()} />
+          {isListLoading ? <LoadingBlock label={isSearching ? "正在搜索知识库" : "正在加载知识库"} /> : null}
+          {isListError ? (
+            <div className="panel flex min-h-36 items-center justify-center px-6 text-center text-sm text-slate-500 dark:text-slate-400">
+              {isSearching ? `知识库搜索失败：${(listError as Error)?.message ?? "请稍后重试"}` : "知识库暂不可用"}
+            </div>
           ) : null}
 
-          {!kbsQuery.isLoading && !kbsQuery.isError && viewMode === "grid" ? (
+          {!isListLoading && !isListError && items.length === 0 && isSearching ? (
+            <div className="panel flex min-h-36 items-center justify-center px-6 text-center text-sm text-slate-500 dark:text-slate-400">
+              没有找到匹配的知识库
+            </div>
+          ) : null}
+
+          {!isListLoading && !isListError && viewMode === "grid" && (!isSearching || items.length > 0) ? (
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               {items.map((item, index) => (
                 <KnowledgeBaseCard key={item.id} item={item} index={index} />
               ))}
-              <CreateKnowledgeBaseCard
-                expanded={showCreateForm}
-                name={name}
-                description={description}
-                pending={createMutation.isPending}
-                error={createMutation.error as Error | null}
-                onExpand={() => setShowCreateForm(true)}
-                onCancel={() => {
-                  setShowCreateForm(false);
-                  setName("");
-                  setDescription("");
-                }}
-                onNameChange={setName}
-                onDescriptionChange={setDescription}
-                onCreate={() => {
-                  if (name.trim()) {
-                    createMutation.mutate({ name: name.trim(), description: description.trim() });
-                  }
-                }}
-              />
-            </div>
-          ) : null}
-
-          {!kbsQuery.isLoading && !kbsQuery.isError && viewMode === "list" ? (
-            <div className="overflow-x-auto rounded-[14px] border border-[var(--line)] bg-[var(--surface)] shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
-              <div className="grid min-w-[760px] grid-cols-[minmax(0,1fr)_92px_112px_136px_112px] gap-4 border-b border-[var(--line)] px-5 py-3 text-xs font-medium text-slate-500 dark:border-[#475569] dark:text-slate-400">
-                <span>知识库</span>
-                <span>文档</span>
-                <span>片段</span>
-                <span>更新时间</span>
-                <span className="text-right">操作</span>
-              </div>
-              <div className="min-w-[760px] divide-y divide-[var(--line)] dark:divide-[#475569]">
-                {items.map((item, index) => (
-                  <KnowledgeBaseListRow key={item.id} item={item} index={index} />
-                ))}
-                <CreateKnowledgeBaseListRow
+              {!isSearching ? (
+                <CreateKnowledgeBaseCard
                   expanded={showCreateForm}
                   name={name}
                   description={description}
@@ -226,23 +205,62 @@ export function LibraryPage() {
                     }
                   }}
                 />
+              ) : null}
+            </div>
+          ) : null}
+
+          {!isListLoading && !isListError && viewMode === "list" && (!isSearching || items.length > 0) ? (
+            <div className="overflow-x-auto rounded-[14px] border border-[var(--line)] bg-[var(--surface)] shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
+              <div className="grid min-w-[760px] grid-cols-[minmax(0,1fr)_92px_112px_136px_112px] gap-4 border-b border-[var(--line)] px-5 py-3 text-xs font-medium text-slate-500 dark:border-[var(--line)] dark:text-slate-400">
+                <span>知识库</span>
+                <span>文档</span>
+                <span>片段</span>
+                <span>更新时间</span>
+                <span className="text-right">操作</span>
+              </div>
+              <div className="min-w-[760px] divide-y divide-[var(--line)] dark:divide-[var(--line)]">
+                {items.map((item, index) => (
+                  <KnowledgeBaseListRow key={item.id} item={item} index={index} />
+                ))}
+                {!isSearching ? (
+                  <CreateKnowledgeBaseListRow
+                    expanded={showCreateForm}
+                    name={name}
+                    description={description}
+                    pending={createMutation.isPending}
+                    error={createMutation.error as Error | null}
+                    onExpand={() => setShowCreateForm(true)}
+                    onCancel={() => {
+                      setShowCreateForm(false);
+                      setName("");
+                      setDescription("");
+                    }}
+                    onNameChange={setName}
+                    onDescriptionChange={setDescription}
+                    onCreate={() => {
+                      if (name.trim()) {
+                        createMutation.mutate({ name: name.trim(), description: description.trim() });
+                      }
+                    }}
+                  />
+                ) : null}
               </div>
             </div>
           ) : null}
 
-          {!kbsQuery.isLoading && !kbsQuery.isError ? (
+          {!isSearching && !kbsQuery.isLoading && !kbsQuery.isError ? (
             <KnowledgeBasePagination
               page={kbPage}
               total={totalKbs}
               pageSize={KB_PAGE_SIZE}
               totalPages={totalPages}
-              isFetching={kbsQuery.isFetching}
+              isFetching={listIsFetching}
               onPageChange={setKbPage}
             />
           ) : null}
         </main>
 
-        <aside className="space-y-5 pt-0 xl:pt-[78px]">
+        <aside className="space-y-5 pt-0">
           <RecentCitationPanel
             items={citationsQuery.data?.items ?? []}
             isLoading={citationsQuery.isLoading}
@@ -284,7 +302,7 @@ function KnowledgeBasePagination({
   const pages = getVisiblePages(currentPage, totalPages);
 
   return (
-    <div className="mt-5 flex flex-col items-stretch justify-between gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3 text-sm text-slate-600 shadow-sm dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-300 sm:flex-row sm:items-center">
+    <div className="mt-5 flex flex-col items-stretch justify-between gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3 text-sm text-slate-600 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-300 sm:flex-row sm:items-center">
       <div>
         共 <span className="font-medium text-slate-900 dark:text-slate-100">{formatNumber(total)}</span> 个知识库
         {total > 0 ? (
@@ -300,7 +318,7 @@ function KnowledgeBasePagination({
           type="button"
           disabled={currentPage <= 1 || isFetching}
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-          className="grid size-9 place-items-center rounded-[9px] border border-[var(--line)] bg-[var(--surface)] text-slate-600 transition hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-300 dark:hover:bg-[#334155]"
+          className="grid size-9 place-items-center rounded-[9px] border border-[var(--line)] bg-[var(--surface)] text-slate-600 transition hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]"
           aria-label="上一页"
         >
           <ChevronLeft size={18} />
@@ -316,7 +334,7 @@ function KnowledgeBasePagination({
               "grid size-9 place-items-center rounded-[9px] text-sm font-medium transition disabled:cursor-not-allowed",
               item === currentPage
                 ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-600 hover:bg-[var(--surface-hover)] disabled:opacity-45 dark:text-slate-300 dark:hover:bg-[#334155]",
+                : "text-slate-600 hover:bg-[var(--surface-hover)] disabled:opacity-45 dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]",
             ].join(" ")}
             aria-current={item === currentPage ? "page" : undefined}
           >
@@ -328,7 +346,7 @@ function KnowledgeBasePagination({
           type="button"
           disabled={currentPage >= totalPages || isFetching}
           onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-          className="grid size-9 place-items-center rounded-[9px] border border-[var(--line)] bg-[var(--surface)] text-slate-600 transition hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-300 dark:hover:bg-[#334155]"
+          className="grid size-9 place-items-center rounded-[9px] border border-[var(--line)] bg-[var(--surface)] text-slate-600 transition hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]"
           aria-label="下一页"
         >
           <ChevronRight size={18} />
@@ -357,7 +375,7 @@ function KnowledgeBaseCard({ item, index }: { item: KnowledgeBase; index: number
   const lastUpdated = item.updatedAt ?? item.lastIngestedAt ?? item.createdAt;
 
   return (
-    <article className="rounded-[12px] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
+    <article className="rounded-[12px] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-[86px_minmax(0,1fr)] sm:gap-5">
         <div className={`relative h-30 rounded-[7px] bg-gradient-to-br ${coverStyles[index % coverStyles.length]} shadow-[0_12px_24px_rgba(15,23,42,0.16)] sm:h-[122px]`}>
           <div className="absolute inset-x-0 top-8 grid place-items-center">
@@ -391,11 +409,11 @@ function KnowledgeBaseCard({ item, index }: { item: KnowledgeBase; index: number
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 border-t border-[var(--line)] pt-3 dark:border-[#475569] sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-4 flex flex-col gap-3 border-t border-[var(--line)] pt-3 dark:border-[var(--line)] sm:flex-row sm:items-center sm:justify-between">
         <span className="text-xs text-slate-500 dark:text-slate-400">更新于 {formatDateTime(lastUpdated)}</span>
         <Link
           href={askHrefForKb(item)}
-          className="inline-flex h-9 items-center gap-2 rounded-[9px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-slate-800 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-200 dark:hover:bg-[#334155]"
+          className="inline-flex h-9 items-center gap-2 rounded-[9px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-slate-800 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]"
         >
           进入提问
           <ArrowRight size={15} />
@@ -410,7 +428,7 @@ function KnowledgeBaseListRow({ item, index }: { item: KnowledgeBase; index: num
   const lastUpdated = item.updatedAt ?? item.lastIngestedAt ?? item.createdAt;
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_92px_112px_136px_112px] items-center gap-4 px-5 py-4 hover:bg-[var(--surface-hover)] dark:hover:bg-[#334155]">
+    <div className="grid grid-cols-[minmax(0,1fr)_92px_112px_136px_112px] items-center gap-4 px-5 py-4 hover:bg-[var(--surface-hover)] dark:hover:bg-[var(--surface-hover)]">
       <div className="flex min-w-0 items-center gap-4">
         <div className={`grid size-14 shrink-0 place-items-center rounded-[10px] bg-gradient-to-br ${coverStyles[index % coverStyles.length]} text-white shadow-[0_10px_22px_rgba(15,23,42,0.16)]`}>
           <CoverIcon size={25} strokeWidth={2.2} />
@@ -431,7 +449,7 @@ function KnowledgeBaseListRow({ item, index }: { item: KnowledgeBase; index: num
       <div className="flex justify-end">
         <Link
           href={askHrefForKb(item)}
-          className="inline-flex h-9 items-center gap-2 rounded-[9px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-slate-800 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-200 dark:hover:bg-[#334155]"
+          className="inline-flex h-9 items-center gap-2 rounded-[9px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-slate-800 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]"
         >
           提问
           <ArrowRight size={15} />
@@ -466,7 +484,7 @@ function CreateKnowledgeBaseCard({
 }) {
   if (expanded) {
     return (
-      <div className="rounded-[14px] border border-dashed border-blue-300 bg-[var(--surface)] p-5 dark:border-blue-400/40 dark:bg-[#2a3648]">
+      <div className="rounded-[14px] border border-dashed border-blue-300 bg-[var(--surface)] p-5 dark:border-blue-400/40 dark:bg-[var(--surface)]">
         <div className="mb-4 flex items-center gap-3 text-blue-600 dark:text-blue-300">
           <Plus size={20} />
           <span className="font-semibold">新建知识库</span>
@@ -492,7 +510,7 @@ function CreateKnowledgeBaseCard({
             <button
               type="button"
               onClick={onCancel}
-              className="h-10 rounded-[8px] border border-[var(--line)] px-4 text-sm font-medium text-slate-600 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:text-slate-300 dark:hover:bg-[#334155]"
+              className="h-10 rounded-[8px] border border-[var(--line)] px-4 text-sm font-medium text-slate-600 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]"
             >
               取消
             </button>
@@ -506,7 +524,7 @@ function CreateKnowledgeBaseCard({
     <button
       type="button"
       onClick={onExpand}
-      className="flex min-h-[108px] items-center justify-center gap-4 rounded-[14px] border border-dashed border-[var(--line)] bg-[var(--surface)] text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-300 dark:hover:bg-[#334155] lg:col-span-2"
+      className="flex min-h-[108px] items-center justify-center gap-4 rounded-[14px] border border-dashed border-[var(--line)] bg-[var(--surface)] text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)] lg:col-span-2"
     >
       <Plus size={22} />
       <span>
@@ -543,7 +561,7 @@ function CreateKnowledgeBaseListRow({
   if (expanded) {
     return (
       <div className="px-5 py-5">
-        <div className="rounded-[12px] border border-dashed border-blue-300 bg-[var(--background)] p-4 dark:border-blue-400/40 dark:bg-[#1f2937]">
+        <div className="rounded-[12px] border border-dashed border-blue-300 bg-[var(--background)] p-4 dark:border-blue-400/40 dark:bg-[var(--background)]">
           <div className="mb-4 flex items-center gap-3 text-blue-600 dark:text-blue-300">
             <Plus size={20} />
             <span className="font-semibold">新建知识库</span>
@@ -567,7 +585,7 @@ function CreateKnowledgeBaseListRow({
             <button
               type="button"
               onClick={onCancel}
-              className="h-11 rounded-[8px] border border-[var(--line)] px-4 text-sm font-medium text-slate-600 hover:bg-[var(--surface-hover)] dark:border-[#475569] dark:text-slate-300 dark:hover:bg-[#334155]"
+              className="h-11 rounded-[8px] border border-[var(--line)] px-4 text-sm font-medium text-slate-600 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]"
             >
               取消
             </button>
@@ -582,7 +600,7 @@ function CreateKnowledgeBaseListRow({
     <button
       type="button"
       onClick={onExpand}
-      className="flex w-full flex-wrap items-center justify-center gap-3 px-5 py-5 text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-300 dark:hover:bg-[#334155]"
+      className="flex w-full flex-wrap items-center justify-center gap-3 px-5 py-5 text-slate-700 hover:bg-[var(--surface-hover)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]"
     >
       <Plus size={20} />
       <span className="font-semibold">新建知识库</span>
@@ -605,13 +623,13 @@ function RecentCitationPanel({
   onToggle: () => void;
 }) {
   return (
-    <section className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
+    <section className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
       <PanelHeader title="最近引用" expanded={expanded} onToggle={onToggle} />
-      <div className="mt-4 border-t border-[var(--line)] pt-3 dark:border-[#475569]">
+      <div className="mt-4 border-t border-[var(--line)] pt-3 dark:border-[var(--line)]">
         {isLoading ? <LoadingBlock label="加载最近引用" /> : null}
         {isError ? <div className="py-6 text-sm text-slate-500 dark:text-slate-400">最近引用暂不可用。</div> : null}
         {!isLoading && !isError ? (
-          <div className="divide-y divide-[var(--line)] dark:divide-[#475569]">
+          <div className="divide-y divide-[var(--line)] dark:divide-[var(--line)]">
             {items.length > 0 ? items.map((item, index) => <CitationRow key={item.segmentId} item={item} index={index} />) : (
               <div className="py-6 text-sm text-slate-500 dark:text-slate-400">暂无最近引用。</div>
             )}
@@ -664,9 +682,9 @@ function RecentQuestionPanel({
   onToggle: () => void;
 }) {
   return (
-    <section className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[#475569] dark:bg-[#2a3648]">
+    <section className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
       <PanelHeader title="最近问过" expanded={expanded} onToggle={onToggle} />
-      <div className="mt-4 divide-y divide-[var(--line)] dark:divide-[#475569]">
+      <div className="mt-4 divide-y divide-[var(--line)] dark:divide-[var(--line)]">
         {isLoading ? <LoadingBlock label="加载最近提问" /> : null}
         {isError ? <div className="py-6 text-sm text-slate-500 dark:text-slate-400">最近提问暂不可用。</div> : null}
         {!isLoading && !isError ? (
@@ -712,8 +730,13 @@ function PanelHeader({ title, expanded, onToggle }: { title: string; expanded: b
   return (
     <div className="flex items-center justify-between">
       <h2 className="text-[17px] font-semibold text-slate-950 dark:text-slate-100">{title}</h2>
-      <button type="button" onClick={onToggle} className="text-sm font-medium text-blue-600 dark:text-blue-300">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="inline-flex items-center gap-0.5 text-xs font-medium leading-none text-[#0969da] dark:text-[#58a6ff]"
+      >
         {expanded ? "收起" : "查看全部"}
+        <ChevronRight size={11} />
       </button>
     </div>
   );

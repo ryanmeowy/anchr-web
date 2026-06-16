@@ -45,26 +45,49 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAskPage = pathname === "/ask";
   const isLibraryPage = pathname === "/library";
-  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
-  });
+  const isSimpleHeaderPage =
+    isAskPage || isLibraryPage || pathname === "/search" || pathname === "/imports" || pathname === "/settings" || pathname.startsWith("/preview");
+  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [themeHydrated, setThemeHydrated] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [sidebarHydrated, setSidebarHydrated] = useState(false);
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setTheme(getInitialTheme());
+      setThemeHydrated(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+      setSidebarHydrated(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!themeHydrated) return;
+
     document.documentElement.classList.toggle("dark", theme === "dark");
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme]);
+  }, [theme, themeHydrated]);
 
   useEffect(() => {
+    if (!sidebarHydrated) return;
+
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
-  }, [collapsed]);
+  }, [collapsed, sidebarHydrated]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--background)] text-slate-950 dark:bg-[#1f2937] dark:text-slate-200 lg:flex-row">
+    <div className="flex min-h-screen flex-col bg-[var(--background)] text-slate-950 dark:bg-[var(--background)] dark:text-slate-200 lg:flex-row">
       <aside
         className={[
-          "relative z-20 flex w-full flex-col border-b border-[var(--line)] bg-[var(--surface)] px-4 py-4 dark:border-[#475569] dark:bg-[#243044]/95",
+          "relative z-20 flex w-full flex-col border-b border-[var(--line)] bg-[var(--surface)] px-4 py-4 dark:border-[var(--line)] dark:bg-[#161b22]/95",
           "lg:fixed lg:inset-y-0 lg:left-0 lg:border-b-0 lg:border-r lg:py-6 lg:transition-[width] lg:duration-200 lg:ease-out",
           collapsed ? "lg:w-[64px]" : "lg:w-[220px]",
         ].join(" ")}
@@ -79,7 +102,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => setCollapsed(false)}
-              className="grid place-items-center rounded-[8px] hover:bg-[var(--surface-hover)] dark:hover:bg-[#334155]"
+              className="grid place-items-center rounded-[8px] hover:bg-[var(--surface-hover)] dark:hover:bg-[var(--surface-hover)]"
               aria-label="展开侧边栏"
               title="展开侧边栏"
             >
@@ -93,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => setCollapsed(true)}
-                className="grid size-9 place-items-center rounded-[8px] text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[#334155]"
+                className="grid size-9 place-items-center rounded-[8px] text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[var(--surface-hover)]"
                 aria-label="折叠侧边栏"
                 title="折叠侧边栏"
               >
@@ -117,8 +140,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   "flex h-10 shrink-0 items-center rounded-[8px] text-[14px] transition",
                   collapsed ? "justify-center px-0" : "gap-3 px-3",
                   active
-                    ? "bg-[var(--surface-hover)] font-medium text-slate-950 dark:bg-[#334155] dark:text-slate-50"
-                    : "text-slate-700 hover:bg-[var(--surface-hover)] hover:text-slate-950 dark:text-slate-300 dark:hover:bg-[#334155] dark:hover:text-slate-50",
+                    ? "bg-[var(--surface-hover)] font-medium text-slate-950 dark:bg-[var(--surface-hover)] dark:text-slate-50"
+                    : "text-slate-700 hover:bg-[var(--surface-hover)] hover:text-slate-950 dark:text-slate-300 dark:hover:bg-[var(--surface-hover)] dark:hover:text-slate-50",
                 ].join(" ")}
               >
                 <Icon size={18} strokeWidth={1.8} />
@@ -128,24 +151,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="mt-auto hidden border-t border-[var(--line)] pt-4 dark:border-[#475569] lg:block">
+        {isAskPage && !collapsed ? (
           <div
-            className={[
-              "flex items-center rounded-[8px] py-1.5",
-              collapsed ? "justify-center" : "gap-3 px-1",
-            ].join(" ")}
-            title={collapsed ? "wang.li" : undefined}
-          >
-            <div className="grid size-9 shrink-0 place-items-center rounded-full border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-600 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300">
-              R
-            </div>
-            {!collapsed && (
-              <div className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 dark:text-slate-200">
-                ryan
-              </div>
-            )}
-          </div>
-        </div>
+            id="ask-conversations-slot"
+            className="-mx-1 mt-4 hidden min-h-0 flex-1 flex-col border-t border-[var(--line)] pt-4 dark:border-[var(--line)] lg:flex"
+          />
+        ) : null}
+
       </aside>
 
       <main
@@ -154,29 +166,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           collapsed ? "lg:ml-[64px]" : "lg:ml-[220px]",
         ].join(" ")}
       >
-        {isAskPage ? (
-          <header className="sticky top-0 z-10 flex h-[68px] items-center justify-end bg-[var(--background)] px-4 backdrop-blur dark:bg-[#1f2937]/90 sm:px-6 lg:h-[82px] lg:px-10">
-            <ThemeSwitcher theme={theme} onChange={setTheme} />
-          </header>
-        ) : isLibraryPage ? (
-          <header className="sticky top-0 z-10 flex h-[68px] items-center justify-end bg-[var(--background)] px-4 backdrop-blur dark:bg-[#1f2937]/90 sm:px-6 lg:h-[82px] lg:px-10">
-            <ThemeSwitcher theme={theme} onChange={setTheme} />
+        {isSimpleHeaderPage ? (
+          <header className="sticky top-0 z-10 bg-[var(--background)] px-4 sm:px-6 lg:px-10">
+            <div className="mx-auto flex h-[68px] max-w-[1320px] items-center justify-end lg:h-[82px]">
+              <ThemeSwitcher theme={theme} onChange={setTheme} />
+            </div>
           </header>
         ) : (
-          <header className="sticky top-0 z-10 flex h-[68px] items-center justify-end gap-4 border-b border-[var(--line)] bg-[var(--background)] px-4 backdrop-blur dark:border-[#475569] dark:bg-[#1f2937]/80 sm:px-6 lg:h-[74px] lg:gap-5 lg:px-8">
-            <button className="grid size-10 place-items-center rounded-full text-slate-600 hover:bg-[var(--surface-hover)] dark:text-slate-300 dark:hover:bg-[#334155]" aria-label="帮助">
+          <header className="sticky top-0 z-10 flex h-[68px] items-center justify-end gap-4 border-b border-[var(--line)] bg-[var(--background)] px-4 backdrop-blur dark:border-[var(--line)] dark:bg-[#0d1117]/80 sm:px-6 lg:h-[74px] lg:gap-5 lg:px-8">
+            <button className="grid size-10 place-items-center rounded-full text-slate-600 hover:bg-[var(--surface-hover)] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]" aria-label="帮助">
               <BookOpen size={22} />
             </button>
             <button
-              className="grid size-10 place-items-center rounded-full text-slate-600 hover:bg-[var(--surface-hover)] dark:text-blue-300 dark:hover:bg-[#334155]"
+              className="grid size-10 place-items-center rounded-full text-slate-600 hover:bg-[var(--surface-hover)] dark:text-blue-300 dark:hover:bg-[var(--surface-hover)]"
               aria-label="切换主题"
               type="button"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
               <Moon size={21} />
             </button>
-            <button className="flex h-10 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-slate-700 dark:border-[#475569] dark:bg-[#2a3648] dark:text-slate-200">
-              <span className="grid size-7 place-items-center rounded-full bg-[#fff1b8] font-medium dark:bg-[#2a3648]">W</span>
+            <button className="flex h-10 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-slate-700 dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200">
+              <span className="grid size-7 place-items-center rounded-full bg-[#fff1b8] font-medium dark:bg-[var(--surface)]">W</span>
               <ChevronDown size={17} />
             </button>
           </header>
@@ -190,13 +200,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function ThemeSwitcher({ theme, onChange }: { theme: ThemeMode; onChange: (theme: ThemeMode) => void }) {
   return (
-    <div className="inline-flex h-9 items-center rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-0.5 shadow-[0_4px_14px_rgba(15,23,42,0.05)] dark:border-[#475569] dark:bg-[#2a3648]">
+    <div className="inline-flex h-9 items-center rounded-[10px] border border-[var(--line)] bg-[var(--surface)] p-0.5 shadow-[0_4px_14px_rgba(15,23,42,0.05)] dark:border-[var(--line)] dark:bg-[var(--surface)]">
       <button
         className={[
           "grid size-7 place-items-center rounded-[8px] transition",
           theme === "light"
-            ? "bg-white text-blue-600 shadow-[0_1px_5px_rgba(15,23,42,0.12)] dark:bg-[#334155] dark:text-blue-300"
-            : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[#334155]",
+            ? "bg-white text-blue-600 shadow-[0_1px_5px_rgba(15,23,42,0.12)] dark:bg-[var(--surface-hover)] dark:text-blue-300"
+            : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[var(--surface-hover)]",
         ].join(" ")}
         aria-label="浅色主题"
         type="button"
@@ -208,8 +218,8 @@ function ThemeSwitcher({ theme, onChange }: { theme: ThemeMode; onChange: (theme
         className={[
           "grid size-7 place-items-center rounded-[8px] transition",
           theme === "dark"
-            ? "bg-[#334155] text-blue-300 shadow-[0_1px_5px_rgba(0,0,0,0.18)]"
-            : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[#334155]",
+            ? "bg-[var(--surface-hover)] text-blue-300 shadow-[0_1px_5px_rgba(0,0,0,0.18)]"
+            : "text-slate-500 hover:bg-[var(--surface-hover)] dark:text-slate-400 dark:hover:bg-[var(--surface-hover)]",
         ].join(" ")}
         aria-label="深色主题"
         type="button"
@@ -236,7 +246,7 @@ function LogoMark() {
         width="73"
         height="73"
         rx="17.5"
-        className="fill-white stroke-[#d6dde7] dark:fill-[#243044] dark:stroke-[#64748b]"
+        className="fill-white stroke-[#d6dde7] dark:fill-[#161b22] dark:stroke-[#30363d]"
         strokeWidth="1.5"
       />
       <path
