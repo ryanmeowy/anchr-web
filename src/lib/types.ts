@@ -302,6 +302,7 @@ export type PreviewSegment = {
   segmentId: string;
   assetId?: string;
   kbId?: string;
+  kbName?: string;
   assetType?: string;
   segmentType?: string;
   fileName?: string;
@@ -316,7 +317,7 @@ export type PreviewSegment = {
   anchor?: {
     pageNo?: number;
     chunkOrder?: number;
-    bbox?: unknown;
+    bbox?: PreviewBBoxRecord[] | null;
     imageWidth?: number;
     imageHeight?: number;
   };
@@ -324,6 +325,7 @@ export type PreviewSegment = {
     segmentId: string;
     content?: string;
     snippet?: string;
+    title?: string;
     pageNo?: number;
     chunkOrder?: number;
     relation?: string;
@@ -334,6 +336,20 @@ export type PreviewSegment = {
     citationIndex?: number;
     citationReason?: string;
   };
+};
+
+export type PreviewBBox = {
+  l: number;
+  t: number;
+  r: number;
+  b: number;
+  coordOrigin?: string;
+  coord_origin?: string;
+};
+
+export type PreviewBBoxRecord = {
+  bbox?: PreviewBBox | null;
+  pageNo?: number | null;
 };
 
 // ── capability config ──────────────────────────────────────────────────

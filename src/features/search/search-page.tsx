@@ -25,12 +25,19 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FileTypeIcon } from "@/components/shared/file-type-icon";
-import Link from "next/link";
-import { useCallback, useMemo, useState, type ReactNode, type UIEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type UIEvent } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
 import { formatNumber } from "@/lib/format";
-import type { KnowledgeBase, RecentSearch, SearchAssetType, SearchPage as SearchPageData, SearchResult } from "@/lib/types";
+import {
+  clearPreviewRestoreState,
+  normalizeSearchCitations,
+  readPreviewRestoreState,
+  savePreviewNavigation,
+  type PreviewCitation,
+} from "@/lib/preview-context";
+import type { KnowledgeBase, RecentSearch, SearchAnswer, SearchAssetType, SearchPage as SearchPageData, SearchResult } from "@/lib/types";
 
 const SEARCH_LIMIT = 10;
 const SEARCH_TOP_K = 50;
@@ -90,6 +97,20 @@ type SearchFiltersValue = {
   withAnswer: boolean;
 };
 
+type SearchPreviewReturnState = {
+  query: string;
+  submittedQuery: string;
+  submittedFilters: SearchFiltersValue | null;
+  selectedKbIds: string[];
+  selectedAssetTypes: SearchAssetType[];
+  dateFrom: string;
+  dateTo: string;
+  activeTab: SearchTab;
+  searchData: SearchPageData | null;
+  elapsedMs: number | null;
+  scrollY: number;
+};
+
 type ResultGroup = {
   kbId: string;
   title: string;
@@ -97,6 +118,7 @@ type ResultGroup = {
 };
 
 export function SearchPage() {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [submittedFilters, setSubmittedFilters] = useState<SearchFiltersValue | null>(null);
@@ -137,6 +159,29 @@ export function SearchPage() {
         .map((item) => item.fileType as SearchAssetType),
     [capabilitiesQuery.data?.supportedFormats],
   );
+
+  useEffect(() => {
+    const restored = readPreviewRestoreState<SearchPreviewReturnState>("search");
+    if (!restored?.context.returnState) {
+      return;
+    }
+
+    const state = restored.context.returnState;
+    window.requestAnimationFrame(() => {
+      setQuery(state.query);
+      setSubmittedQuery(state.submittedQuery);
+      setSubmittedFilters(state.submittedFilters);
+      setSelectedKbIds(state.selectedKbIds);
+      setSelectedAssetTypes(state.selectedAssetTypes);
+      setDateFrom(state.dateFrom);
+      setDateTo(state.dateTo);
+      setActiveTab(state.activeTab);
+      setSearchData(state.searchData);
+      setElapsedMs(state.elapsedMs);
+      clearPreviewRestoreState("search");
+      window.scrollTo({ top: state.scrollY });
+    });
+  }, []);
 
   const buildSubmittedFilters = useCallback((withAnswer: boolean): SearchFiltersValue => ({
     kbIds: selectedKbIds,
@@ -262,6 +307,57 @@ export function SearchPage() {
     executeSearch(item.query, filters);
   };
 
+  const buildSearchReturnState = useCallback((): SearchPreviewReturnState => ({
+    query,
+    submittedQuery,
+    submittedFilters,
+    selectedKbIds,
+    selectedAssetTypes,
+    dateFrom,
+    dateTo,
+    activeTab,
+    searchData,
+    elapsedMs,
+    scrollY: window.scrollY,
+  }), [
+    activeTab,
+    dateFrom,
+    dateTo,
+    elapsedMs,
+    query,
+    searchData,
+    selectedAssetTypes,
+    selectedKbIds,
+    submittedFilters,
+    submittedQuery,
+  ]);
+
+  const openSearchPreview = useCallback((
+    segmentId: string | undefined,
+    citationIndex: number,
+    citations: PreviewCitation[],
+    context?: { question?: string; answer?: string },
+  ) => {
+    if (!segmentId) {
+      return;
+    }
+
+    const contextKey = savePreviewNavigation<SearchPreviewReturnState>({
+      source: "search",
+      question: context?.question,
+      answer: context?.answer,
+      citations,
+      returnState: buildSearchReturnState(),
+    });
+    const params = new URLSearchParams({
+      from: "search",
+      contextKey,
+      citationIndex: String(citationIndex),
+    });
+
+    router.push(`/preview/${encodeURIComponent(segmentId)}?${params.toString()}`);
+  }, [buildSearchReturnState, router]);
+
   const resultGroups = useMemo(() => groupResults(searchData?.items ?? [], kbById), [kbById, searchData?.items]);
   const recentSearchItems = useMemo(
     () => recentSearchQuery.data?.pages.flatMap((page) => page.items) ?? [],
@@ -328,6 +424,12 @@ export function SearchPage() {
           {hasSearched && !isSearching && activeTab === "answer" ? (
             <AnswerPanel
               data={searchData}
+              onPreviewCitation={(citation, citationIndex) => {
+                openSearchPreview(citation.segmentId, citationIndex, normalizeSearchCitations(searchData?.answer?.citations), {
+                  question: submittedQuery,
+                  answer: searchData?.answer?.answer,
+                });
+              }}
               onRegenerate={() => {
                 if (submittedQuery && submittedFilters) {
                   const filters = { ...submittedFilters, withAnswer: true };
@@ -346,6 +448,14 @@ export function SearchPage() {
               hasMore={Boolean(searchData?.nextCursor)}
               isAppending={isAppending}
               onLoadMore={handleLoadMore}
+              onPreviewResult={(item) => {
+                const citations = normalizeSearchCitations(searchData?.answer?.citations);
+                const matchedCitation = citations.find((citation) => citation.segmentId === item.segmentId);
+                openSearchPreview(item.segmentId, matchedCitation?.citationIndex ?? 1, citations.length ? citations : [searchResultToCitation(item)], {
+                  question: submittedQuery,
+                  answer: searchData?.answer?.answer,
+                });
+              }}
             />
           ) : null}
         </main>
@@ -425,7 +535,15 @@ function EmptySearchState() {
   );
 }
 
-function AnswerPanel({ data, onRegenerate }: { data: SearchPageData | null; onRegenerate: () => void }) {
+function AnswerPanel({
+  data,
+  onPreviewCitation,
+  onRegenerate,
+}: {
+  data: SearchPageData | null;
+  onPreviewCitation: (citation: NonNullable<SearchAnswer["citations"]>[number], citationIndex: number) => void;
+  onRegenerate: () => void;
+}) {
   const answer = data?.answer?.answer?.trim();
   const citations = data?.answer?.citations ?? [];
   const [copied, setCopied] = useState(false);
@@ -468,15 +586,16 @@ function AnswerPanel({ data, onRegenerate }: { data: SearchPageData | null; onRe
       {citations.length > 0 ? (
         <div className="mt-5 flex flex-wrap items-center gap-2 pl-0 sm:pl-12">
           <span className="text-sm font-medium text-slate-500 dark:text-slate-400">来源:</span>
-          {citations.map((item) => (
-            <Link
+          {citations.map((item, index) => (
+            <button
+              type="button"
               key={`${item.citationIndex}-${item.segmentId}`}
-              href={`/preview/${item.segmentId}`}
+              onClick={() => onPreviewCitation(item, item.citationIndex ?? index + 1)}
               className="inline-flex max-w-full items-center gap-2 rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]"
             >
               <span className="font-bold text-blue-600 dark:text-blue-300">[{item.citationIndex}]</span>
               <span className="truncate">{item.fileName ?? "引用来源"}</span>
-            </Link>
+            </button>
           ))}
         </div>
       ) : null}
@@ -510,6 +629,7 @@ function ResultsPanel({
   hasMore,
   isAppending,
   onLoadMore,
+  onPreviewResult,
 }: {
   groups: ResultGroup[];
   total: number;
@@ -517,6 +637,7 @@ function ResultsPanel({
   hasMore: boolean;
   isAppending: boolean;
   onLoadMore: () => void;
+  onPreviewResult: (item: SearchResult) => void;
 }) {
   return (
     <section>
@@ -535,7 +656,7 @@ function ResultsPanel({
       ) : (
         <div className="space-y-4">
           {groups.map((group) => (
-            <ResultGroupCard key={group.kbId} group={group} />
+            <ResultGroupCard key={group.kbId} group={group} onPreviewResult={onPreviewResult} />
           ))}
         </div>
       )}
@@ -555,7 +676,7 @@ function ResultsPanel({
   );
 }
 
-function ResultGroupCard({ group }: { group: ResultGroup }) {
+function ResultGroupCard({ group, onPreviewResult }: { group: ResultGroup; onPreviewResult: (item: SearchResult) => void }) {
   return (
     <article className="overflow-hidden rounded-[14px] border border-[var(--line)] bg-[var(--surface)] shadow-sm dark:border-[var(--line)] dark:bg-[var(--surface)]">
       <div className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-3 dark:border-[var(--line)]">
@@ -565,23 +686,27 @@ function ResultGroupCard({ group }: { group: ResultGroup }) {
       </div>
       <div className="divide-y divide-[var(--line)] dark:divide-[var(--line)]">
         {group.items.map((item, index) => (
-          <ResultRow key={item.segmentId ?? `${item.assetId}-${index}`} item={item} />
+          <ResultRow key={item.segmentId ?? `${item.assetId}-${index}`} item={item} onPreviewResult={onPreviewResult} />
         ))}
       </div>
     </article>
   );
 }
 
-function ResultRow({ item }: { item: SearchResult }) {
+function ResultRow({ item, onPreviewResult }: { item: SearchResult; onPreviewResult: (item: SearchResult) => void }) {
   const assetType = item.assetType;
   const meta = ASSET_TYPE_META[assetType] ?? UNKNOWN_ASSET_TYPE_META;
   const Icon = meta.icon;
-  const href = item.segmentId ? `/preview/${item.segmentId}` : "/search";
   const position = formatResultPosition(item);
   const assetTypeLabel = SOURCE_TYPE_LABEL[assetType] ?? assetType;
 
   return (
-    <Link href={href} className="block px-4 py-4 transition hover:bg-[var(--surface-hover)] dark:hover:bg-[var(--surface-hover)]">
+    <button
+      type="button"
+      onClick={() => onPreviewResult(item)}
+      disabled={!item.segmentId}
+      className="block w-full px-4 py-4 text-left transition hover:bg-[var(--surface-hover)] disabled:cursor-default disabled:hover:bg-transparent dark:hover:bg-[var(--surface-hover)]"
+    >
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -613,8 +738,20 @@ function ResultRow({ item }: { item: SearchResult }) {
           </span>
         </div>
       </div>
-    </Link>
+    </button>
   );
+}
+
+function searchResultToCitation(item: SearchResult): PreviewCitation {
+  return {
+    citationIndex: 1,
+    segmentId: item.segmentId,
+    assetId: item.assetId,
+    kbId: item.kbId,
+    fileName: displaySourceName(item.sourceRef, item.assetId),
+    pageNo: item.pageNo ?? item.anchor?.pageNo ?? undefined,
+    snippet: item.snippet || item.content || item.ocrSummary,
+  };
 }
 
 function SearchFilters({

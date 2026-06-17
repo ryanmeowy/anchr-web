@@ -345,6 +345,10 @@ export const apiClient = {
     ),
   previewSegment: (segmentId: string) =>
     request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}`),
+  refreshSegmentPreview: (segmentId: string) =>
+    request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}/refresh`, {
+      method: "POST",
+    }),
   previewNeighbors: (segmentId: string) =>
     request<{ items?: PreviewSegment["surroundingChunks"] }>(
       `/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}/neighbors?before=2&after=2`,

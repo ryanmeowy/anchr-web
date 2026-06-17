@@ -15,12 +15,17 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
+import {
+  clearPreviewRestoreState,
+  normalizeConversationCitations,
+  readPreviewRestoreState,
+  savePreviewNavigation,
+} from "@/lib/preview-context";
 import type { ConversationCitation, ConversationSession, ConversationTurn } from "@/lib/types";
 
 type ChatMessage = {
@@ -36,10 +41,22 @@ type ChatMessage = {
 
 type MessageCache = Record<string, ChatMessage[]>;
 
+type AskPreviewReturnState = {
+  activeSessionId: string;
+  query: string;
+  selectedKbIdsValue: string[] | null;
+  conversations: ConversationSession[];
+  nextCursor: string | null;
+  messagesBySession: MessageCache;
+  messageScrollTop: number;
+  conversationListScrollTop: number;
+};
+
 const CONVERSATION_PAGE_SIZE = 50;
 const HISTORY_LIMIT = 100;
 
 export function AskPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialKbId = searchParams.get("kbId") ?? "";
   const initialKbName = searchParams.get("kbName") ?? "";
@@ -63,6 +80,7 @@ export function AskPage() {
   const [conversationSlot, setConversationSlot] = useState<HTMLElement | null>(null);
   const streamRef = useRef<{ requestId: string; sessionId: string } | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const kbsQuery = useQuery({
@@ -108,6 +126,33 @@ export function AskPage() {
   const isStreamingActiveSession = Boolean(activeSessionId && streamingSessionId === activeSessionId);
   const lastActiveMessageContent = activeMessages.at(-1)?.content;
   const canSubmit = Boolean(query.trim()) && !streamingSessionId && (Boolean(activeSessionId) || selectedKbIds.length > 0);
+
+  useEffect(() => {
+    const restored = readPreviewRestoreState<AskPreviewReturnState>("ask");
+    if (!restored?.context.returnState) {
+      return;
+    }
+
+    const state = restored.context.returnState;
+    window.requestAnimationFrame(() => {
+      setActiveSessionId(state.activeSessionId);
+      setQuery(state.query);
+      setSelectedKbIdsValue(state.selectedKbIdsValue);
+      setConversations(state.conversations);
+      setNextCursor(state.nextCursor);
+      setMessagesBySession(state.messagesBySession);
+      setIsLoadingConversations(false);
+      setIsLoadingMessages(false);
+      clearPreviewRestoreState("ask");
+
+      if (messageScrollRef.current) {
+        messageScrollRef.current.scrollTop = state.messageScrollTop;
+      }
+      if (listScrollRef.current) {
+        listScrollRef.current.scrollTop = state.conversationListScrollTop;
+      }
+    });
+  }, []);
 
   const loadConversations = useCallback(async (cursor?: string | null, append = false) => {
     if (append) {
@@ -232,6 +277,49 @@ export function AskPage() {
     setOpenMenuSessionId(null);
     setRenamingSessionId(null);
   };
+
+  const handlePreviewCitation = useCallback((
+    message: ChatMessage,
+    citation: ConversationCitation,
+    citationIndex: number,
+    question?: string,
+  ) => {
+    if (!citation.segmentId) {
+      return;
+    }
+
+    const contextKey = savePreviewNavigation<AskPreviewReturnState>({
+      source: "ask",
+      question,
+      answer: stripTraceText(message.content),
+      citations: normalizeConversationCitations(message.citations),
+      returnState: {
+        activeSessionId,
+        query,
+        selectedKbIdsValue,
+        conversations,
+        nextCursor,
+        messagesBySession,
+        messageScrollTop: messageScrollRef.current?.scrollTop ?? 0,
+        conversationListScrollTop: listScrollRef.current?.scrollTop ?? 0,
+      },
+    });
+    const params = new URLSearchParams({
+      from: "ask",
+      contextKey,
+      citationIndex: String(citationIndex + 1),
+    });
+
+    router.push(`/preview/${encodeURIComponent(citation.segmentId)}?${params.toString()}`);
+  }, [
+    activeSessionId,
+    conversations,
+    messagesBySession,
+    nextCursor,
+    query,
+    router,
+    selectedKbIdsValue,
+  ]);
 
   const handleSubmit = async () => {
     const text = query.trim();
@@ -515,7 +603,7 @@ export function AskPage() {
       {conversationSlot ? createPortal(conversationList, conversationSlot) : null}
       <div className="flex h-[calc(100vh-68px)] min-h-[560px] overflow-hidden lg:h-[calc(100vh-82px)]">
         <section className="flex min-w-0 flex-1 flex-col bg-[var(--background)]">
-          <div className="muted-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10">
+          <div ref={messageScrollRef} className="muted-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10">
             <div className="mx-auto flex min-h-full max-w-[860px] flex-col">
               {messageError ? (
                 <ErrorBlock message={messageError} />
@@ -525,8 +613,13 @@ export function AskPage() {
                 </div>
               ) : activeMessages.length > 0 ? (
                 <div className="space-y-7">
-                  {activeMessages.map((message) => (
-                    <ChatBubble key={message.id} message={message} />
+                  {activeMessages.map((message, index) => (
+                    <ChatBubble
+                      key={message.id}
+                      message={message}
+                      question={activeMessages[index - 1]?.role === "user" ? activeMessages[index - 1]?.content : undefined}
+                      onPreviewCitation={handlePreviewCitation}
+                    />
                   ))}
                   <div ref={messagesEndRef} />
                 </div>
@@ -848,7 +941,20 @@ function SelectionBox({ checked }: { checked: boolean }) {
   );
 }
 
-function ChatBubble({ message }: { message: ChatMessage }) {
+function ChatBubble({
+  message,
+  question,
+  onPreviewCitation,
+}: {
+  message: ChatMessage;
+  question?: string;
+  onPreviewCitation: (
+    message: ChatMessage,
+    citation: ConversationCitation,
+    citationIndex: number,
+    question?: string,
+  ) => void;
+}) {
   const isUser = message.role === "user";
 
   return (
@@ -882,13 +988,15 @@ function ChatBubble({ message }: { message: ChatMessage }) {
         {!isUser && message.citations?.length ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {message.citations.map((citation, index) => (
-              <Link
+              <button
+                type="button"
                 key={`${citation.segmentId ?? citation.fileName ?? index}-${index}`}
-                href={citation.segmentId ? `/preview/${citation.segmentId}` : "/ask"}
+                onClick={() => onPreviewCitation(message, citation, index, question)}
+                disabled={!citation.segmentId}
                 className="rounded-[8px] border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-500/25 dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-500/20"
               >
                 [{index + 1}] {citation.fileName ?? "引用来源"} {citation.pageNo ? `第 ${citation.pageNo} 页` : ""}
-              </Link>
+              </button>
             ))}
           </div>
         ) : null}
