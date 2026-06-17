@@ -630,7 +630,7 @@ function RecentCitationPanel({
         {isError ? <div className="py-6 text-sm text-slate-500 dark:text-slate-400">最近引用暂不可用。</div> : null}
         {!isLoading && !isError ? (
           <div className="divide-y divide-[var(--line)] dark:divide-[var(--line)]">
-            {items.length > 0 ? items.map((item, index) => <CitationRow key={item.segmentId} item={item} index={index} />) : (
+            {items.length > 0 ? items.map((item, index) => <CitationRow key={`${item.segmentId}-${item.openedAt ?? "unknown"}-${index}`} item={item} index={index} />) : (
               <div className="py-6 text-sm text-slate-500 dark:text-slate-400">暂无最近引用。</div>
             )}
           </div>

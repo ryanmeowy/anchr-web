@@ -1,69 +1,95 @@
-"use client";
+import {
+  FileArchive,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  FileType2,
+  Link2,
+} from "lucide-react";
 
-import { FileImage, FileText, FileType, Hash } from "lucide-react";
-
-type FileTypeIconProps = {
-  fileName?: string | null;
-  sourceType?: string | null;
+export function FileTypeIcon({
+  fileName,
+  sourceType,
+  compact = false,
+  className = "",
+}: {
+  fileName: string;
+  sourceType?: string;
   compact?: boolean;
   className?: string;
-};
+}) {
+  const type = sourceType === "URL" ? "URL" : inferIconType(fileName, sourceType);
+  const size = compact ? "size-5" : "size-11";
+  const iconSize = compact ? 14 : 24;
+  const shared = `${size} grid place-items-center rounded-[8px] ${className}`;
 
-const TYPE_STYLES: Record<string, string> = {
-  PDF: "bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/20",
-  IMAGE: "bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-500/15 dark:text-violet-300 dark:ring-violet-500/20",
-  TXT: "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-500/20",
-  MD: "bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/20",
-  MARKDOWN: "bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/20",
-};
-
-export function normalizeExtension(value: string) {
-  return value.trim().replace(/^\./, "").toLowerCase();
-}
-
-export function FileTypeIcon({ fileName, sourceType, compact = false, className = "" }: FileTypeIconProps) {
-  const type = inferType(fileName, sourceType);
-  const label = labelForType(type);
-  const sizeClass = compact ? "h-6 px-2 text-[11px]" : "h-9 px-3 text-xs";
-  const iconSize = compact ? 13 : 16;
+  if (type === "PDF") {
+    return (
+      <span className={`${shared} border border-red-200 bg-red-50 text-red-500`}>
+        <FileText size={iconSize} />
+      </span>
+    );
+  }
+  if (type === "DOCX") {
+    return (
+      <span className={`${shared} border border-blue-200 bg-blue-50 text-blue-600`}>
+        <FileType2 size={iconSize} />
+      </span>
+    );
+  }
+  if (type === "XLSX" || type === "CSV") {
+    return (
+      <span className={`${shared} border border-emerald-200 bg-emerald-50 text-emerald-600`}>
+        <FileSpreadsheet size={iconSize} />
+      </span>
+    );
+  }
+  if (type === "IMAGE") {
+    return (
+      <span className={`${shared} border border-violet-200 bg-violet-50 text-violet-600`}>
+        <FileImage size={iconSize} />
+      </span>
+    );
+  }
+  if (type === "ZIP") {
+    return (
+      <span className={`${shared} border border-amber-200 bg-amber-50 text-amber-600`}>
+        <FileArchive size={iconSize} />
+      </span>
+    );
+  }
+  if (type === "URL") {
+    return (
+      <span className={`${shared} border border-slate-200 bg-slate-100 text-slate-600`}>
+        <Link2 size={iconSize} />
+      </span>
+    );
+  }
 
   return (
-    <span className={[
-      "inline-flex shrink-0 items-center gap-1.5 rounded-[7px] font-bold ring-1",
-      TYPE_STYLES[type] ?? "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-500/20",
-      sizeClass,
-      className,
-    ].join(" ")}
-    >
-      <FileTypeGlyph type={type} size={iconSize} />
-      {label}
+    <span className={`${shared} border border-slate-200 bg-slate-50 text-slate-600`}>
+      <FileText size={iconSize} />
     </span>
   );
 }
 
-function inferType(fileName?: string | null, sourceType?: string | null) {
-  const explicit = sourceType?.trim().toUpperCase();
-  if (explicit) {
-    return explicit;
+export function inferIconType(fileName: string, sourceType?: string) {
+  if (sourceType && sourceType !== "UPLOAD") {
+    return sourceType;
   }
 
-  const extension = normalizeExtension(fileName?.split(".").pop() ?? "");
+  const extension =
+    fileName.split("?")[0]?.split("#")[0]?.split(".").at(-1)?.toLowerCase() ?? "";
   if (extension === "pdf") return "PDF";
-  if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"].includes(extension)) return "IMAGE";
+  if (extension === "docx" || extension === "doc") return "DOCX";
+  if (extension === "xlsx" || extension === "xls" || extension === "csv") return "XLSX";
+  if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension)) return "IMAGE";
+  if (extension === "zip") return "ZIP";
   if (extension === "md" || extension === "markdown") return "MD";
-  if (extension === "txt") return "TXT";
-  return extension ? extension.toUpperCase() : "FILE";
+
+  return "TEXT";
 }
 
-function FileTypeGlyph({ type, size }: { type: string; size: number }) {
-  if (type === "PDF" || type === "TXT") return <FileText size={size} />;
-  if (type === "IMAGE") return <FileImage size={size} />;
-  if (type === "MD" || type === "MARKDOWN") return <Hash size={size} />;
-  return <FileType size={size} />;
-}
-
-function labelForType(type: string) {
-  if (type === "IMAGE") return "图片";
-  if (type === "MD" || type === "MARKDOWN") return "MD";
-  return type || "FILE";
+export function normalizeExtension(extension: string) {
+  return extension.trim().replace(/^\./, "").toLowerCase();
 }

@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
@@ -34,6 +34,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 type PdfDocumentProxy = Awaited<ReturnType<typeof pdfjsLib.getDocument>["promise"]>;
 type PdfPageProxy = Awaited<ReturnType<PdfDocumentProxy["getPage"]>>;
+type PdfPageSize = { width: number; height: number; widthPt: number; heightPt: number };
+type PdfRenderTask = ReturnType<PdfPageProxy["render"]>;
+type PdfFitMode = "frame" | "manual";
 
 const DEFAULT_PDF_SCALE = 1.15;
 const MIN_PDF_SCALE = 0.55;
@@ -88,8 +91,8 @@ export function PreviewPage({ segmentId }: { segmentId: string }) {
         </nav>
 
         <div className="grid min-h-[720px] flex-1 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <section className="panel min-w-0 overflow-hidden">
-            <div className="grid min-h-[76px] grid-cols-1 border-b border-[var(--line)] bg-[var(--surface)] dark:border-[var(--line)] lg:grid-cols-[174px_minmax(0,1fr)]">
+          <section className="panel preview-panel flex min-h-[720px] min-w-0 flex-col overflow-hidden">
+            <div className="grid min-h-[76px] shrink-0 grid-cols-1 border-b border-[var(--line)] bg-[var(--surface)] dark:border-[var(--line)] lg:grid-cols-[174px_minmax(0,1fr)]">
               <div className="flex items-center border-b border-[var(--line)] px-5 dark:border-[var(--line)] lg:border-b-0 lg:border-r">
                 <button
                   type="button"
@@ -165,21 +168,88 @@ function PreviewWorkspace({
   onRefresh: () => void;
   isRefreshing: boolean;
 }) {
-  const previewType = (item.previewType || item.assetType || "").toUpperCase();
+  const previewType = getPreviewType(item);
+  const previewShellRef = useRef<HTMLDivElement | null>(null);
+  const previewScrollerRef = useRef<HTMLDivElement | null>(null);
   const [pdfPage, setPdfPage] = useState(item.anchor?.pageNo ?? 1);
   const [pdfScale, setPdfScale] = useState(DEFAULT_PDF_SCALE);
+  const [pdfFitMode, setPdfFitMode] = useState<PdfFitMode>("frame");
   const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
+  const [pdfPageSize, setPdfPageSize] = useState<PdfPageSize | null>(null);
+  const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null);
+  const [previewFrameSize, setPreviewFrameSize] = useState({ width: 0, height: 0 });
 
   const pageNumbers = useMemo(() => {
-    const total = pdfPageCount ?? Math.max(pdfPage + 2, item.anchor?.pageNo ?? 1);
-    const start = Math.max(1, pdfPage - 2);
-    const end = Math.min(total, start + 4);
-    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+    const total = pdfPageCount ?? Math.max(pdfPage, item.anchor?.pageNo ?? 1);
+    return Array.from({ length: total }, (_, index) => index + 1);
   }, [item.anchor?.pageNo, pdfPage, pdfPageCount]);
 
+  const getPdfFrameScale = useCallback(() => {
+    if (!pdfPageSize || !previewFrameSize.width || !previewFrameSize.height) {
+      return DEFAULT_PDF_SCALE;
+    }
+
+    return clampScale(Math.max(previewFrameSize.width / pdfPageSize.widthPt, previewFrameSize.height / pdfPageSize.heightPt));
+  }, [pdfPageSize, previewFrameSize.height, previewFrameSize.width]);
+
+  useEffect(() => {
+    const scroller = previewScrollerRef.current;
+    if (!scroller) {
+      return;
+    }
+
+    const updateFrameSize = () => {
+      const nextSize = getPreviewFrameSize(scroller);
+      setPreviewFrameSize((size) => (
+        Math.abs(size.width - nextSize.width) < 1 && Math.abs(size.height - nextSize.height) < 1 ? size : nextSize
+      ));
+    };
+
+    updateFrameSize();
+    const observer = new ResizeObserver(updateFrameSize);
+    observer.observe(scroller);
+    window.addEventListener("resize", updateFrameSize);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateFrameSize);
+    };
+  }, []);
+
+  const fitPdfToFrame = useCallback(() => {
+    setPdfFitMode("frame");
+    setPdfScale(getPdfFrameScale());
+  }, [getPdfFrameScale]);
+
+  useEffect(() => {
+    if (previewType !== "PDF" || pdfFitMode !== "frame") {
+      return;
+    }
+
+    const nextScale = getPdfFrameScale();
+    setPdfScale((scale) => (Math.abs(scale - nextScale) < 0.01 ? scale : nextScale));
+  }, [getPdfFrameScale, pdfFitMode, previewType]);
+
+  const toggleFullscreen = useCallback(() => {
+    const shell = previewShellRef.current;
+    if (!shell) {
+      return;
+    }
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => undefined);
+      return;
+    }
+
+    shell.requestFullscreen().catch(() => undefined);
+  }, []);
+
   return (
-    <div className="grid h-[calc(100vh-238px)] min-h-[640px] grid-cols-1 bg-slate-50 dark:bg-[#0d1117] lg:grid-cols-[154px_minmax(0,1fr)]">
-      <aside className="hidden border-r border-[var(--line)] bg-[var(--surface)] p-4 dark:border-[var(--line)] dark:bg-[var(--surface)] lg:block">
+    <div
+      ref={previewShellRef}
+      className="preview-workspace grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-slate-50 dark:bg-[#0d1117] lg:grid-cols-[154px_minmax(0,1fr)]"
+    >
+      <aside className="hidden min-h-0 border-r border-[var(--line)] bg-[var(--surface)] p-4 dark:border-[var(--line)] dark:bg-[var(--surface)] lg:block">
         <div className="muted-scrollbar h-full overflow-y-auto pr-1">
           {pageNumbers.map((page) => (
             <button
@@ -190,11 +260,11 @@ function PreviewWorkspace({
               disabled={previewType !== "PDF"}
             >
               <div className={[
-                "mx-auto grid h-[116px] w-[82px] place-items-center rounded-[7px] border bg-white text-xs text-slate-400 shadow-sm dark:bg-slate-950",
+                "mx-auto grid h-[116px] w-[82px] place-items-center overflow-hidden rounded-[7px] border bg-white text-xs text-slate-400 shadow-sm",
                 page === pdfPage ? "border-blue-500 ring-2 ring-blue-100 dark:ring-blue-500/20" : "border-slate-200 dark:border-slate-700",
               ].join(" ")}
               >
-                <FileText size={18} />
+                {previewType === "PDF" ? <PdfThumbnail pdfDoc={pdfDoc} pageNo={page} isActive={page === pdfPage} /> : <FileText size={18} />}
               </div>
               <div className={[
                 "mx-auto mt-2 grid h-6 min-w-6 place-items-center rounded-[6px] px-1 text-xs",
@@ -208,8 +278,8 @@ function PreviewWorkspace({
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-col">
-        <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface)] px-5 dark:border-[var(--line)] dark:bg-[var(--surface)]">
+      <main className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+        <div className="flex min-h-[64px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface)] px-5 dark:border-[var(--line)] dark:bg-[var(--surface)]">
           <div className="flex items-center gap-2">
             <IconButton label="上一页" disabled={previewType !== "PDF" || pdfPage <= 1} onClick={() => setPdfPage((page) => Math.max(1, page - 1))}>
               <ChevronLeft size={17} />
@@ -223,32 +293,46 @@ function PreviewWorkspace({
           </div>
 
           <div className="flex items-center gap-2">
-            <IconButton label="缩小" disabled={previewType !== "PDF"} onClick={() => setPdfScale((scale) => clampScale(scale - 0.1))}>
+            <IconButton
+              label="缩小"
+              disabled={previewType !== "PDF"}
+              onClick={() => {
+                setPdfFitMode("manual");
+                setPdfScale((scale) => clampScale(scale - 0.1));
+              }}
+            >
               <Minus size={16} />
             </IconButton>
             <span className="w-14 text-center text-sm font-medium text-slate-700 dark:text-slate-200">{Math.round(pdfScale * 100)}%</span>
-            <IconButton label="放大" disabled={previewType !== "PDF"} onClick={() => setPdfScale((scale) => clampScale(scale + 0.1))}>
+            <IconButton
+              label="放大"
+              disabled={previewType !== "PDF"}
+              onClick={() => {
+                setPdfFitMode("manual");
+                setPdfScale((scale) => clampScale(scale + 0.1));
+              }}
+            >
               <Plus size={16} />
             </IconButton>
             <button
               type="button"
               disabled={previewType !== "PDF"}
-              onClick={() => setPdfScale(DEFAULT_PDF_SCALE)}
+              onClick={fitPdfToFrame}
               className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-slate-700 hover:bg-[var(--surface-hover)] disabled:opacity-50 dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]"
             >
-              适合宽度
+              铺满
               <ChevronDown size={15} />
             </button>
             <IconButton label="刷新预览地址" onClick={onRefresh} disabled={isRefreshing}>
               {isRefreshing ? <Loader2 className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
             </IconButton>
-            <IconButton label="全屏">
+            <IconButton label="全屏" onClick={toggleFullscreen}>
               <Maximize2 size={17} />
             </IconButton>
           </div>
         </div>
 
-        <div className="muted-scrollbar min-h-0 flex-1 overflow-auto p-5 lg:p-8">
+        <div ref={previewScrollerRef} className="muted-scrollbar min-h-0 flex-1 overflow-auto bg-slate-50 p-5 dark:bg-[#0d1117] lg:p-8">
           {previewType === "PDF" && item.previewUrl ? (
             <PdfPreview
               item={item}
@@ -257,6 +341,8 @@ function PreviewWorkspace({
               citationIndex={citationIndex}
               onPageCountChange={setPdfPageCount}
               onPageNoChange={setPdfPage}
+              onPageSizeChange={setPdfPageSize}
+              onDocumentChange={setPdfDoc}
             />
           ) : previewType === "IMAGE" && item.previewUrl ? (
             <ImagePreview item={item} citationIndex={citationIndex} />
@@ -269,6 +355,16 @@ function PreviewWorkspace({
   );
 }
 
+function getPreviewFrameSize(scroller: HTMLElement) {
+    const styles = window.getComputedStyle(scroller);
+    const horizontalPadding = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+    const verticalPadding = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+  return {
+    width: Math.max(0, scroller.clientWidth - horizontalPadding),
+    height: Math.max(0, scroller.clientHeight - verticalPadding),
+  };
+}
+
 function PdfPreview({
   item,
   pageNo,
@@ -276,6 +372,8 @@ function PdfPreview({
   citationIndex,
   onPageCountChange,
   onPageNoChange,
+  onPageSizeChange,
+  onDocumentChange,
 }: {
   item: PreviewSegment;
   pageNo: number;
@@ -283,10 +381,12 @@ function PdfPreview({
   citationIndex: number;
   onPageCountChange: (count: number) => void;
   onPageNoChange: (pageNo: number) => void;
+  onPageSizeChange: (size: PdfPageSize | null) => void;
+  onDocumentChange: (doc: PdfDocumentProxy | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null);
-  const [pageSize, setPageSize] = useState<{ width: number; height: number; widthPt: number; heightPt: number } | null>(null);
+  const [pageSize, setPageSize] = useState<PdfPageSize | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
 
@@ -301,6 +401,7 @@ function PdfPreview({
         setError(null);
         setPdfDoc(null);
         setPageSize(null);
+        onPageSizeChange(null);
       }
     });
     const loadingTask = pdfjsLib.getDocument({ url: item.previewUrl });
@@ -312,6 +413,7 @@ function PdfPreview({
           return;
         }
         setPdfDoc(doc);
+        onDocumentChange(doc);
         onPageCountChange(doc.numPages);
         const targetPageNo = item.anchor?.pageNo ?? 1;
         if (targetPageNo < 1 || targetPageNo > doc.numPages) {
@@ -326,9 +428,10 @@ function PdfPreview({
 
     return () => {
       cancelled = true;
+      onDocumentChange(null);
       loadingTask.destroy();
     };
-  }, [item.anchor?.pageNo, item.previewUrl, onPageCountChange, onPageNoChange]);
+  }, [item.anchor?.pageNo, item.previewUrl, onDocumentChange, onPageCountChange, onPageNoChange, onPageSizeChange]);
 
   useEffect(() => {
     if (!pdfDoc || !canvasRef.current) {
@@ -336,13 +439,23 @@ function PdfPreview({
     }
 
     let cancelled = false;
+    let renderTask: PdfRenderTask | null = null;
     setIsRendering(true);
 
     pdfDoc.getPage(pageNo)
-      .then((page) => renderPdfPage(page, canvasRef.current, scale))
+      .then((page) => {
+        if (cancelled) {
+          return null;
+        }
+
+        const renderTarget = renderPdfPage(page, canvasRef.current, scale);
+        renderTask = renderTarget.renderTask;
+        return renderTarget.promise;
+      })
       .then((size) => {
-        if (!cancelled) {
+        if (!cancelled && size) {
           setPageSize(size);
+          onPageSizeChange(size);
         }
       })
       .catch((nextError: unknown) => {
@@ -358,8 +471,9 @@ function PdfPreview({
 
     return () => {
       cancelled = true;
+      renderTask?.cancel();
     };
-  }, [pdfDoc, pageNo, scale]);
+  }, [onPageSizeChange, pdfDoc, pageNo, scale]);
 
   if (error) {
     return <ErrorBlock message={error} />;
@@ -367,8 +481,8 @@ function PdfPreview({
 
   return (
     <div className="mx-auto w-fit">
-      <div className="relative bg-white shadow-[0_18px_48px_rgba(15,23,42,0.12)] dark:bg-slate-950">
-        <canvas ref={canvasRef} className="block" />
+      <div className="relative bg-white shadow-[0_18px_48px_rgba(15,23,42,0.12)]">
+        <canvas ref={canvasRef} className="block bg-white" />
         {pageSize ? (
           <BBoxOverlay
             records={item.anchor?.bbox ?? []}
@@ -381,7 +495,7 @@ function PdfPreview({
           />
         ) : null}
         {isRendering ? (
-          <div className="absolute inset-0 grid place-items-center bg-white/55 text-slate-500 dark:bg-slate-950/55 dark:text-slate-300">
+          <div className="absolute inset-0 grid place-items-center bg-white/55 text-slate-500">
             <Loader2 className="animate-spin" size={24} />
           </div>
         ) : null}
@@ -390,7 +504,93 @@ function PdfPreview({
   );
 }
 
-async function renderPdfPage(page: PdfPageProxy, canvas: HTMLCanvasElement | null, scale: number) {
+function PdfThumbnail({ pdfDoc, pageNo, isActive }: { pdfDoc: PdfDocumentProxy | null; pageNo: number; isActive: boolean }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [shouldRender, setShouldRender] = useState(false);
+  const [isRendering, setIsRendering] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    if (isActive) {
+      containerRef.current?.scrollIntoView({ block: "nearest" });
+      setShouldRender(true);
+    }
+  }, [isActive]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || shouldRender) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShouldRender(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "160px 0px" },
+    );
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [shouldRender]);
+
+  useEffect(() => {
+    if (!pdfDoc || !canvasRef.current || !shouldRender) {
+      return;
+    }
+
+    let cancelled = false;
+    let renderTask: PdfRenderTask | null = null;
+    setHasError(false);
+    setIsRendering(true);
+
+    pdfDoc.getPage(pageNo)
+      .then((page) => {
+        if (cancelled) {
+          return null;
+        }
+
+        const viewport = page.getViewport({ scale: 1 });
+        const scale = Math.min(74 / viewport.width, 106 / viewport.height);
+        const renderTarget = renderPdfPage(page, canvasRef.current, scale);
+        renderTask = renderTarget.renderTask;
+        return renderTarget.promise;
+      })
+      .catch((error: unknown) => {
+        if (!cancelled && !isPdfRenderingCancelled(error)) {
+          setHasError(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsRendering(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      renderTask?.cancel();
+    };
+  }, [pdfDoc, pageNo, shouldRender]);
+
+  return (
+    <div ref={containerRef} className="relative grid h-full w-full place-items-center">
+      {!pdfDoc || hasError || !shouldRender ? <FileText size={18} /> : null}
+      <canvas ref={canvasRef} className={["bg-white", !pdfDoc || hasError || !shouldRender ? "hidden" : "block"].join(" ")} />
+      {isRendering && shouldRender ? (
+        <div className="absolute inset-0 grid place-items-center bg-white/60">
+          <Loader2 className="animate-spin" size={16} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function renderPdfPage(page: PdfPageProxy, canvas: HTMLCanvasElement | null, scale: number) {
   if (!canvas) {
     throw new Error("Canvas is unavailable");
   }
@@ -405,15 +605,23 @@ async function renderPdfPage(page: PdfPageProxy, canvas: HTMLCanvasElement | nul
   canvas.height = Math.floor(viewport.height);
   canvas.style.width = `${Math.floor(viewport.width)}px`;
   canvas.style.height = `${Math.floor(viewport.height)}px`;
+  context.save();
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.restore();
 
-  await page.render({ canvas, canvasContext: context, viewport }).promise;
+  const renderTask = page.render({ canvas, canvasContext: context, viewport });
   const [x1, y1, x2, y2] = page.view;
-
-  return {
+  const size = {
     width: viewport.width,
     height: viewport.height,
     widthPt: Math.abs(x2 - x1),
     heightPt: Math.abs(y2 - y1),
+  };
+
+  return {
+    renderTask,
+    promise: renderTask.promise.then(() => size),
   };
 }
 
@@ -526,12 +734,12 @@ function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIn
         <span>{item.anchor?.pageNo ? `第 ${item.anchor.pageNo} 页` : item.previewType ?? item.assetType ?? "文本"}</span>
       </header>
       <div className="space-y-6 text-[15px] leading-8 text-slate-800 dark:text-slate-200">
-        {chunks.map((chunk) => {
+        {chunks.map((chunk, index) => {
           const isCurrent = chunk.relation === "current" || chunk.segmentId === item.segmentId;
 
           return (
             <section
-              key={chunk.segmentId}
+              key={`${chunk.segmentId}-${chunk.relation ?? "chunk"}-${chunk.chunkOrder ?? index}-${index}`}
               className={isCurrent ? "relative rounded-[8px] border border-amber-300 bg-amber-50 px-5 py-4 dark:border-amber-500/45 dark:bg-amber-500/10" : ""}
             >
               {isCurrent ? (
@@ -625,7 +833,7 @@ function CitationPanel({
 
             return (
               <div
-                key={chunk.segmentId}
+                key={`${chunk.segmentId}-${chunk.relation ?? "chunk"}-${chunk.chunkOrder ?? index}-${index}`}
                 className={[
                   "rounded-[8px] border p-3",
                   isCurrent
@@ -785,4 +993,23 @@ function clampScale(scale: number) {
 
 function isPdfRenderingCancelled(error: unknown) {
   return error instanceof Error && error.name === "RenderingCancelledException";
+}
+
+function getPreviewType(item: PreviewSegment) {
+  const rawType = `${item.previewType ?? item.assetType ?? ""}`.trim().toUpperCase();
+  const fileName = item.fileName?.toLowerCase() ?? "";
+
+  if (rawType === "PDF" || rawType === "APPLICATION/PDF" || fileName.endsWith(".pdf")) {
+    return "PDF";
+  }
+
+  if (
+    rawType === "IMAGE" ||
+    rawType.startsWith("IMAGE/") ||
+    /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(fileName)
+  ) {
+    return "IMAGE";
+  }
+
+  return rawType;
 }

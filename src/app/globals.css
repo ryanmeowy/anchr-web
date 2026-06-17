@@ -102,3 +102,17 @@ a {
   border-radius: 999px;
   background: #cbd5e1;
 }
+
+.preview-workspace:fullscreen {
+  height: 100vh;
+  min-height: 100vh;
+  width: 100vw;
+}
+
+.preview-panel {
+  background: #f8fafc;
+}
+
+.dark .preview-panel {
+  background: #0d1117;
+}

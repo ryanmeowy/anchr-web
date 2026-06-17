@@ -686,7 +686,7 @@ function ResultGroupCard({ group, onPreviewResult }: { group: ResultGroup; onPre
       </div>
       <div className="divide-y divide-[var(--line)] dark:divide-[var(--line)]">
         {group.items.map((item, index) => (
-          <ResultRow key={item.segmentId ?? `${item.assetId}-${index}`} item={item} onPreviewResult={onPreviewResult} />
+          <ResultRow key={`${item.segmentId ?? item.assetId}-${index}`} item={item} onPreviewResult={onPreviewResult} />
         ))}
       </div>
     </article>
@@ -1291,7 +1291,7 @@ function RecentSearchPanel({
         >
           {visibleItems.length > 0 ? visibleItems.map((item, index) => (
             <RecentSearchRow
-              key={`${item.query}-${item.searchedAt ?? index}`}
+              key={`${item.query}-${item.searchedAt ?? "unknown"}-${index}`}
               item={item}
               onSelect={() => onSelect(item)}
             />
