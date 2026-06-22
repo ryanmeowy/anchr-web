@@ -37,9 +37,11 @@ import {
   savePreviewNavigation,
   type PreviewCitation,
 } from "@/lib/preview-context";
-import type { KnowledgeBase, RecentSearch, SearchAnswer, SearchAssetType, SearchPage as SearchPageData, SearchResult } from "@/lib/types";
+import type { KnowledgeBase, RecentSearch, SearchAnswer, SearchAssetType, SearchHitType, SearchPage as SearchPageData, SearchResult } from "@/lib/types";
 
-const SEARCH_LIMIT = 10;
+const DEFAULT_SEARCH_LIMIT = 10;
+const MIN_SEARCH_LIMIT = 1;
+const MAX_SEARCH_LIMIT = 200;
 const SEARCH_TOP_K = 50;
 const RECENT_SEARCH_PAGE_SIZE = 5;
 const RECENT_SEARCH_COLLAPSED_SIZE = 3;
@@ -80,6 +82,11 @@ const SOURCE_TYPE_LABEL: Record<string, string> = {
   MARKDOWN: "Markdown",
 };
 
+const HIT_TYPE_OPTIONS: Array<{ value: SearchHitType; label: string }> = [
+  { value: "TEXT_CHUNK", label: "文本片段" },
+  { value: "IMAGE_OCR_BLOCK", label: "OCR片段" },
+];
+
 type SearchTab = "answer" | "results";
 type SearchMutationVariables = {
   query: string;
@@ -92,6 +99,8 @@ type SearchMutationVariables = {
 type SearchFiltersValue = {
   kbIds: string[];
   assetTypes: SearchAssetType[];
+  hitType: SearchHitType[];
+  limit: number;
   dateFrom: string;
   dateTo: string;
   withAnswer: boolean;
@@ -103,6 +112,8 @@ type SearchPreviewReturnState = {
   submittedFilters: SearchFiltersValue | null;
   selectedKbIds: string[];
   selectedAssetTypes: SearchAssetType[];
+  selectedHitTypes: SearchHitType[];
+  recallLimit: number;
   dateFrom: string;
   dateTo: string;
   activeTab: SearchTab;
@@ -125,6 +136,8 @@ export function SearchPage() {
   const [selectedKbIds, setSelectedKbIds] = useState<string[]>([]);
   const [isKbMenuOpen, setIsKbMenuOpen] = useState(false);
   const [selectedAssetTypes, setSelectedAssetTypes] = useState<SearchAssetType[]>([]);
+  const [selectedHitTypes, setSelectedHitTypes] = useState<SearchHitType[]>([]);
+  const [recallLimit, setRecallLimit] = useState(DEFAULT_SEARCH_LIMIT);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [activeTab, setActiveTab] = useState<SearchTab>("answer");
@@ -173,6 +186,8 @@ export function SearchPage() {
       setSubmittedFilters(state.submittedFilters);
       setSelectedKbIds(state.selectedKbIds);
       setSelectedAssetTypes(state.selectedAssetTypes);
+      setSelectedHitTypes(state.selectedHitTypes ?? []);
+      setRecallLimit(clampSearchLimit(state.recallLimit ?? DEFAULT_SEARCH_LIMIT));
       setDateFrom(state.dateFrom);
       setDateTo(state.dateTo);
       setActiveTab(state.activeTab);
@@ -186,10 +201,12 @@ export function SearchPage() {
   const buildSubmittedFilters = useCallback((withAnswer: boolean): SearchFiltersValue => ({
     kbIds: selectedKbIds,
     assetTypes: selectedAssetTypes,
+    hitType: selectedHitTypes,
+    limit: clampSearchLimit(recallLimit),
     dateFrom,
     dateTo,
     withAnswer,
-  }), [dateFrom, dateTo, selectedAssetTypes, selectedKbIds]);
+  }), [dateFrom, dateTo, recallLimit, selectedAssetTypes, selectedHitTypes, selectedKbIds]);
 
   const buildDateRange = useCallback((filters: SearchFiltersValue) => {
     const from = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`).getTime() : undefined;
@@ -207,15 +224,13 @@ export function SearchPage() {
       apiClient.searchKnowledgeBase({
         query: variables.query,
         topK: SEARCH_TOP_K,
-        limit: SEARCH_LIMIT,
-        strategy: "KB_RRF_RERANK",
+        limit: variables.filters.limit,
         kbIds: variables.filters.kbIds,
         assetTypes: variables.filters.assetTypes.length > 0 ? variables.filters.assetTypes : undefined,
+        hitType: variables.filters.hitType.length > 0 ? variables.filters.hitType : undefined,
         dateRange: buildDateRange(variables.filters),
         cursor: variables.cursor ?? undefined,
-        sort: "score",
-        withAnswer: variables.filters.withAnswer,
-        answerMode: "STRICT",
+        withAnswer: variables.filters.withAnswer
       }),
     onSuccess: (data, variables) => {
       setElapsedMs(Math.max(1, Math.round(performance.now() - variables.startedAt)));
@@ -291,6 +306,8 @@ export function SearchPage() {
     const filters: SearchFiltersValue = {
       kbIds: nextKbIds,
       assetTypes: nextAssetTypes,
+      hitType: [],
+      limit: DEFAULT_SEARCH_LIMIT,
       dateFrom: nextDateFrom,
       dateTo: nextDateTo,
       withAnswer: nextWithAnswer,
@@ -299,6 +316,8 @@ export function SearchPage() {
     setQuery(item.query);
     setSelectedKbIds(nextKbIds);
     setSelectedAssetTypes(nextAssetTypes);
+    setSelectedHitTypes([]);
+    setRecallLimit(DEFAULT_SEARCH_LIMIT);
     setDateFrom(nextDateFrom);
     setDateTo(nextDateTo);
     setSubmittedQuery(item.query);
@@ -313,6 +332,8 @@ export function SearchPage() {
     submittedFilters,
     selectedKbIds,
     selectedAssetTypes,
+    selectedHitTypes,
+    recallLimit: clampSearchLimit(recallLimit),
     dateFrom,
     dateTo,
     activeTab,
@@ -325,8 +346,10 @@ export function SearchPage() {
     dateTo,
     elapsedMs,
     query,
+    recallLimit,
     searchData,
     selectedAssetTypes,
+    selectedHitTypes,
     selectedKbIds,
     submittedFilters,
     submittedQuery,
@@ -475,6 +498,10 @@ export function SearchPage() {
             sourceTypesError={capabilitiesQuery.isError}
             selectedAssetTypes={selectedAssetTypes}
             onSelectedAssetTypesChange={setSelectedAssetTypes}
+            selectedHitTypes={selectedHitTypes}
+            onSelectedHitTypesChange={setSelectedHitTypes}
+            recallLimit={recallLimit}
+            onRecallLimitChange={setRecallLimit}
             dateFrom={dateFrom}
             dateTo={dateTo}
             onDateFromChange={setDateFrom}
@@ -768,6 +795,10 @@ function SearchFilters({
   sourceTypesError,
   selectedAssetTypes,
   onSelectedAssetTypesChange,
+  selectedHitTypes,
+  onSelectedHitTypesChange,
+  recallLimit,
+  onRecallLimitChange,
   dateFrom,
   dateTo,
   onDateFromChange,
@@ -786,6 +817,10 @@ function SearchFilters({
   sourceTypesError: boolean;
   selectedAssetTypes: SearchAssetType[];
   onSelectedAssetTypesChange: (types: SearchAssetType[]) => void;
+  selectedHitTypes: SearchHitType[];
+  onSelectedHitTypesChange: (types: SearchHitType[]) => void;
+  recallLimit: number;
+  onRecallLimitChange: (limit: number) => void;
   dateFrom: string;
   dateTo: string;
   onDateFromChange: (value: string) => void;
@@ -813,10 +848,7 @@ function SearchFilters({
           />
         </FilterSection>
 
-        <FilterSection
-          title="来源类型"
-          action={sourceTypesLoading || sourceTypesError ? undefined : selectedAssetTypes.length === 0 ? `全部 ${formatNumber(sourceTypes.length)}` : `已选 ${selectedAssetTypes.length}`}
-        >
+        <FilterSection title="来源类型">
           {sourceTypesLoading ? <LoadingBlock label="加载来源类型" /> : null}
           {sourceTypesError ? <div className="text-sm text-slate-500 dark:text-slate-400">来源类型暂不可用。</div> : null}
           {!sourceTypesLoading && !sourceTypesError && sourceTypes.length === 0 ? (
@@ -825,28 +857,54 @@ function SearchFilters({
           {!sourceTypesLoading && !sourceTypesError && sourceTypes.length > 0 ? (
             <div className="grid grid-cols-4 gap-2">
               {sourceTypes.map((assetType) => {
-              const checked = selectedAssetTypes.length === 0 || selectedAssetTypes.includes(assetType);
+                const checked = selectedAssetTypes.includes(assetType);
 
-              return (
-                <button
-                  key={assetType}
-                  type="button"
-                  onClick={() => onSelectedAssetTypesChange(toggleWithinAllSelection(selectedAssetTypes, assetType, sourceTypes))}
-                  className={[
-                    "flex min-h-12 flex-col items-center justify-center gap-1 rounded-[8px] px-1.5 py-2 text-center transition",
-                    checked
-                      ? "border-blue-300 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/15"
-                      : "bg-[var(--background)] hover:bg-[var(--surface-hover)] dark:bg-[#0d1117] dark:hover:bg-[var(--surface-hover)]",
-                  ].join(" ")}
-                  aria-pressed={checked}
-                >
-                  <FileTypeIcon fileName={assetType} sourceType={assetType} compact />
-                  <span className="max-w-full truncate text-xs font-medium text-slate-600 dark:text-slate-300">{SOURCE_TYPE_LABEL[assetType]}</span>
-                </button>
-              );
+                return (
+                  <button
+                    key={assetType}
+                    type="button"
+                    onClick={() => onSelectedAssetTypesChange(toggleSelection(selectedAssetTypes, assetType))}
+                    className={[
+                      "flex min-h-12 flex-col items-center justify-center gap-1 rounded-[8px] px-1.5 py-2 text-center transition",
+                      checked
+                        ? "border-blue-300 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/15"
+                        : "bg-[var(--background)] hover:bg-[var(--surface-hover)] dark:bg-[#0d1117] dark:hover:bg-[var(--surface-hover)]",
+                    ].join(" ")}
+                    aria-pressed={checked}
+                  >
+                    <FileTypeIcon fileName={assetType} sourceType={assetType} compact />
+                    <span className="max-w-full truncate text-xs font-medium text-slate-600 dark:text-slate-300">{SOURCE_TYPE_LABEL[assetType]}</span>
+                  </button>
+                );
               })}
             </div>
           ) : null}
+        </FilterSection>
+
+        <FilterSection title="筛选类型">
+          <div className="grid grid-cols-2 gap-2">
+            {HIT_TYPE_OPTIONS.map((option) => (
+              <HitTypeButton
+                key={option.value}
+                label={option.label}
+                selected={selectedHitTypes.includes(option.value)}
+                onClick={() => onSelectedHitTypesChange(toggleSelection(selectedHitTypes, option.value))}
+              />
+            ))}
+          </div>
+        </FilterSection>
+
+        <FilterSection title="召回数量">
+          <input
+            type="number"
+            min={MIN_SEARCH_LIMIT}
+            max={MAX_SEARCH_LIMIT}
+            value={recallLimit}
+            onChange={(event) => onRecallLimitChange(clampSearchLimit(event.target.valueAsNumber))}
+            className="field h-11 text-sm"
+            aria-label="召回数量"
+          />
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">有效值 {MIN_SEARCH_LIMIT}~{MAX_SEARCH_LIMIT}</p>
         </FilterSection>
 
         <FilterSection title="时间范围">
@@ -874,6 +932,24 @@ function FilterSection({ title, action, children }: { title: string; action?: st
       </div>
       {children}
     </div>
+  );
+}
+
+function HitTypeButton({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "inline-flex h-10 items-center justify-center rounded-[8px] px-2 text-sm font-medium transition",
+        selected
+          ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200"
+          : "bg-[var(--background)] text-slate-600 hover:bg-[var(--surface-hover)] dark:bg-[#0d1117] dark:text-slate-300 dark:hover:bg-[var(--surface-hover)]",
+      ].join(" ")}
+      aria-pressed={selected}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -1365,20 +1441,18 @@ function formatSelectedKbLabel(selectedKbIds: string[], kbById: Map<string, Know
   return `已选 ${selectedKbIds.length} 个知识库`;
 }
 
-function toggleWithinAllSelection<T>(selected: T[], value: T, allValues: T[]) {
-  if (selected.length === 0) {
-    return allValues.filter((item) => item !== value);
-  }
-
-  const next = selected.includes(value)
+function toggleSelection<T>(selected: T[], value: T) {
+  return selected.includes(value)
     ? selected.filter((item) => item !== value)
     : [...selected, value];
+}
 
-  if (next.length === 0 || next.length === allValues.length) {
-    return [];
+function clampSearchLimit(value: number) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_SEARCH_LIMIT;
   }
 
-  return next;
+  return Math.min(MAX_SEARCH_LIMIT, Math.max(MIN_SEARCH_LIMIT, Math.round(value)));
 }
 
 function formatDateRangeLabel(from: string, to: string) {

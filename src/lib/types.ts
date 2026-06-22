@@ -213,7 +213,7 @@ export type UploadIngestionItem = {
 };
 
 export type SearchAssetType = string;
-export type SearchHitType = "TEXT" | "IMAGE" | "MIXED";
+export type SearchHitType = "TEXT_CHUNK" | "IMAGE_OCR_BLOCK";
 export type SearchStrategy = "KB_RRF" | "KB_RRF_RERANK";
 export type SearchAnswerMode = "STRICT";
 
@@ -224,7 +224,7 @@ export type SearchRequest = {
   strategy?: SearchStrategy;
   kbIds?: string[];
   assetTypes?: SearchAssetType[];
-  hitTypes?: SearchHitType[];
+  hitType?: SearchHitType[];
   dateRange?: {
     from?: number;
     to?: number;
@@ -375,6 +375,7 @@ export type CapabilityConnectionTestRequest = {
   baseUrl: string;
   apiKey?: string;
   modelName?: string;
+  extraConfig?: Record<string, unknown>;
   configId?: number;
 };
 

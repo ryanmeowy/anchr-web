@@ -43,6 +43,10 @@ const CONFIG_STATUS_DOT_CLASS =
 const CONFIG_ENABLE_BUTTON_CLASS =
   "inline-flex h-6 w-[54px] shrink-0 items-center justify-center whitespace-nowrap rounded-[6px] bg-emerald-100 px-0 font-sans text-xs font-medium leading-none tracking-normal text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-emerald-500/30" as const;
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 function splitParenLabel(label: string) {
   const match = label.match(/^(.*?)(\s*[(（].*[)）])$/);
   return match ? [match[1].trim(), match[2].trim()] : [label];
@@ -214,7 +218,10 @@ function ConfigEditor({
   const [saved, setSaved] = useState(false);
   const [testResult, setTestResult] = useState<CapabilityConnectionTestResult | null>(null);
   const [paramsExpanded, setParamsExpanded] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const initialized = useRef(false);
+
+  const clearTestResult = () => setTestResult(null);
 
   const paramsQuery = useQuery({
     queryKey: [...queryKey, "params"],
@@ -281,25 +288,56 @@ function ConfigEditor({
       return apiClient.deleteCapabilityConfig(capability, config.id);
     },
     onSuccess: () => {
+      setDeleteConfirmOpen(false);
       queryClient.invalidateQueries({ queryKey });
       onSaved();
     },
   });
 
   const testMutation = useMutation({
-    mutationFn: () =>
-      apiClient.testConnection({
-        capability,
+    mutationFn: () => {
+      const body: CapabilityConfigUpdateRequest = {
         baseUrl: baseUrl.trim(),
-        apiKey: apiKey.trim() || undefined,
         modelName: modelName.trim() || undefined,
-        configId: config && !isNew ? config.id : undefined,
-      }),
+        extraConfig: toExtraConfig(extra, paramItems),
+      };
+      if (apiKey.trim()) body.apiKey = apiKey.trim();
+      return apiClient.testConnection({
+        capability,
+        ...body,
+        configId: shouldUseSavedCapabilityConfig ? config?.id : undefined,
+      });
+    },
+    onMutate: () => setTestResult(null),
     onSuccess: (result) => setTestResult(result),
+    onError: (error) => {
+      setTestResult({
+        success: false,
+        latencyMs: 0,
+        message: getErrorMessage(error, "连接失败"),
+      });
+    },
   });
 
+  const currentCapabilityConfig = useMemo<CapabilityConfigUpdateRequest>(() => ({
+    baseUrl: baseUrl.trim(),
+    modelName: modelName.trim() || undefined,
+    extraConfig: toExtraConfig(extra, paramItems),
+  }), [baseUrl, extra, modelName, paramItems]);
+
+  const savedCapabilityConfig = useMemo<CapabilityConfigUpdateRequest | null>(() => {
+    if (!config) return null;
+    return {
+      baseUrl: config.baseUrl.trim(),
+      modelName: config.modelName?.trim() || undefined,
+      extraConfig: normalizeExtraConfig(config.extraConfig, paramItems),
+    };
+  }, [config, paramItems]);
+
+  const hasUnsavedCapabilityChanges = isNew || !savedCapabilityConfig || !areCapabilityConfigsEqual(currentCapabilityConfig, savedCapabilityConfig);
+  const shouldUseSavedCapabilityConfig = Boolean(config && !isNew && !hasUnsavedCapabilityChanges && !apiKey.trim());
   const canSave = baseUrl.trim().length > 0;
-  const canTest = canSave && (apiKey.trim().length > 0 || (config && !isNew));
+  const canTest = canSave && (apiKey.trim().length > 0 || shouldUseSavedCapabilityConfig);
 
   return (
     <div>
@@ -318,7 +356,7 @@ function ConfigEditor({
           </p>
         </div>
         {saved && (
-          <span className="ml-auto text-sm font-medium text-emerald-600 dark:text-emerald-400">已保存</span>
+          <span className="ml-auto text-sm font-medium text-emerald-600 dark:text-emerald-400">保存成功</span>
         )}
       </div>
 
@@ -334,21 +372,21 @@ function ConfigEditor({
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Base URL</span>
           <input className={FIELD_CLASS} value={baseUrl}
             placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
-            onChange={(e) => { setBaseUrl(e.target.value); setSaved(false); setTestResult(null); }} />
+            onChange={(e) => { setBaseUrl(e.target.value); setSaved(false); clearTestResult(); }} />
         </label>
 
         <label className="block">
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">API Key</span>
           <input type="password" className={FIELD_CLASS} value={apiKey}
             placeholder={!isNew && config?.apiKeyMasked ? `(已保存: ${config.apiKeyMasked})` : "sk-..."}
-            onChange={(e) => { setApiKey(e.target.value); setSaved(false); }} />
+            onChange={(e) => { setApiKey(e.target.value); setSaved(false); clearTestResult(); }} />
         </label>
 
         <label className="block">
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Model</span>
           <input className={FIELD_CLASS} value={modelName}
             placeholder={capability === "GENERATION" ? "qwen-plus" : capability === "RERANK" ? "gte-rerank-v2" : "text-embedding-v4"}
-            onChange={(e) => { setModelName(e.target.value); setSaved(false); }} />
+            onChange={(e) => { setModelName(e.target.value); setSaved(false); clearTestResult(); }} />
         </label>
 
         <div>
@@ -379,7 +417,7 @@ function ConfigEditor({
                         className="field h-8 text-sm"
                         value={extra[p.key] ?? ""}
                         placeholder={p.key}
-                        onChange={(e) => { setExtra((prev) => ({ ...prev, [p.key]: e.target.value })); setSaved(false); }}
+                        onChange={(e) => { setExtra((prev) => ({ ...prev, [p.key]: e.target.value })); setSaved(false); clearTestResult(); }}
                       />
                     </label>
                   ))}
@@ -397,16 +435,15 @@ function ConfigEditor({
             : "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
         }`}>
           {testResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          测试{testResult.success ? "连通" : "失败"}
-          {testResult.latencyMs > 0 ? ` (${testResult.latencyMs}ms)` : ""}
-          {!testResult.success && testResult.message ? `: ${testResult.message}` : ""}
+          {testResult.success ? "连接成功" : "连接失败"}
+          {testResult.success && testResult.latencyMs > 0 ? ` (${testResult.latencyMs}ms)` : ""}
         </div>
       )}
 
       {saveMutation.error && (
         <div className="mt-3 inline-flex items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
           <AlertCircle size={16} />
-          {saveMutation.error instanceof Error ? saveMutation.error.message : "保存失败"}
+          保存失败：{getErrorMessage(saveMutation.error, "请稍后重试")}
         </div>
       )}
 
@@ -429,13 +466,50 @@ function ConfigEditor({
         </button>
         {!isNew && config && (
           <button
-            type="button" onClick={() => { if (confirm("确定删除？")) deleteMutation.mutate(); }}
+            type="button" onClick={() => { deleteMutation.reset(); setDeleteConfirmOpen(true); }}
             className="inline-flex h-11 items-center gap-2 rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-5 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-[var(--line)] dark:text-rose-400 dark:hover:bg-rose-500/10"
           >
             <Trash2 size={17} />删除
           </button>
         )}
       </div>
+
+      {deleteConfirmOpen && config ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-[420px] rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_18px_48px_rgba(15,23,42,0.16)] dark:border-[var(--line)] dark:bg-[var(--surface)]">
+            <div className="flex items-start justify-between">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-500/15">
+                <AlertTriangle size={24} className="text-rose-600 dark:text-rose-400" />
+              </div>
+              <button onClick={() => { deleteMutation.reset(); setDeleteConfirmOpen(false); }} className="grid size-8 place-items-center rounded-[7px] text-slate-400 hover:bg-[var(--surface-hover)] dark:text-slate-500">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-4 text-center">
+              <h2 className="text-lg font-semibold text-slate-950 dark:text-slate-100">确认删除配置</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                删除后将无法继续使用该模型配置。如需恢复，需要重新填写连接参数。
+              </p>
+            </div>
+            {deleteMutation.error ? (
+              <div className="mt-4 inline-flex w-full items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+                <AlertCircle size={16} />删除失败：{getErrorMessage(deleteMutation.error, "请稍后重试")}
+              </div>
+            ) : null}
+            <div className="mt-5 flex gap-3">
+              <button type="button" onClick={() => { deleteMutation.reset(); setDeleteConfirmOpen(false); }}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-[8px] border border-[var(--line)] bg-[var(--surface)] text-sm font-semibold text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200">
+                取消
+              </button>
+              <button type="button" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}
+                className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-[8px] bg-rose-600 px-5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(225,29,72,0.28)] hover:bg-rose-700 disabled:bg-slate-300 dark:disabled:bg-slate-700">
+                {deleteMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
+                {deleteMutation.isPending ? "删除中..." : "确定删除"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -459,6 +533,18 @@ function toExtraConfig(extra: Record<string, string>, params: CapabilityParams["
     if (v) result[p.key] = v;
   }
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function normalizeExtraConfig(json: Record<string, unknown> | undefined, params: CapabilityParams["params"]) {
+  return toExtraConfig(fromExtraConfig(json, params), params);
+}
+
+function areCapabilityConfigsEqual(left: CapabilityConfigUpdateRequest, right: CapabilityConfigUpdateRequest) {
+  return (
+    left.baseUrl === right.baseUrl &&
+    (left.modelName ?? "") === (right.modelName ?? "") &&
+    JSON.stringify(left.extraConfig ?? {}) === JSON.stringify(right.extraConfig ?? {})
+  );
 }
 
 // ── storage panel ───────────────────────────────────────────────────────────
@@ -513,19 +599,46 @@ function StoragePanel() {
     },
   });
 
+  const currentStorageTestConfig = useMemo(() => ({
+    endpoint: endpoint.trim(),
+    bucket: bucket.trim(),
+  }), [bucket, endpoint]);
+
+  const savedStorageTestConfig = useMemo(() => {
+    if (!configQuery.data) return null;
+    return {
+      endpoint: configQuery.data.endpoint?.trim() ?? "",
+      bucket: configQuery.data.bucket?.trim() ?? "",
+    };
+  }, [configQuery.data]);
+
+  const hasUnsavedStorageTestChanges = !savedStorageTestConfig || (
+    currentStorageTestConfig.endpoint !== savedStorageTestConfig.endpoint ||
+    currentStorageTestConfig.bucket !== savedStorageTestConfig.bucket
+  );
+  const shouldUseSavedStorageConfig = Boolean(configQuery.data && !hasUnsavedStorageTestChanges && !accessKey.trim() && !secretKey.trim());
+
   const testMutation = useMutation({
     mutationFn: () => apiClient.testStorage({
       endpoint: endpoint.trim(),
       accessKey: accessKey.trim() || undefined,
       secretKey: secretKey.trim() || undefined,
       bucket: bucket.trim(),
-      configId: configQuery.data && !accessKey.trim() && !secretKey.trim() ? configQuery.data.id : undefined,
+      configId: shouldUseSavedStorageConfig ? configQuery.data?.id : undefined,
     }),
+    onMutate: () => setTestResult(null),
     onSuccess: (result) => setTestResult(result),
+    onError: (error) => {
+      setTestResult({
+        success: false,
+        latencyMs: 0,
+        message: getErrorMessage(error, "连接失败"),
+      });
+    },
   });
 
   const canSave = endpoint.trim() && bucket.trim();
-  const canTest = canSave && ((accessKey.trim() && secretKey.trim()) || configQuery.data != null);
+  const canTest = canSave && ((accessKey.trim() && secretKey.trim()) || shouldUseSavedStorageConfig);
 
   return (
     <div className="panel p-5">
@@ -535,7 +648,7 @@ function StoragePanel() {
           <h2 className="text-lg font-semibold text-slate-950 dark:text-slate-100">存储设置</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">配置对象存储的连接参数。</p>
         </div>
-        {saved ? <span className="ml-auto text-sm font-medium text-emerald-600 dark:text-emerald-400">已保存</span> : null}
+        {saved ? <span className="ml-auto text-sm font-medium text-emerald-600 dark:text-emerald-400">保存成功</span> : null}
       </div>
       <div className="mb-4 inline-flex items-center gap-2 rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-slate-600 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-slate-300">
         <Info size={16} className="text-blue-500" />
@@ -587,13 +700,12 @@ function StoragePanel() {
       {testResult && (
         <div className={`mt-4 inline-flex items-center gap-2 rounded-[8px] px-3 py-2 text-sm ${testResult.success ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" : "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"}`}>
           {testResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          测试{testResult.success ? "连通" : "失败"}{testResult.latencyMs > 0 ? ` (${testResult.latencyMs}ms)` : ""}
-          {!testResult.success && testResult.message ? `: ${testResult.message}` : ""}
+          {testResult.success ? "连接成功" : "连接失败"}{testResult.success && testResult.latencyMs > 0 ? ` (${testResult.latencyMs}ms)` : ""}
         </div>
       )}
       {saveMutation.error && (
         <div className="mt-3 inline-flex items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
-          <AlertCircle size={16} />{saveMutation.error instanceof Error ? saveMutation.error.message : "保存失败"}
+          <AlertCircle size={16} />保存失败：{getErrorMessage(saveMutation.error, "请稍后重试")}
         </div>
       )}
       <div className="mt-5 flex items-center gap-3">
@@ -617,6 +729,7 @@ function StoragePanel() {
 function SecurityPanel() {
   const [token, setToken] = useState(() => getAccessToken());
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   return (
     <div className="panel p-5">
@@ -626,25 +739,44 @@ function SecurityPanel() {
           <h2 className="text-lg font-semibold text-slate-950 dark:text-slate-100">访问令牌</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">配置 API 访问令牌。</p>
         </div>
-        {saved ? <span className="ml-auto text-sm font-medium text-emerald-600 dark:text-emerald-400">已保存</span> : null}
+        {saved ? <span className="ml-auto text-sm font-medium text-emerald-600 dark:text-emerald-400">保存成功</span> : null}
       </div>
       <label className="block">
         <span className="text-sm font-medium text-slate-700 dark:text-slate-300">X-Access-Token</span>
         <input className={FIELD_CLASS} value={token} placeholder="粘贴 X-Access-Token"
-          onChange={(e) => { setToken(e.target.value); setSaved(false); }} />
+          onChange={(e) => { setToken(e.target.value); setSaved(false); setSaveError(null); }} />
       </label>
+      {saveError ? (
+        <div className="mt-3 inline-flex items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+          <AlertCircle size={16} />保存失败：{saveError}
+        </div>
+      ) : null}
       <div className="mt-5 flex items-center gap-3">
         <button type="button" onClick={() => {
-          saveAccessToken(token);
-          setSaved(true); setTimeout(() => setSaved(false), 2000);
+          try {
+            saveAccessToken(token);
+            setSaveError(null);
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+          } catch (error) {
+            setSaved(false);
+            setSaveError(getErrorMessage(error, "请稍后重试"));
+          }
         }}
           className="inline-flex h-11 items-center gap-2 rounded-[8px] bg-blue-600 px-5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(37,99,235,0.28)] hover:bg-blue-700 disabled:bg-slate-300">
           <Save size={17} />保存
         </button>
         <button type="button" onClick={() => {
-          clearAccessToken();
-          setToken("");
-          setSaved(true); setTimeout(() => setSaved(false), 2000);
+          try {
+            clearAccessToken();
+            setToken("");
+            setSaveError(null);
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+          } catch (error) {
+            setSaved(false);
+            setSaveError(getErrorMessage(error, "请稍后重试"));
+          }
         }}
           className="inline-flex h-11 items-center gap-2 rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-5 text-sm font-semibold text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]">
           清除

@@ -12,11 +12,9 @@ import {
   Maximize2,
   MessageCircle,
   Minus,
-  MoreHorizontal,
   Plus,
   RefreshCcw,
   Sparkles,
-  Star,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -66,7 +64,6 @@ export function PreviewPage({ segmentId }: { segmentId: string }) {
 
   const item = refreshMutation.data ?? previewQuery.data;
   const citationIndex = citationIndexFromUrl || item?.citationContext?.citationIndex || 1;
-  const returnLabel = from === "search" ? "返回搜索结果" : "返回回答";
 
   const handleBack = () => {
     if (window.history.length > 1) {
@@ -92,18 +89,18 @@ export function PreviewPage({ segmentId }: { segmentId: string }) {
 
         <div className="grid min-h-[720px] flex-1 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
           <section className="panel preview-panel flex min-h-[720px] min-w-0 flex-col overflow-hidden">
-            <div className="grid min-h-[76px] shrink-0 grid-cols-1 border-b border-[var(--line)] bg-[var(--surface)] dark:border-[var(--line)] lg:grid-cols-[174px_minmax(0,1fr)]">
-              <div className="flex items-center border-b border-[var(--line)] px-5 dark:border-[var(--line)] lg:border-b-0 lg:border-r">
+            <div className="grid shrink-0 grid-cols-1 border-b border-[var(--line)] bg-[var(--surface)] dark:border-[var(--line)] lg:min-h-[76px] lg:grid-cols-[154px_minmax(0,1fr)]">
+              <div className="flex min-h-[76px] items-center px-5 lg:border-r lg:border-[var(--line)] lg:dark:border-[var(--line)]">
                 <button
                   type="button"
                   onClick={handleBack}
                   className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-slate-700 hover:bg-[var(--surface-hover)] dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-slate-200 dark:hover:bg-[var(--surface-hover)]"
                 >
                   <ChevronLeft size={17} />
-                  {returnLabel}
+                  返回
                 </button>
               </div>
-              <div className="flex min-w-0 items-center justify-between gap-4 px-5">
+              <div className="flex min-h-[76px] min-w-0 items-center px-5">
                 <div className="flex min-w-0 items-center gap-3">
                   <AssetIcon type={item?.previewType ?? item?.assetType} />
                   <div className="min-w-0">
@@ -112,14 +109,6 @@ export function PreviewPage({ segmentId }: { segmentId: string }) {
                     </h1>
                     <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{item?.title ?? decodedSegmentId}</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                  <IconButton label="收藏">
-                    <Star size={18} />
-                  </IconButton>
-                  <IconButton label="更多">
-                    <MoreHorizontal size={19} />
-                  </IconButton>
                 </div>
               </div>
             </div>
