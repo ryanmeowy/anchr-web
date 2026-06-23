@@ -83,6 +83,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
   }, [collapsed, sidebarHydrated]);
 
+  if (isAskPage) {
+    return <>{children}</>;
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-[var(--background)] text-slate-950 dark:bg-[var(--background)] dark:text-slate-200 lg:flex-row">
       <aside

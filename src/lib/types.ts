@@ -79,6 +79,8 @@ export type RecentSearch = {
   answerMode?: string | null;
 };
 
+export type ConversationAnswerMode = "STRICT" | "SUMMARY" | "EXPLORE";
+
 export type RecentDocument = {
   taskId: string;
   kbId: string;

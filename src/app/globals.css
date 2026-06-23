@@ -62,6 +62,410 @@ a {
   text-decoration: none;
 }
 
+.premium-theme {
+  --premium-bg: #f7f7f2;
+  --premium-bg-grid: rgba(17, 19, 21, 0.055);
+  --premium-ink: #111315;
+  --premium-ink-soft: #5f6872;
+  --premium-muted: #858c94;
+  --premium-line: rgba(17, 19, 21, 0.12);
+  --premium-line-strong: rgba(17, 19, 21, 0.16);
+  --premium-panel: rgba(255, 255, 255, 0.78);
+  --premium-panel-strong: rgba(255, 255, 255, 0.9);
+  --premium-panel-muted: rgba(247, 247, 242, 0.82);
+  --premium-elevated: rgba(255, 255, 255, 0.95);
+  --premium-rail: #111315;
+  --premium-rail-muted: rgba(255, 255, 255, 0.66);
+  --premium-accent: #bbff66;
+  --premium-accent-contrast: #111315;
+  --premium-blue: #3158ff;
+  --premium-blue-soft: rgba(49, 88, 255, 0.14);
+  --premium-shadow: 0 24px 80px rgba(17, 19, 21, 0.12);
+  --premium-tight-shadow: 0 14px 38px rgba(17, 19, 21, 0.1);
+  --premium-menu-shadow: 0 24px 64px rgba(17, 19, 21, 0.18);
+  --premium-focus-ring: rgba(49, 88, 255, 0.14);
+  --premium-focus-line: rgba(49, 88, 255, 0.28);
+  --premium-glow-primary: rgba(187, 255, 102, 0.34);
+  --premium-glow-secondary: rgba(49, 88, 255, 0.15);
+  background: var(--premium-bg);
+  color: var(--premium-ink);
+}
+
+.premium-theme[data-premium-theme="dark"] {
+  --premium-bg: #070908;
+  --premium-bg-grid: rgba(244, 247, 236, 0.055);
+  --premium-ink: #f4f7ec;
+  --premium-ink-soft: rgba(244, 247, 236, 0.78);
+  --premium-muted: rgba(244, 247, 236, 0.5);
+  --premium-line: rgba(255, 255, 255, 0.13);
+  --premium-line-strong: rgba(255, 255, 255, 0.18);
+  --premium-panel: rgba(255, 255, 255, 0.08);
+  --premium-panel-strong: rgba(17, 19, 21, 0.82);
+  --premium-panel-muted: rgba(255, 255, 255, 0.08);
+  --premium-elevated: rgba(18, 21, 20, 0.96);
+  --premium-rail: #111315;
+  --premium-rail-muted: rgba(255, 255, 255, 0.68);
+  --premium-accent: #bbff66;
+  --premium-accent-contrast: #111315;
+  --premium-blue: #3158ff;
+  --premium-blue-soft: rgba(49, 88, 255, 0.18);
+  --premium-shadow: 0 30px 90px rgba(0, 0, 0, 0.44);
+  --premium-tight-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
+  --premium-menu-shadow: 0 24px 64px rgba(0, 0, 0, 0.46);
+  --premium-focus-ring: rgba(187, 255, 102, 0.12);
+  --premium-focus-line: rgba(187, 255, 102, 0.42);
+  --premium-glow-primary: rgba(187, 255, 102, 0.18);
+  --premium-glow-secondary: rgba(49, 88, 255, 0.2);
+  color-scheme: dark;
+}
+
+.premium-surface {
+  border: 1px solid var(--premium-line);
+  background: var(--premium-panel);
+  box-shadow: var(--premium-tight-shadow);
+  color: var(--premium-ink);
+}
+
+.premium-elevated {
+  border: 1px solid var(--premium-line);
+  background: var(--premium-elevated);
+  box-shadow: var(--premium-menu-shadow);
+  color: var(--premium-ink);
+}
+
+.premium-muted {
+  color: var(--premium-muted);
+}
+
+.premium-focusable:focus-within,
+.premium-focusable:focus-visible {
+  border-color: var(--premium-focus-line);
+  box-shadow:
+    0 0 0 3px var(--premium-focus-ring),
+    var(--premium-tight-shadow);
+}
+
+.ask-premium-composer .ask-premium-textarea {
+  min-height: 76px;
+  max-height: 160px;
+  resize: vertical;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.ask-premium-composer:focus-within {
+  border-color: rgba(49, 88, 255, 0.28);
+  box-shadow:
+    0 0 0 3px rgba(49, 88, 255, 0.14),
+    0 14px 38px rgba(17, 19, 21, 0.1);
+}
+
+.ask-premium-composer .ask-premium-textarea:focus-visible {
+  outline: 0;
+}
+
+.ask-premium-composer .ask-premium-textarea::placeholder {
+  color: #858c94;
+}
+
+.ask-premium-composer .ask-premium-control-button {
+  min-height: 38px;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ask-premium-composer .ask-premium-control-button svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.ask-premium-composer .ask-premium-control-button span {
+  max-width: 154px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ask-premium-composer .ask-premium-send-button {
+  width: 48px;
+  height: 48px;
+}
+
+.ask-premium-composer .ask-premium-send-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.ask-premium-composer .ask-premium-floating-menu {
+  animation: askPremiumMenuRise 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.ask-premium-inline-loading {
+  color: var(--premium-muted);
+}
+
+.ask-premium-answer-mode-title {
+  font-size: clamp(32px, 3.4vw, 52px);
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
+
+.ask-premium-answer-mode-bar {
+  inline-size: 100%;
+  max-inline-size: 100%;
+}
+
+.ask-premium-spinner {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border: 2px solid color-mix(in srgb, var(--premium-ink), transparent 84%);
+  border-top-color: var(--premium-accent);
+  border-radius: 9999px;
+  animation: askPremiumSpin 760ms linear infinite;
+}
+
+.ask-premium-page[data-premium-theme="dark"] {
+  background: var(--premium-bg);
+  color: var(--premium-ink);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-grid-bg {
+  background-image:
+    linear-gradient(var(--premium-bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--premium-bg-grid) 1px, transparent 1px);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-glow-bg {
+  background:
+    radial-gradient(circle at 80% 8%, var(--premium-glow-primary), transparent 28rem),
+    radial-gradient(circle at 15% 88%, var(--premium-glow-secondary), transparent 30rem),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.035), transparent 34rem);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-shell {
+  border-color: var(--premium-line);
+  background: rgba(10, 12, 11, 0.76);
+  box-shadow: var(--premium-shadow);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-history {
+  border-color: var(--premium-line);
+  background: rgba(15, 17, 16, 0.78);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-main {
+  background:
+    linear-gradient(90deg, rgba(13, 15, 14, 0.92), rgba(13, 15, 14, 0.64)),
+    radial-gradient(circle at 84% 4%, var(--premium-glow-primary), transparent 27rem),
+    radial-gradient(circle at 10% 86%, var(--premium-glow-secondary), transparent 30rem);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-hero {
+  border-color: var(--premium-line);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-kicker {
+  color: var(--premium-accent);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-scope-chip,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-empty-state {
+  border-color: var(--premium-line);
+  background: var(--premium-panel);
+  color: var(--premium-ink-soft);
+  box-shadow: var(--premium-tight-shadow);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-new-chat {
+  background: var(--premium-accent);
+  color: var(--premium-accent-contrast);
+  box-shadow: 0 14px 34px rgba(187, 255, 102, 0.16);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-error {
+  border: 1px solid rgba(255, 122, 122, 0.24);
+  background: rgba(255, 122, 122, 0.12);
+  color: #ffb8b8;
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-watermark {
+  color: rgba(255, 255, 255, 0.045);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-muted,
+.ask-premium-page[data-premium-theme="dark"] .text-slate-500 {
+  color: var(--premium-muted);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-composer {
+  border-color: var(--premium-line);
+  background: var(--premium-panel-strong);
+  box-shadow: var(--premium-tight-shadow);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-composer:focus-within {
+  border-color: var(--premium-focus-line);
+  box-shadow:
+    0 0 0 3px var(--premium-focus-ring),
+    var(--premium-tight-shadow);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-textarea {
+  color: var(--premium-ink);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-textarea::placeholder {
+  color: rgba(244, 247, 236, 0.42);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-control-button {
+  border-color: var(--premium-line);
+  background: var(--premium-panel);
+  color: var(--premium-ink-soft);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-control-button:hover,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-control-button[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--premium-accent), transparent 62%);
+  background: var(--premium-accent);
+  color: var(--premium-accent-contrast);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-send-button {
+  background: var(--premium-accent);
+  color: var(--premium-accent-contrast);
+  box-shadow: 0 18px 40px rgba(187, 255, 102, 0.22);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-send-button:hover {
+  background: var(--premium-blue);
+  color: #fff;
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-floating-menu,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-conversation-menu {
+  border-color: var(--premium-line);
+  background: var(--premium-elevated);
+  color: var(--premium-ink);
+  box-shadow: var(--premium-menu-shadow);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-floating-menu strong,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-floating-menu .text-\[\#111315\] {
+  color: var(--premium-ink);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-floating-menu small,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-floating-menu .text-slate-500 {
+  color: rgba(244, 247, 236, 0.52);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-floating-menu button:hover {
+  background: rgba(187, 255, 102, 0.12);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-floating-menu .bg-\[\#f7f7f2\] {
+  background: var(--premium-panel);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-conversation-item {
+  color: rgba(244, 247, 236, 0.74);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-conversation-item:hover {
+  background: var(--premium-panel);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-conversation-item.border-black\/10,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-conversation-item.bg-white\/80 {
+  border-color: rgba(187, 255, 102, 0.22);
+  background: var(--premium-panel);
+  color: var(--premium-ink);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-conversation-more,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-rename {
+  background: var(--premium-panel);
+  color: rgba(244, 247, 236, 0.72);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-assistant-card {
+  border-color: var(--premium-line);
+  background: var(--premium-panel);
+  color: var(--premium-ink);
+  box-shadow: var(--premium-tight-shadow);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-answer-text {
+  color: var(--premium-ink-soft);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-bubble,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-assistant-avatar {
+  background: var(--premium-blue);
+  box-shadow: 0 18px 42px rgba(49, 88, 255, 0.28);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-citation {
+  border-color: var(--premium-line);
+  background: var(--premium-panel);
+  color: var(--premium-ink-soft);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-citation:hover {
+  background: var(--premium-accent);
+  color: var(--premium-accent-contrast);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-trace {
+  border-color: var(--premium-line);
+  background:
+    linear-gradient(180deg, rgba(17, 19, 21, 0.98), rgba(7, 9, 8, 0.98)),
+    radial-gradient(circle at 50% 0%, rgba(187, 255, 102, 0.12), transparent 18rem);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-trace-hero,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-trace-card,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-trace-timeline,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-trace-empty {
+  border-color: var(--premium-line);
+  background: var(--premium-panel);
+}
+
+@media (max-width: 640px) {
+  .ask-premium-composer .ask-premium-control-button span {
+    max-width: 112px;
+  }
+
+  .ask-premium-composer .ask-premium-send-button {
+    width: 46px;
+    height: 46px;
+  }
+}
+
+@keyframes askPremiumMenuRise {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-100% + 8px)) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(-100%) scale(1);
+  }
+}
+
+@keyframes askPremiumSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 8px;

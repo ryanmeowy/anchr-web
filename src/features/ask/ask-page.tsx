@@ -60,6 +60,8 @@ export function AskPage() {
   const searchParams = useSearchParams();
   const initialKbId = searchParams.get("kbId") ?? "";
   const initialKbName = searchParams.get("kbName") ?? "";
+  const initialSessionId = searchParams.get("session") ?? "";
+  const initialTurnId = searchParams.get("turn") ?? "";
   const [query, setQuery] = useState("");
   const [selectedKbIdsValue, setSelectedKbIdsValue] = useState<string[] | null>(initialKbId ? [initialKbId] : null);
   const [activeSessionId, setActiveSessionId] = useState("");
@@ -71,6 +73,7 @@ export function AskPage() {
   const [messagesBySession, setMessagesBySession] = useState<MessageCache>({});
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [messageError, setMessageError] = useState<string | null>(null);
+  const [highlightedTurnId, setHighlightedTurnId] = useState<string | null>(null);
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -119,7 +122,10 @@ export function AskPage() {
     return `${selectedKbIds.length} 个知识库`;
   }, [kbOptions, selectedKbIds]);
 
-  const activeMessages = activeSessionId ? (messagesBySession[activeSessionId] ?? []) : [];
+  const activeMessages = useMemo(
+    () => (activeSessionId ? (messagesBySession[activeSessionId] ?? []) : []),
+    [activeSessionId, messagesBySession],
+  );
   const hasLoadedActiveMessages = activeSessionId
     ? Object.prototype.hasOwnProperty.call(messagesBySession, activeSessionId)
     : false;
@@ -277,6 +283,43 @@ export function AskPage() {
     setOpenMenuSessionId(null);
     setRenamingSessionId(null);
   };
+
+  useEffect(() => {
+    if (!initialSessionId || initialSessionId === activeSessionId) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      handleSelectConversation(initialSessionId);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialSessionId, activeSessionId]);
+
+  useEffect(() => {
+    if (!initialTurnId || !initialSessionId || activeSessionId !== initialSessionId || isLoadingMessages) {
+      return;
+    }
+    if (!activeMessages.some((message) => message.turnId === initialTurnId)) {
+      return;
+    }
+
+    const node = document.querySelector(`[data-turn-id="${CSS.escape(initialTurnId)}"]`);
+    if (!node) {
+      return;
+    }
+
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    const frame = window.requestAnimationFrame(() => {
+      setHighlightedTurnId(initialTurnId);
+    });
+    const timer = window.setTimeout(() => setHighlightedTurnId(null), 2500);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [initialTurnId, initialSessionId, activeSessionId, isLoadingMessages, activeMessages]);
 
   const handlePreviewCitation = useCallback((
     message: ChatMessage,
@@ -619,6 +662,7 @@ export function AskPage() {
                       message={message}
                       question={activeMessages[index - 1]?.role === "user" ? activeMessages[index - 1]?.content : undefined}
                       onPreviewCitation={handlePreviewCitation}
+                      highlighted={highlightedTurnId != null && highlightedTurnId === message.turnId}
                     />
                   ))}
                   <div ref={messagesEndRef} />
@@ -945,6 +989,7 @@ function ChatBubble({
   message,
   question,
   onPreviewCitation,
+  highlighted,
 }: {
   message: ChatMessage;
   question?: string;
@@ -954,11 +999,19 @@ function ChatBubble({
     citationIndex: number,
     question?: string,
   ) => void;
+  highlighted?: boolean;
 }) {
   const isUser = message.role === "user";
 
   return (
-    <div className={["flex gap-3", isUser ? "justify-end" : "justify-start"].join(" ")}>
+    <div
+      data-turn-id={message.turnId}
+      className={[
+        "flex gap-3 transition-shadow duration-300",
+        isUser ? "justify-end" : "justify-start",
+        highlighted ? "rounded-[10px] ring-2 ring-blue-500/70" : "",
+      ].join(" ")}
+    >
       {!isUser ? (
         <div className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-blue-600 text-white">
           <Sparkles size={16} />

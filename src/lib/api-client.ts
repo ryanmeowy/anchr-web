@@ -7,6 +7,7 @@ import type {
   CapabilityConnectionTestRequest,
   CapabilityConnectionTestResult,
   CapabilityParams,
+  ConversationAnswerMode,
   ConversationCitation,
   ConversationMessage,
   ConversationMessageList,
@@ -42,10 +43,20 @@ type RequestOptions = {
 };
 
 type StreamMessageCallbacks = {
-  onTrace?: (event: { stage?: string; message?: string }) => void;
+  onTrace?: (event: { stage?: string; message?: string; answerMode?: ConversationAnswerMode | string }) => void;
   onDelta?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; title?: string | null }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }) => void;
+};
+
+type ConversationMessageRequest = {
+  query: string;
+  limit?: number;
+  kbIds?: string[];
+  answerMode?: ConversationAnswerMode;
+  preferredModalities?: Array<"TEXT" | "IMAGE" | "MIXED">;
+  debug?: boolean;
+  stream?: boolean;
 };
 
 export class ApiError extends Error {
@@ -153,7 +164,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "trace") {
-    callbacks.onTrace?.(parseSseJson<{ stage?: string; message?: string }>(data) ?? {});
+    callbacks.onTrace?.(parseSseJson<{ stage?: string; message?: string; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
     return;
   }
 
@@ -169,7 +180,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "done") {
-    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; title?: string | null }>(data) ?? {});
+    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
     return;
   }
 
@@ -285,14 +296,14 @@ export const apiClient = {
     request<null>(`/api/conversations/${encodeURIComponent(sessionId)}`, {
       method: "DELETE",
     }),
-  sendMessage: (sessionId: string, body: { query: string; kbIds: string[]; answerMode: string }) =>
+  sendMessage: (sessionId: string, body: ConversationMessageRequest) =>
     request<ConversationMessage>(`/api/conversations/${encodeURIComponent(sessionId)}/messages`, {
       method: "POST",
       body,
     }),
   sendMessageStream: async (
     sessionId: string,
-    body: { query: string; kbIds?: string[]; answerMode?: string; stream?: boolean },
+    body: ConversationMessageRequest,
     callbacks: StreamMessageCallbacks,
     signal?: AbortSignal,
   ) => {

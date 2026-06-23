@@ -698,8 +698,12 @@ function RecentQuestionPanel({
 }
 
 function QuestionRow({ item }: { item: RecentQuestion }) {
+  const session = item.sessionId ? `session=${encodeURIComponent(item.sessionId)}` : "";
+  const turn = item.turnId ? `turn=${encodeURIComponent(item.turnId)}` : "";
+  const query = [session, turn].filter(Boolean).join("&");
+  const href = query ? `/ask?${query}` : "/ask";
   return (
-    <Link href="/ask" className="grid grid-cols-[1fr_auto] gap-3 py-3">
+    <Link href={href} className="grid grid-cols-[1fr_auto] gap-3 py-3">
       <div className="flex min-w-0 gap-3">
         <MessageCircle size={18} className="mt-0.5 shrink-0 text-blue-600 dark:text-blue-300" />
         <div className="min-w-0">
