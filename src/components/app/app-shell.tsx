@@ -151,10 +151,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {isAskPage && !collapsed ? (
+        {isAskPage ? (
           <div
             id="ask-conversations-slot"
-            className="-mx-1 mt-4 hidden min-h-0 flex-1 flex-col border-t border-[var(--line)] pt-4 dark:border-[var(--line)] lg:flex"
+            className={[
+              "-mx-1 mt-4 min-h-0 flex-1 flex-col border-t border-[var(--line)] pt-4 dark:border-[var(--line)]",
+              collapsed ? "hidden" : "hidden lg:flex",
+            ].join(" ")}
           />
         ) : null}
 
