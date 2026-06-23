@@ -1369,14 +1369,14 @@ function PremiumChatBubble({
         </div>
         {message.error ? <div className="mt-3 text-sm text-rose-600">{message.error}</div> : null}
         {message.citations?.length ? (
-          <div className="mt-5 flex flex-wrap gap-2">
+          <div className="mt-5 flex flex-wrap gap-2" aria-label="引用来源">
             {message.citations.map((citation, index) => (
               <button
                 type="button"
                 key={`${citation.segmentId ?? citation.fileName ?? index}-${index}`}
                 onClick={() => onPreviewCitation(message, citation, index, question)}
                 disabled={!citation.segmentId}
-                className="ask-premium-citation rounded-full border border-black/10 bg-[#f7f7f2]/85 px-3 py-2 text-xs font-black text-slate-700 transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
+                className="ask-premium-citation inline-flex min-h-[34px] items-center gap-2 rounded-full border border-black/10 bg-[#f7f7f2]/85 px-3 text-xs font-black text-[#111315] transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
               >
                 [{index + 1}] {citation.fileName ?? "引用来源"} {citation.pageNo ? `第 ${citation.pageNo} 页` : ""}
               </button>

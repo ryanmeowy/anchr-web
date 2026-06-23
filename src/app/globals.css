@@ -219,6 +219,21 @@ a {
   max-inline-size: 100%;
 }
 
+.ask-premium-citation {
+  min-height: 34px;
+  border-color: var(--premium-line);
+  background: var(--premium-panel-muted);
+  color: var(--premium-ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.ask-premium-citation:hover {
+  background: var(--premium-ink);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
 .ask-premium-spinner {
   display: block;
   width: 22px;
