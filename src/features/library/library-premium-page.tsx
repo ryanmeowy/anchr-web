@@ -291,15 +291,15 @@ export function LibraryPremiumPage() {
   };
 
   return (
-    <div className="premium-theme ask-premium-page library-premium-page min-h-screen overflow-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>
+    <div className="premium-theme ask-premium-page library-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>
       <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(17,19,21,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(17,19,21,0.055)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
       <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,rgba(187,255,102,0.34),transparent_28rem),radial-gradient(circle_at_14%_92%,rgba(49,88,255,0.15),transparent_30rem)]" />
 
-      <div className="relative h-screen overflow-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
+      <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
+        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:min-h-[calc(100vh-48px)] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
 
-          <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
+          <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
             <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
                 LIBRARY
@@ -317,8 +317,8 @@ export function LibraryPremiumPage() {
               </section>
             </header>
 
-            <main className="ask-premium-main grid min-h-0 min-w-0 gap-3 overflow-hidden bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:px-5">
-              <section className="flex min-h-0 min-w-0 flex-col overflow-hidden" aria-label="我的知识库">
+            <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-visible bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:px-5">
+              <section className="flex min-w-0 flex-col" aria-label="我的知识库">
                 <div className="mb-5 grid grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <form
                     className="premium-focusable flex min-h-11 min-w-0 items-center gap-3 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2 pl-4 shadow-[0_12px_32px_rgba(17,19,21,0.07)] backdrop-blur-xl transition"
@@ -401,7 +401,7 @@ export function LibraryPremiumPage() {
                 ) : null}
 
                 {!kbsQuery.isLoading && !kbsQuery.isError && viewMode === "grid" ? (
-                  <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-3 xl:grid-rows-2">
+                  <div className="grid grid-cols-1 gap-3 xl:auto-rows-fr xl:grid-cols-3">
                     {gridItems.map((item, index) => (
                       <KnowledgeBaseCard
                         key={item.id}
@@ -523,7 +523,7 @@ export function LibraryPremiumPage() {
                 </div>
               </section>
 
-              <aside className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_184px] gap-2 overflow-hidden lg:min-w-0" aria-label="活动洞察">
+              <aside className="grid gap-2 overflow-visible lg:min-w-0" aria-label="活动洞察">
                 <RecentCitationPanel
                   items={citationsQuery.data?.items ?? []}
                   isLoading={citationsQuery.isLoading}
@@ -534,7 +534,7 @@ export function LibraryPremiumPage() {
                   isLoading={questionsQuery.isLoading}
                   isError={questionsQuery.isError}
                 />
-                <div className="h-full">
+                <div className="min-h-[184px]">
                   <HealthPanel
                     selectedKb={selectedKb}
                     health={healthQuery.data}
@@ -655,7 +655,7 @@ function KnowledgeBaseCard({
     <article
       onClick={onSelect}
       className={[
-        "library-kb-card group relative grid h-full min-h-[168px] cursor-pointer grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 overflow-hidden rounded-[8px] border p-2.5 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(17,19,21,0.13)]",
+        "group relative grid h-full min-h-[254px] cursor-pointer grid-rows-[auto_auto_auto] gap-1.5 overflow-hidden rounded-[8px] border p-2.5 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(17,19,21,0.13)]",
         selected ? "border-[var(--premium-line-strong)] bg-[var(--premium-panel-strong)] ring-1 ring-black/5 dark:ring-white/10" : "border-[var(--premium-line)] bg-[var(--premium-panel)]",
       ].join(" ")}
     >
@@ -679,8 +679,8 @@ function KnowledgeBaseCard({
           {updateError ? <p className="line-clamp-1 text-[11px] text-rose-600 dark:text-rose-300">{updateError}</p> : null}
         </div>
       ) : (
-        <div className="relative z-10 min-h-0 min-w-0 overflow-hidden">
-          <h3 className="library-kb-title line-clamp-1 break-words text-[16px] font-black leading-[1.08]">{item.name}</h3>
+        <div className="relative z-10 min-w-0">
+          <h3 className="line-clamp-1 break-words text-[16px] font-black leading-[1.08]">{item.name}</h3>
           <p className="mt-1 line-clamp-1 min-h-4 text-[11px] leading-4 text-[var(--premium-ink-soft)]">{item.description || "暂无描述"}</p>
           <div className="mt-1.5 grid grid-cols-2 gap-1.5">
             <StatBox value={formatNumber(documentCount)} label="文档" />
@@ -690,8 +690,8 @@ function KnowledgeBaseCard({
         </div>
       )}
 
-      <div className="library-kb-footer relative z-10 flex shrink-0 flex-col gap-1.5 border-t border-[var(--premium-line)] pt-2 sm:flex-row sm:items-center sm:justify-between">
-        <small className="library-kb-updated text-xs text-[var(--premium-muted)]">更新于 {formatDateTime(lastUpdated)}</small>
+      <div className="relative z-10 flex shrink-0 flex-col gap-1.5 border-t border-[var(--premium-line)] pt-2 sm:flex-row sm:items-center sm:justify-between">
+        <small className="text-xs text-[var(--premium-muted)]">更新于 {formatDateTime(lastUpdated)}</small>
         {editing ? (
           <EditConfirmActions saving={saving} canSave={Boolean(editName.trim())} onSave={onSaveEdit} onCancel={onCancelEdit} />
         ) : archiveConfirming ? (
@@ -883,7 +883,7 @@ function IconActionButton({
         event.stopPropagation();
         onClick();
       }}
-      className="library-icon-action grid size-8 shrink-0 place-items-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] transition hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)] disabled:cursor-not-allowed disabled:opacity-45"
+      className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] transition hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)] disabled:cursor-not-allowed disabled:opacity-45"
     >
       {children}
     </button>
@@ -895,7 +895,7 @@ function AskKbLink({ item, label }: { item: KnowledgeBase; label: string }) {
     <Link
       href={askHrefForKb(item)}
       onClick={(event) => event.stopPropagation()}
-      className="library-kb-action inline-flex min-h-8 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-xs font-black text-[var(--premium-ink-soft)] transition hover:translate-x-1 hover:border-[rgba(187,255,102,0.72)] hover:bg-[rgba(187,255,102,0.26)] hover:text-[var(--premium-ink)] dark:hover:border-[rgba(187,255,102,0.72)] dark:hover:bg-[rgba(187,255,102,0.26)] dark:hover:text-[var(--premium-ink)] dark:hover:shadow-[0_0_0_3px_rgba(187,255,102,0.08)]"
+      className="inline-flex min-h-8 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-xs font-black text-[var(--premium-ink-soft)] transition hover:translate-x-1 hover:border-[rgba(187,255,102,0.72)] hover:bg-[rgba(187,255,102,0.26)] hover:text-[var(--premium-ink)] dark:hover:border-[rgba(187,255,102,0.72)] dark:hover:bg-[rgba(187,255,102,0.26)] dark:hover:text-[var(--premium-ink)] dark:hover:shadow-[0_0_0_3px_rgba(187,255,102,0.08)]"
     >
       {label} <ArrowRight size={14} />
     </Link>
@@ -947,7 +947,7 @@ function StatusBadge({ status, compact = false }: { status: string; compact?: bo
 
 function StatBox({ value, label }: { value: string; label: string }) {
   return (
-    <span className="library-stat-box min-h-9 rounded-[8px] border border-[var(--premium-line)] bg-white/45 p-1.5 text-[10px] text-[var(--premium-muted)] dark:bg-white/5">
+    <span className="min-h-9 rounded-[8px] border border-[var(--premium-line)] bg-white/45 p-1.5 text-[10px] text-[var(--premium-muted)] dark:bg-white/5">
       <b className="mb-0.5 block truncate text-sm text-[var(--premium-ink)]">{value}</b>
       {label}
     </span>
@@ -955,7 +955,7 @@ function StatBox({ value, label }: { value: string; label: string }) {
 }
 
 function ingestionPanelClass() {
-  return "library-ingestion-panel mt-1.5 grid gap-1.5 rounded-[8px] border border-[var(--premium-line)] bg-[linear-gradient(135deg,var(--premium-panel-strong),rgba(255,255,255,0.34)),repeating-linear-gradient(135deg,rgba(17,19,21,0.025)_0_1px,transparent_1px_12px)] p-1.5 text-[11px] text-[var(--premium-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(10,12,14,0.58),rgba(10,12,14,0.42)),repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_1px,transparent_1px_12px)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
+  return "mt-1.5 grid gap-1.5 rounded-[8px] border border-[var(--premium-line)] bg-[linear-gradient(135deg,var(--premium-panel-strong),rgba(255,255,255,0.34)),repeating-linear-gradient(135deg,rgba(17,19,21,0.025)_0_1px,transparent_1px_12px)] p-1.5 text-[11px] text-[var(--premium-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(10,12,14,0.58),rgba(10,12,14,0.42)),repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_1px,transparent_1px_12px)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
 }
 
 function RecentIngestionCard({
@@ -970,7 +970,7 @@ function RecentIngestionCard({
   if (!active) {
     return (
       <div className={ingestionPanelClass()}>
-        <div className="library-ingestion-head flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2">
           <span className="font-black">最近导入</span>
           <span className="rounded-full bg-black/5 px-2 py-1 text-[10px] font-black dark:bg-black/30 dark:text-white/65">归档只读</span>
         </div>
@@ -988,7 +988,7 @@ function RecentIngestionCard({
 
   return (
     <div className={ingestionPanelClass()}>
-      <div className="library-ingestion-head flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         <span className="min-w-0 text-[11px] font-black text-[var(--premium-muted)]">
           <b className="block truncate text-[11px] text-[var(--premium-ink)]">{ingestedAt ? formatDateTime(ingestedAt) : "暂无导入"}</b>
           最近导入
@@ -1014,7 +1014,7 @@ function RecentIngestionCard({
 
 function IngestionCount({ value, label }: { value: number; label: string }) {
   return (
-    <span className="library-ingestion-count min-w-0 rounded-[8px] bg-white/50 p-1 text-[9px] leading-tight text-[var(--premium-muted)] dark:border dark:border-white/8 dark:bg-black/18">
+    <span className="min-w-0 rounded-[8px] bg-white/50 p-1 text-[9px] leading-tight text-[var(--premium-muted)] dark:border dark:border-white/8 dark:bg-black/18">
       <b className="mb-0.5 block truncate text-[11px] text-[var(--premium-ink)]">{formatNumber(value)}</b>
       {label}
     </span>
@@ -1035,7 +1035,7 @@ function CreateKnowledgeBaseCard({
 }: CreateKnowledgeBaseProps) {
   if (expanded) {
     return (
-      <div className="grid h-full min-h-[168px] gap-2 rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-[var(--premium-panel)] p-2.5 shadow-[var(--premium-tight-shadow)]">
+      <div className="grid h-full min-h-[254px] gap-2 rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-[var(--premium-panel)] p-2.5 shadow-[var(--premium-tight-shadow)]">
         <div className="flex items-center gap-2 font-black text-[var(--premium-blue)]">
           <Plus size={20} />
           新建知识库
@@ -1060,7 +1060,7 @@ function CreateKnowledgeBaseCard({
     <button
       type="button"
       onClick={onExpand}
-      className="grid h-full min-h-[168px] place-items-center rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-[linear-gradient(135deg,var(--premium-panel),rgba(255,255,255,0.28)),repeating-linear-gradient(135deg,rgba(17,19,21,0.035)_0_1px,transparent_1px_12px)] p-3 text-center transition hover:-translate-y-1 hover:border-[var(--premium-ink-soft)] hover:bg-[var(--premium-panel-strong)]"
+      className="grid h-full min-h-[254px] place-items-center rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-[linear-gradient(135deg,var(--premium-panel),rgba(255,255,255,0.28)),repeating-linear-gradient(135deg,rgba(17,19,21,0.035)_0_1px,transparent_1px_12px)] p-3 text-center transition hover:-translate-y-1 hover:border-[var(--premium-ink-soft)] hover:bg-[var(--premium-panel-strong)]"
     >
       <span>
         <span className="mx-auto mb-2 grid size-12 place-items-center rounded-full bg-[var(--premium-ink)] text-[var(--premium-bg)] shadow-[0_14px_30px_rgba(17,19,21,0.18)]">
@@ -1200,9 +1200,9 @@ function CitationItem({ item, index }: { item: RecentCitation; index: number }) 
 
 function RecentQuestionPanel({ items, isLoading, isError }: { items: RecentQuestion[]; isLoading: boolean; isError: boolean }) {
   return (
-    <section className="flex h-full flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近问过">
+    <section className="flex min-h-[152px] flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近问过">
       <PanelLabel label="RECENT QUESTIONS" value={String(items.length)} dark />
-      <div className="mt-2.5 grid min-h-0 flex-1 auto-rows-fr gap-2">
+      <div className="mt-2.5 grid gap-2">
         {isLoading ? <DarkState label="加载最近提问" /> : null}
         {isError ? <DarkState label="最近提问暂不可用" /> : null}
         {!isLoading && !isError && items.length === 0 ? <DarkState label="暂无最近提问" /> : null}
@@ -1220,8 +1220,8 @@ function QuestionItem({ item }: { item: RecentQuestion }) {
   const href = query ? `/ask?${query}` : "/ask";
 
   return (
-    <Link href={href} className="grid h-full content-center gap-1.5 rounded-[8px] border border-white/10 bg-white/10 p-2.5 transition hover:-translate-x-0.5 hover:bg-white/[0.14]">
-      <strong className="line-clamp-2 break-words text-xs">{item.question || "未命名问题"}</strong>
+    <Link href={href} className="grid min-h-16 content-center gap-1.5 rounded-[8px] border border-white/10 bg-white/10 p-2.5 transition hover:-translate-x-0.5 hover:bg-white/[0.14]">
+      <strong className="line-clamp-2 break-words text-xs leading-5">{item.question || "未命名问题"}</strong>
       <p className="line-clamp-1 text-[11px] leading-4 text-white/70">{(item.knowledgeBaseNames ?? item.kbScope ?? []).slice(0, 2).join(" / ") || "全部知识库"}</p>
     </Link>
   );
@@ -1285,7 +1285,7 @@ function HealthMetric({ value, label }: { value: string; label: string }) {
 function PanelLabel({ label, value, dark = false }: { label: string; value: string; dark?: boolean }) {
   return (
     <p className={[
-      "m-0 flex items-center justify-between gap-3 text-xs font-black",
+      "m-0 flex items-center justify-between gap-3 text-xs font-black leading-5",
       dark ? "text-white/60" : "text-[var(--premium-muted)]",
     ].join(" ")}>
       {label} <span className="truncate">{value}</span>
