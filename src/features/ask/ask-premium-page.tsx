@@ -16,7 +16,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
+import { ErrorBlock } from "@/components/ui/query-state";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import {
@@ -717,7 +717,9 @@ export function AskPremiumPage() {
             </button>
             <div className="min-h-0 flex-1 overflow-auto pr-1 lg:pr-2" ref={listScrollRef} onScroll={handleConversationListScroll}>
               {isLoadingConversations ? (
-                <LoadingBlock label="加载会话" />
+                <div className="flex min-h-36 items-center justify-center" aria-label="加载会话">
+                  <Loader2 className="animate-spin text-[var(--premium-muted)]" size={22} aria-hidden="true" />
+                </div>
               ) : conversations.length ? (
                 <div className="grid auto-cols-[minmax(210px,72vw)] grid-flow-col gap-2 overflow-x-auto lg:grid-flow-row lg:auto-cols-auto lg:overflow-x-visible">
                   {conversations.map((conversation) => (
@@ -744,7 +746,9 @@ export function AskPremiumPage() {
                 <div className="ask-premium-empty-state rounded-[8px] border border-black/10 bg-white/70 p-4 text-sm text-slate-500">暂无历史会话。</div>
               )}
               {isLoadingMoreConversations ? (
-                <div className="py-3 text-center text-xs text-slate-500">加载更多...</div>
+                <div className="flex justify-center py-3" aria-label="加载更多会话">
+                  <Loader2 className="animate-spin text-[var(--premium-muted)]" size={16} aria-hidden="true" />
+                </div>
               ) : nextCursor ? (
                 <button type="button" onClick={() => void loadConversations(nextCursor, true)} className="mt-3 h-9 w-full rounded-[8px] text-xs font-bold text-slate-500 hover:bg-white/70">
                   加载更多

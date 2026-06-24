@@ -18,7 +18,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
+import { ErrorBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
 import {
   clearPreviewRestoreState,
@@ -589,8 +589,8 @@ export function AskPage() {
 
       <div className="muted-scrollbar min-h-0 flex-1 overflow-y-auto pr-1" ref={listScrollRef} onScroll={handleConversationListScroll}>
         {isLoadingConversations ? (
-          <div className="px-3 py-4">
-            <LoadingBlock label="加载会话" />
+          <div className="flex min-h-36 items-center justify-center px-3 py-4" aria-label="加载会话">
+            <Loader2 className="animate-spin text-slate-500 dark:text-slate-400" size={22} aria-hidden="true" />
           </div>
         ) : conversations.length > 0 ? (
           <div className="space-y-1">
@@ -621,7 +621,9 @@ export function AskPage() {
         )}
 
         {isLoadingMoreConversations ? (
-          <div className="py-3 text-center text-xs text-slate-500 dark:text-slate-400">加载更多...</div>
+          <div className="flex justify-center py-3" aria-label="加载更多会话">
+            <Loader2 className="animate-spin text-slate-500 dark:text-slate-400" size={16} aria-hidden="true" />
+          </div>
         ) : nextCursor ? (
           <button
             type="button"
@@ -651,8 +653,8 @@ export function AskPage() {
               {messageError ? (
                 <ErrorBlock message={messageError} />
               ) : isLoadingMessages ? (
-                <div className="flex flex-1 items-center justify-center">
-                  <LoadingBlock label="加载历史消息" />
+                <div className="flex flex-1 items-center justify-center" aria-label="加载历史消息">
+                  <Loader2 className="animate-spin text-slate-500 dark:text-slate-400" size={24} aria-hidden="true" />
                 </div>
               ) : activeMessages.length > 0 ? (
                 <div className="space-y-7">

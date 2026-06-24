@@ -146,6 +146,8 @@ export function LibraryPremiumPage() {
   const totalPages = Math.max(1, Math.ceil(totalWithCreateCard / KB_PAGE_SIZE));
   const shouldShowCreateEntry = canShowCreateEntry && !isSearching && !kbsQuery.isLoading && !kbsQuery.isError && items.length < KB_PAGE_SIZE;
   const gridItems = items.slice(0, shouldShowCreateEntry ? KB_PAGE_SIZE - 1 : KB_PAGE_SIZE);
+  const canShowResults = !kbsQuery.isLoading && !kbsQuery.isError;
+  const showEmptyResults = canShowResults && items.length === 0 && !shouldShowCreateEntry;
   const activeSelectedKbId = useMemo(() => {
     if (items.length === 0) return null;
     if (selectedKbIdValue && items.some((item) => item.id === selectedKbIdValue)) {
@@ -317,9 +319,9 @@ export function LibraryPremiumPage() {
               </section>
             </header>
 
-            <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-visible bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:px-5">
-              <section className="flex min-w-0 flex-col" aria-label="我的知识库">
-                <div className="mb-5 grid grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-visible bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:items-stretch lg:px-5">
+              <section className="flex min-h-0 min-w-0 flex-col lg:h-full" aria-label="我的知识库">
+                <div className="mb-5 grid shrink-0 grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <form
                     className="premium-focusable flex min-h-11 min-w-0 items-center gap-3 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2 pl-4 shadow-[0_12px_32px_rgba(17,19,21,0.07)] backdrop-blur-xl transition"
                     role="search"
@@ -367,159 +369,163 @@ export function LibraryPremiumPage() {
                   </div>
                 </div>
 
-                <div className="mb-2.5 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-end">
-                  <div>
-                    <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none">我的知识库</h2>
-                    <p className="mt-1 text-[11px] text-[var(--premium-muted)]">按可问答状态、文档数量和最近活动组织。</p>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {filterOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => handleFilterChange(option.value)}
-                        className={[
-                          "inline-flex h-7 w-[68px] items-center justify-center rounded-full border px-1 transition hover:-translate-y-0.5",
-                          filterMode === option.value
-                            ? "border-[var(--premium-ink)] bg-[var(--premium-ink)] text-[var(--premium-bg)]"
-                            : "border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)]",
-                        ].join(" ")}
-                        aria-pressed={filterMode === option.value}
-                      >
-                        <span className="block max-w-full truncate text-center text-[11px] font-bold leading-none">{option.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {kbsQuery.isLoading ? <InlineState label="加载知识库" /> : null}
-                {kbsQuery.isError ? (
-                  <InlineState label={`知识库暂不可用：${kbsQuery.error instanceof Error ? kbsQuery.error.message : "请稍后重试"}`} />
-                ) : null}
-                {!kbsQuery.isLoading && !kbsQuery.isError && items.length === 0 && trimmedKeyword ? (
-                  <InlineState label="没有找到匹配的知识库" />
-                ) : null}
-
-                {!kbsQuery.isLoading && !kbsQuery.isError && viewMode === "grid" ? (
-                  <div className="grid grid-cols-1 gap-3 xl:auto-rows-fr xl:grid-cols-3">
-                    {gridItems.map((item, index) => (
-                      <KnowledgeBaseCard
-                        key={item.id}
-                        item={item}
-                        index={index}
-                        stats={statsByKbId.get(item.id)}
-                        selected={item.id === activeSelectedKbId}
-                        editing={item.id === editingKbId}
-                        editName={editName}
-                        editDescription={editDescription}
-                        saving={savingKbId === item.id}
-                        archiveConfirming={archiveConfirmKbId === item.id}
-                        archiving={archivingKbId === item.id}
-                        updateError={item.id === editingKbId && updateMutation.error instanceof Error ? updateMutation.error.message : null}
-                        archiveError={item.id === archiveConfirmKbId && archiveMutation.error instanceof Error ? archiveMutation.error.message : null}
-                        onSelect={() => setSelectedKbIdValue(item.id)}
-                        onStartEdit={() => handleStartEdit(item)}
-                        onCancelEdit={handleCancelEdit}
-                        onEditNameChange={setEditName}
-                        onEditDescriptionChange={setEditDescription}
-                        onSaveEdit={() => handleSaveEdit(item.id)}
-                        onRequestArchive={() => handleRequestArchive(item)}
-                        onCancelArchive={handleCancelArchive}
-                        onConfirmArchive={() => handleConfirmArchive(item.id)}
-                      />
-                    ))}
-                    {shouldShowCreateEntry ? <CreateKnowledgeBaseCard
-                      expanded={showCreateForm}
-                      name={newName}
-                      description={newDescription}
-                      pending={createMutation.isPending}
-                      error={createMutation.error instanceof Error ? createMutation.error.message : null}
-                      onExpand={() => {
-                        setEditingKbId(null);
-                        setArchiveConfirmKbId(null);
-                        setShowCreateForm(true);
-                      }}
-                      onCancel={() => {
-                        setShowCreateForm(false);
-                        setNewName("");
-                        setNewDescription("");
-                      }}
-                      onNameChange={setNewName}
-                      onDescriptionChange={setNewDescription}
-                      onCreate={handleCreate}
-                    /> : null}
-                  </div>
-                ) : null}
-
-                {!kbsQuery.isLoading && !kbsQuery.isError && viewMode === "list" ? (
-                  <div className="flex min-h-0 flex-1 flex-col overflow-x-auto rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] shadow-[var(--premium-tight-shadow)]">
-                    <div className="grid min-w-[860px] grid-cols-[minmax(0,1fr)_92px_112px_136px_184px] items-center gap-4 border-b border-[var(--premium-line)] px-5 py-3 text-xs font-black text-[var(--premium-muted)]">
-                      <span>知识库</span>
-                      <span className="text-center">文档</span>
-                      <span className="text-center">片段</span>
-                      <span className="text-center">更新时间</span>
-                      <span className="text-center">操作</span>
+                <div className="library-results-shell flex min-h-0 flex-1 flex-col">
+                  <div className="mb-2.5 flex shrink-0 flex-col items-start justify-between gap-2 sm:flex-row sm:items-end">
+                    <div>
+                      <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none">我的知识库</h2>
+                      <p className="mt-1 text-[11px] text-[var(--premium-muted)]">按可问答状态、文档数量和最近活动组织。</p>
                     </div>
-                    <div className="grid min-h-0 flex-1 min-w-[860px] grid-rows-6 divide-y divide-[var(--premium-line)]">
-                      {items.map((item, index) => (
-                        <KnowledgeBaseListRow
-                          key={item.id}
-                          item={item}
-                          index={index}
-                          selected={item.id === activeSelectedKbId}
-                          editing={item.id === editingKbId}
-                          editName={editName}
-                          editDescription={editDescription}
-                          saving={savingKbId === item.id}
-                          archiveConfirming={archiveConfirmKbId === item.id}
-                          archiving={archivingKbId === item.id}
-                          updateError={item.id === editingKbId && updateMutation.error instanceof Error ? updateMutation.error.message : null}
-                          archiveError={item.id === archiveConfirmKbId && archiveMutation.error instanceof Error ? archiveMutation.error.message : null}
-                          onSelect={() => setSelectedKbIdValue(item.id)}
-                          onStartEdit={() => handleStartEdit(item)}
-                          onCancelEdit={handleCancelEdit}
-                          onEditNameChange={setEditName}
-                          onEditDescriptionChange={setEditDescription}
-                          onSaveEdit={() => handleSaveEdit(item.id)}
-                          onRequestArchive={() => handleRequestArchive(item)}
-                          onCancelArchive={handleCancelArchive}
-                          onConfirmArchive={() => handleConfirmArchive(item.id)}
-                        />
+                    <div className="flex flex-wrap gap-1.5">
+                      {filterOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => handleFilterChange(option.value)}
+                          className={[
+                            "inline-flex h-7 w-[68px] items-center justify-center rounded-full border px-1 transition hover:-translate-y-0.5",
+                            filterMode === option.value
+                              ? "border-[var(--premium-ink)] bg-[var(--premium-ink)] text-[var(--premium-bg)]"
+                              : "border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)]",
+                          ].join(" ")}
+                          aria-pressed={filterMode === option.value}
+                        >
+                          <span className="block max-w-full truncate text-center text-[11px] font-bold leading-none">{option.label}</span>
+                        </button>
                       ))}
-                      {shouldShowCreateEntry ? <CreateKnowledgeBaseListRow
-                        expanded={showCreateForm}
-                        name={newName}
-                        description={newDescription}
-                        pending={createMutation.isPending}
-                        error={createMutation.error instanceof Error ? createMutation.error.message : null}
-                        onExpand={() => {
-                          setEditingKbId(null);
-                          setArchiveConfirmKbId(null);
-                          setShowCreateForm(true);
-                        }}
-                        onCancel={() => {
-                          setShowCreateForm(false);
-                          setNewName("");
-                          setNewDescription("");
-                        }}
-                        onNameChange={setNewName}
-                        onDescriptionChange={setNewDescription}
-                        onCreate={handleCreate}
-                      /> : null}
                     </div>
                   </div>
-                ) : null}
 
-                <div className="mt-3">
-                  <KnowledgeBasePagination
-                    page={page}
-                    total={total}
-                    visibleCount={items.length}
-                    pageSize={KB_PAGE_SIZE}
-                    totalPages={totalPages}
-                    isFetching={kbsQuery.isFetching}
-                    onPageChange={setPage}
-                  />
+                  <div className="min-h-0 flex-1">
+                    {kbsQuery.isLoading ? <InlineState label="加载知识库" fill /> : null}
+                    {kbsQuery.isError ? (
+                      <InlineState label={`知识库暂不可用：${kbsQuery.error instanceof Error ? kbsQuery.error.message : "请稍后重试"}`} fill />
+                    ) : null}
+                    {showEmptyResults ? (
+                      <InlineState label={trimmedKeyword ? "没有找到匹配的知识库" : "暂无知识库"} fill />
+                    ) : null}
+
+                    {canShowResults && !showEmptyResults && viewMode === "grid" ? (
+                      <div className="library-card-grid grid grid-cols-1 gap-3 lg:h-full lg:min-h-0 xl:grid-cols-3 xl:grid-rows-2">
+                        {gridItems.map((item, index) => (
+                          <KnowledgeBaseCard
+                            key={item.id}
+                            item={item}
+                            index={index}
+                            stats={statsByKbId.get(item.id)}
+                            selected={item.id === activeSelectedKbId}
+                            editing={item.id === editingKbId}
+                            editName={editName}
+                            editDescription={editDescription}
+                            saving={savingKbId === item.id}
+                            archiveConfirming={archiveConfirmKbId === item.id}
+                            archiving={archivingKbId === item.id}
+                            updateError={item.id === editingKbId && updateMutation.error instanceof Error ? updateMutation.error.message : null}
+                            archiveError={item.id === archiveConfirmKbId && archiveMutation.error instanceof Error ? archiveMutation.error.message : null}
+                            onSelect={() => setSelectedKbIdValue(item.id)}
+                            onStartEdit={() => handleStartEdit(item)}
+                            onCancelEdit={handleCancelEdit}
+                            onEditNameChange={setEditName}
+                            onEditDescriptionChange={setEditDescription}
+                            onSaveEdit={() => handleSaveEdit(item.id)}
+                            onRequestArchive={() => handleRequestArchive(item)}
+                            onCancelArchive={handleCancelArchive}
+                            onConfirmArchive={() => handleConfirmArchive(item.id)}
+                          />
+                        ))}
+                        {shouldShowCreateEntry ? <CreateKnowledgeBaseCard
+                          expanded={showCreateForm}
+                          name={newName}
+                          description={newDescription}
+                          pending={createMutation.isPending}
+                          error={createMutation.error instanceof Error ? createMutation.error.message : null}
+                          onExpand={() => {
+                            setEditingKbId(null);
+                            setArchiveConfirmKbId(null);
+                            setShowCreateForm(true);
+                          }}
+                          onCancel={() => {
+                            setShowCreateForm(false);
+                            setNewName("");
+                            setNewDescription("");
+                          }}
+                          onNameChange={setNewName}
+                          onDescriptionChange={setNewDescription}
+                          onCreate={handleCreate}
+                        /> : null}
+                      </div>
+                    ) : null}
+
+                    {canShowResults && !showEmptyResults && viewMode === "list" ? (
+                      <div className="flex h-full min-h-0 flex-col overflow-x-auto rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] shadow-[var(--premium-tight-shadow)]">
+                        <div className="grid min-w-[860px] grid-cols-[minmax(0,1fr)_92px_112px_136px_184px] items-center gap-4 border-b border-[var(--premium-line)] px-5 py-3 text-xs font-black text-[var(--premium-muted)]">
+                          <span>知识库</span>
+                          <span className="text-center">文档</span>
+                          <span className="text-center">片段</span>
+                          <span className="text-center">更新时间</span>
+                          <span className="text-center">操作</span>
+                        </div>
+                        <div className="grid min-h-0 min-w-[860px] flex-1 grid-rows-6 divide-y divide-[var(--premium-line)]">
+                          {items.map((item, index) => (
+                            <KnowledgeBaseListRow
+                              key={item.id}
+                              item={item}
+                              index={index}
+                              selected={item.id === activeSelectedKbId}
+                              editing={item.id === editingKbId}
+                              editName={editName}
+                              editDescription={editDescription}
+                              saving={savingKbId === item.id}
+                              archiveConfirming={archiveConfirmKbId === item.id}
+                              archiving={archivingKbId === item.id}
+                              updateError={item.id === editingKbId && updateMutation.error instanceof Error ? updateMutation.error.message : null}
+                              archiveError={item.id === archiveConfirmKbId && archiveMutation.error instanceof Error ? archiveMutation.error.message : null}
+                              onSelect={() => setSelectedKbIdValue(item.id)}
+                              onStartEdit={() => handleStartEdit(item)}
+                              onCancelEdit={handleCancelEdit}
+                              onEditNameChange={setEditName}
+                              onEditDescriptionChange={setEditDescription}
+                              onSaveEdit={() => handleSaveEdit(item.id)}
+                              onRequestArchive={() => handleRequestArchive(item)}
+                              onCancelArchive={handleCancelArchive}
+                              onConfirmArchive={() => handleConfirmArchive(item.id)}
+                            />
+                          ))}
+                          {shouldShowCreateEntry ? <CreateKnowledgeBaseListRow
+                            expanded={showCreateForm}
+                            name={newName}
+                            description={newDescription}
+                            pending={createMutation.isPending}
+                            error={createMutation.error instanceof Error ? createMutation.error.message : null}
+                            onExpand={() => {
+                              setEditingKbId(null);
+                              setArchiveConfirmKbId(null);
+                              setShowCreateForm(true);
+                            }}
+                            onCancel={() => {
+                              setShowCreateForm(false);
+                              setNewName("");
+                              setNewDescription("");
+                            }}
+                            onNameChange={setNewName}
+                            onDescriptionChange={setNewDescription}
+                            onCreate={handleCreate}
+                          /> : null}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="shrink-0 pt-3">
+                    <KnowledgeBasePagination
+                      page={page}
+                      total={total}
+                      visibleCount={items.length}
+                      pageSize={KB_PAGE_SIZE}
+                      totalPages={totalPages}
+                      isFetching={kbsQuery.isFetching}
+                      onPageChange={setPage}
+                    />
+                  </div>
                 </div>
               </section>
 
@@ -655,7 +661,7 @@ function KnowledgeBaseCard({
     <article
       onClick={onSelect}
       className={[
-        "group relative grid h-full min-h-[254px] cursor-pointer grid-rows-[auto_auto_auto] gap-1.5 overflow-hidden rounded-[8px] border p-2.5 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(17,19,21,0.13)]",
+        "library-kb-card group relative grid h-full min-h-[254px] cursor-pointer grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 overflow-hidden rounded-[8px] border p-2.5 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(17,19,21,0.13)] lg:min-h-0",
         selected ? "border-[var(--premium-line-strong)] bg-[var(--premium-panel-strong)] ring-1 ring-black/5 dark:ring-white/10" : "border-[var(--premium-line)] bg-[var(--premium-panel)]",
       ].join(" ")}
     >
@@ -673,25 +679,25 @@ function KnowledgeBaseCard({
       </div>
 
       {editing ? (
-        <div className="relative z-10 grid min-w-0 content-start gap-1.5" onClick={(event) => event.stopPropagation()}>
+        <div className="relative z-10 grid min-w-0 self-start content-start gap-1.5" onClick={(event) => event.stopPropagation()}>
           <input className={compactFieldClass()} value={editName} onChange={(event) => onEditNameChange(event.target.value)} placeholder="知识库名称" />
           <input className={compactFieldClass()} value={editDescription} onChange={(event) => onEditDescriptionChange(event.target.value)} placeholder="描述，可选" />
           {updateError ? <p className="line-clamp-1 text-[11px] text-rose-600 dark:text-rose-300">{updateError}</p> : null}
         </div>
       ) : (
-        <div className="relative z-10 min-w-0">
-          <h3 className="line-clamp-1 break-words text-[16px] font-black leading-[1.08]">{item.name}</h3>
+        <div className="relative z-10 min-w-0 self-start">
+          <h3 className="library-kb-title line-clamp-1 break-words text-[16px] font-black leading-[1.08]">{item.name}</h3>
           <p className="mt-1 line-clamp-1 min-h-4 text-[11px] leading-4 text-[var(--premium-ink-soft)]">{item.description || "暂无描述"}</p>
           <div className="mt-1.5 grid grid-cols-2 gap-1.5">
             <StatBox value={formatNumber(documentCount)} label="文档" />
             <StatBox value={formatNumber(segmentCount)} label="片段" />
           </div>
-          <RecentIngestionCard item={item} stats={stats} active={active} />
+          <RecentIngestionCard stats={stats} active={active} />
         </div>
       )}
 
-      <div className="relative z-10 flex shrink-0 flex-col gap-1.5 border-t border-[var(--premium-line)] pt-2 sm:flex-row sm:items-center sm:justify-between">
-        <small className="text-xs text-[var(--premium-muted)]">更新于 {formatDateTime(lastUpdated)}</small>
+      <div className="library-kb-footer relative z-10 flex min-h-12 shrink-0 flex-col gap-1.5 border-t border-[var(--premium-line)] pt-2 sm:flex-row sm:items-center sm:justify-between">
+        <small className="library-kb-updated inline-flex h-8 items-center text-xs text-[var(--premium-muted)]">更新于 {formatDateTime(lastUpdated)}</small>
         {editing ? (
           <EditConfirmActions saving={saving} canSave={Boolean(editName.trim())} onSave={onSaveEdit} onCancel={onCancelEdit} />
         ) : archiveConfirming ? (
@@ -791,11 +797,11 @@ function KnowledgeBaseActions({
   onRequestArchive: () => void;
 }) {
   if (!active) {
-    return <span className="text-xs font-black text-[var(--premium-muted)]">已归档</span>;
+    return <span className="inline-flex h-8 items-center text-xs font-black text-[var(--premium-muted)]">已归档</span>;
   }
 
   return (
-    <div className={["flex items-center", compact ? "gap-1" : "gap-1.5"].join(" ")}>
+    <div className={["flex h-8 items-center", compact ? "gap-1" : "gap-1.5"].join(" ")}>
       <AskKbLink item={item} label="进入提问" />
       <IconActionButton label="编辑知识库" onClick={onStartEdit}>
         <Edit3 size={14} />
@@ -883,7 +889,7 @@ function IconActionButton({
         event.stopPropagation();
         onClick();
       }}
-      className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] transition hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)] disabled:cursor-not-allowed disabled:opacity-45"
+      className="library-icon-action grid size-8 shrink-0 place-items-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] transition hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)] disabled:cursor-not-allowed disabled:opacity-45"
     >
       {children}
     </button>
@@ -895,7 +901,7 @@ function AskKbLink({ item, label }: { item: KnowledgeBase; label: string }) {
     <Link
       href={askHrefForKb(item)}
       onClick={(event) => event.stopPropagation()}
-      className="inline-flex min-h-8 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-xs font-black text-[var(--premium-ink-soft)] transition hover:translate-x-1 hover:border-[rgba(187,255,102,0.72)] hover:bg-[rgba(187,255,102,0.26)] hover:text-[var(--premium-ink)] dark:hover:border-[rgba(187,255,102,0.72)] dark:hover:bg-[rgba(187,255,102,0.26)] dark:hover:text-[var(--premium-ink)] dark:hover:shadow-[0_0_0_3px_rgba(187,255,102,0.08)]"
+      className="library-kb-action inline-flex min-h-8 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-xs font-black text-[var(--premium-ink-soft)] transition hover:translate-x-1 hover:border-[rgba(187,255,102,0.72)] hover:bg-[rgba(187,255,102,0.26)] hover:text-[var(--premium-ink)] dark:hover:border-[rgba(187,255,102,0.72)] dark:hover:bg-[rgba(187,255,102,0.26)] dark:hover:text-[var(--premium-ink)] dark:hover:shadow-[0_0_0_3px_rgba(187,255,102,0.08)]"
     >
       {label} <ArrowRight size={14} />
     </Link>
@@ -947,7 +953,7 @@ function StatusBadge({ status, compact = false }: { status: string; compact?: bo
 
 function StatBox({ value, label }: { value: string; label: string }) {
   return (
-    <span className="min-h-9 rounded-[8px] border border-[var(--premium-line)] bg-white/45 p-1.5 text-[10px] text-[var(--premium-muted)] dark:bg-white/5">
+    <span className="library-stat-box min-h-9 rounded-[8px] border border-[var(--premium-line)] bg-white/45 p-1.5 text-[10px] text-[var(--premium-muted)] dark:bg-white/5">
       <b className="mb-0.5 block truncate text-sm text-[var(--premium-ink)]">{value}</b>
       {label}
     </span>
@@ -955,26 +961,33 @@ function StatBox({ value, label }: { value: string; label: string }) {
 }
 
 function ingestionPanelClass() {
-  return "mt-1.5 grid gap-1.5 rounded-[8px] border border-[var(--premium-line)] bg-[linear-gradient(135deg,var(--premium-panel-strong),rgba(255,255,255,0.34)),repeating-linear-gradient(135deg,rgba(17,19,21,0.025)_0_1px,transparent_1px_12px)] p-1.5 text-[11px] text-[var(--premium-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(10,12,14,0.58),rgba(10,12,14,0.42)),repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_1px,transparent_1px_12px)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
+  return "library-ingestion-panel mt-1.5 grid gap-1.5 rounded-[8px] border border-[var(--premium-line)] bg-[linear-gradient(135deg,var(--premium-panel-strong),rgba(255,255,255,0.34)),repeating-linear-gradient(135deg,rgba(17,19,21,0.025)_0_1px,transparent_1px_12px)] p-1.5 text-[11px] text-[var(--premium-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(10,12,14,0.58),rgba(10,12,14,0.42)),repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_1px,transparent_1px_12px)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
 }
 
 function RecentIngestionCard({
-  item,
   stats,
   active,
 }: {
-  item: KnowledgeBase;
   stats?: KnowledgeBaseStats;
   active: boolean;
 }) {
   if (!active) {
     return (
       <div className={ingestionPanelClass()}>
-        <div className="flex items-center justify-between gap-2">
-          <span className="font-black">最近导入</span>
+        <div className="library-ingestion-head flex items-center justify-between gap-2">
+          <span className="min-w-0 text-[11px] font-black text-[var(--premium-muted)]">
+            <b className="block truncate text-[11px] text-[var(--premium-ink)]">知识库已归档</b>
+            最近导入
+          </span>
           <span className="rounded-full bg-black/5 px-2 py-1 text-[10px] font-black dark:bg-black/30 dark:text-white/65">归档只读</span>
         </div>
-        <span className="truncate">统计更新于 {formatDateTime(item.updatedAt ?? item.lastIngestedAt ?? item.createdAt)}</span>
+        <div className="flex h-2 overflow-hidden rounded-full bg-black/10 dark:bg-black/35" aria-hidden="true" />
+        <div className="invisible grid grid-cols-4 gap-1" aria-hidden="true">
+          <IngestionCount value={0} label="总条目" />
+          <IngestionCount value={0} label="成功" />
+          <IngestionCount value={0} label="失败" />
+          <IngestionCount value={0} label="运行中" />
+        </div>
       </div>
     );
   }
@@ -988,7 +1001,7 @@ function RecentIngestionCard({
 
   return (
     <div className={ingestionPanelClass()}>
-      <div className="flex items-center justify-between gap-2">
+      <div className="library-ingestion-head flex items-center justify-between gap-2">
         <span className="min-w-0 text-[11px] font-black text-[var(--premium-muted)]">
           <b className="block truncate text-[11px] text-[var(--premium-ink)]">{ingestedAt ? formatDateTime(ingestedAt) : "暂无导入"}</b>
           最近导入
@@ -1014,7 +1027,7 @@ function RecentIngestionCard({
 
 function IngestionCount({ value, label }: { value: number; label: string }) {
   return (
-    <span className="min-w-0 rounded-[8px] bg-white/50 p-1 text-[9px] leading-tight text-[var(--premium-muted)] dark:border dark:border-white/8 dark:bg-black/18">
+    <span className="library-ingestion-count min-w-0 rounded-[8px] bg-white/50 p-1 text-[9px] leading-tight text-[var(--premium-muted)] dark:border dark:border-white/8 dark:bg-black/18">
       <b className="mb-0.5 block truncate text-[11px] text-[var(--premium-ink)]">{formatNumber(value)}</b>
       {label}
     </span>
@@ -1035,7 +1048,7 @@ function CreateKnowledgeBaseCard({
 }: CreateKnowledgeBaseProps) {
   if (expanded) {
     return (
-      <div className="grid h-full min-h-[254px] gap-2 rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-[var(--premium-panel)] p-2.5 shadow-[var(--premium-tight-shadow)]">
+      <div className="library-create-kb-card grid h-full min-h-[254px] gap-2 rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-[var(--premium-panel)] p-2.5 shadow-[var(--premium-tight-shadow)] lg:min-h-0">
         <div className="flex items-center gap-2 font-black text-[var(--premium-blue)]">
           <Plus size={20} />
           新建知识库
@@ -1060,7 +1073,7 @@ function CreateKnowledgeBaseCard({
     <button
       type="button"
       onClick={onExpand}
-      className="grid h-full min-h-[254px] place-items-center rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-[linear-gradient(135deg,var(--premium-panel),rgba(255,255,255,0.28)),repeating-linear-gradient(135deg,rgba(17,19,21,0.035)_0_1px,transparent_1px_12px)] p-3 text-center transition hover:-translate-y-1 hover:border-[var(--premium-ink-soft)] hover:bg-[var(--premium-panel-strong)]"
+      className="library-create-kb-card grid h-full min-h-[254px] place-items-center rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-[linear-gradient(135deg,var(--premium-panel),rgba(255,255,255,0.28)),repeating-linear-gradient(135deg,rgba(17,19,21,0.035)_0_1px,transparent_1px_12px)] p-3 text-center transition hover:-translate-y-1 hover:border-[var(--premium-ink-soft)] hover:bg-[var(--premium-panel-strong)] lg:min-h-0"
     >
       <span>
         <span className="mx-auto mb-2 grid size-12 place-items-center rounded-full bg-[var(--premium-ink)] text-[var(--premium-bg)] shadow-[0_14px_30px_rgba(17,19,21,0.18)]">

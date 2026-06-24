@@ -53,7 +53,8 @@
       }
 
       button,
-      input {
+      input,
+      select {
         font: inherit;
       }
 
@@ -68,7 +69,8 @@
 
       button:focus-visible,
       a:focus-visible,
-      input:focus-visible {
+      input:focus-visible,
+      select:focus-visible {
         outline: 3px solid rgba(36, 89, 255, 0.38);
         outline-offset: 3px;
       }
@@ -101,13 +103,13 @@
 
       .shell {
         min-height: 100vh;
-        padding: 24px;
+        padding: 16px;
       }
 
       .app {
         display: grid;
-        min-height: calc(100vh - 48px);
-        grid-template-columns: 88px minmax(0, 1fr);
+        min-height: calc(100vh - 32px);
+        grid-template-columns: 72px minmax(0, 1fr);
         overflow: hidden;
         border: 1px solid var(--line-strong);
         border-radius: var(--radius);
@@ -120,10 +122,10 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 16px;
+        gap: 12px;
         border-right: 1px solid rgba(255, 255, 255, 0.12);
         background: rgba(16, 18, 20, 0.96);
-        padding: 16px 12px;
+        padding: 14px 10px;
         color: #fff;
       }
 
@@ -140,15 +142,15 @@
 
       .rail-nav {
         display: grid;
-        gap: 10px;
-        margin-top: 12px;
+        gap: 8px;
+        margin-top: 10px;
       }
 
       .icon-button {
         position: relative;
         display: grid;
-        width: 44px;
-        height: 44px;
+        width: 42px;
+        height: 42px;
         place-items: center;
         border: 0;
         border-radius: var(--radius);
@@ -179,8 +181,8 @@
 
       .user-chip {
         display: grid;
-        width: 44px;
-        height: 44px;
+        width: 42px;
+        height: 42px;
         place-items: center;
         margin-top: auto;
         border: 1px solid rgba(255, 255, 255, 0.14);
@@ -198,27 +200,25 @@
       .hero {
         position: relative;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(280px, 390px);
-        gap: 24px;
-        min-height: 332px;
+        height: 112px;
+        gap: 8px;
         border-bottom: 1px solid var(--line);
-        padding: 24px;
+        padding: 12px 20px;
         overflow: hidden;
       }
 
       .hero-word {
         position: absolute;
         right: 18px;
-        bottom: -32px;
+        bottom: -18px;
         color: rgba(16, 18, 20, 0.052);
-        font-size: clamp(86px, 15vw, 240px);
+        font-size: clamp(48px, 9vw, 132px);
         font-weight: 950;
         line-height: 0.8;
         pointer-events: none;
       }
 
-      .hero-copy,
-      .hero-panel {
+      .hero-copy {
         position: relative;
         z-index: 1;
         animation: revealMask 900ms var(--ease) both;
@@ -229,7 +229,7 @@
         min-width: 0;
         flex-direction: column;
         justify-content: space-between;
-        gap: 24px;
+        gap: 8px;
       }
 
       .eyebrow,
@@ -249,49 +249,39 @@
         color: var(--blue-deep);
       }
 
+      .hero-copy .eyebrow {
+        margin: 0 0 6px;
+        font-size: 10px;
+      }
+
       .pulse {
-        width: 9px;
-        height: 9px;
+        width: 6px;
+        height: 6px;
         flex: 0 0 auto;
         border-radius: var(--pill);
         background: var(--mint-deep);
-        box-shadow: 0 0 0 7px rgba(186, 255, 115, 0.28);
+        box-shadow: 0 0 0 5px rgba(186, 255, 115, 0.28);
         animation: pulse 2.4s var(--ease) infinite;
       }
 
       .hero h1 {
-        max-width: 920px;
-        margin: 12px 0 0;
+        max-width: 760px;
+        margin: 0;
         overflow-wrap: anywhere;
-        font-size: clamp(42px, 7.2vw, 112px);
-        line-height: 0.9;
-      }
-
-      .hero-copy p {
-        max-width: 700px;
-        margin: 18px 0 0;
-        color: var(--ink-soft);
-        font-size: 16px;
-        line-height: 1.8;
-      }
-
-      .hero-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
+        font-size: clamp(16px, 2.4vw, 34px);
+        line-height: 1;
       }
 
       .button,
       .ghost-button,
-      .chip,
-      .toggle-button {
+      .chip {
         display: inline-flex;
-        min-height: 42px;
+        min-height: 34px;
         align-items: center;
         justify-content: center;
         gap: 8px;
         border-radius: var(--pill);
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 900;
         transition:
           color 260ms var(--ease),
@@ -304,15 +294,14 @@
       .button {
         border: 0;
         background: var(--ink);
-        padding: 0 18px;
+        padding: 0 14px;
         color: #fff;
         box-shadow: 0 16px 38px rgba(16, 18, 20, 0.2);
       }
 
       .button:hover,
       .ghost-button:hover,
-      .chip:hover,
-      .toggle-button:hover {
+      .chip:hover {
         background: var(--blue);
         color: #fff;
         transform: translateY(-2px);
@@ -322,101 +311,15 @@
       .chip {
         border: 1px solid var(--line);
         background: rgba(255, 253, 245, 0.7);
-        padding: 0 12px;
+        padding: 0 10px;
         color: var(--ink-soft);
-      }
-
-      .hero-panel {
-        display: grid;
-        min-height: 284px;
-        grid-template-rows: auto 1fr auto;
-        gap: 18px;
-        overflow: hidden;
-        border: 1px solid rgba(16, 18, 20, 0.2);
-        border-radius: var(--radius);
-        background: var(--ink);
-        padding: 18px;
-        color: #fff;
-        box-shadow: var(--tight-shadow);
-        animation-delay: 90ms;
-      }
-
-      .hero-panel .label {
-        color: rgba(255, 255, 255, 0.66);
-      }
-
-      .control-map {
-        position: relative;
-        min-height: 150px;
-        overflow: hidden;
-        border-radius: var(--radius);
-        background:
-          radial-gradient(circle at center, transparent 0 17%, rgba(255, 255, 255, 0.1) 18% 18.8%, transparent 19% 36%, rgba(255, 255, 255, 0.1) 37% 37.8%, transparent 38%),
-          linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-        background-size: auto, 28px 28px, 28px 28px;
-      }
-
-      .control-map::before {
-        position: absolute;
-        inset: -40% 50% 50% -40%;
-        background: conic-gradient(from 0deg, rgba(186, 255, 115, 0), rgba(186, 255, 115, 0.46), rgba(186, 255, 115, 0));
-        transform-origin: 100% 100%;
-        animation: sweep 5s linear infinite;
-        content: "";
-      }
-
-      .control-map i {
-        position: absolute;
-        width: 12px;
-        height: 12px;
-        border-radius: var(--pill);
-        background: var(--mint);
-        box-shadow: 0 0 0 7px rgba(186, 255, 115, 0.15);
-      }
-
-      .control-map i:nth-child(1) {
-        top: 28px;
-        left: 20%;
-      }
-
-      .control-map i:nth-child(2) {
-        top: 78px;
-        left: 56%;
-      }
-
-      .control-map i:nth-child(3) {
-        top: 42px;
-        right: 18%;
-      }
-
-      .hero-metrics {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-      }
-
-      .hero-metrics span {
-        min-height: 64px;
-        border-radius: var(--radius);
-        background: rgba(255, 255, 255, 0.08);
-        padding: 10px;
-        color: rgba(255, 255, 255, 0.72);
-        font-size: 11px;
-      }
-
-      .hero-metrics b {
-        display: block;
-        margin-bottom: 6px;
-        color: #fff;
-        font-size: 20px;
       }
 
       .content {
         display: grid;
-        grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-        gap: 20px;
-        padding: 20px 24px 24px;
+        grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+        gap: 12px;
+        padding: 12px 20px 16px;
       }
 
       .panel,
@@ -433,29 +336,26 @@
       .side-stack {
         display: grid;
         align-content: start;
-        gap: 14px;
+        gap: 10px;
       }
 
       .panel {
-        padding: 16px;
+        padding: 12px;
         animation: revealUp 760ms var(--ease) both;
       }
 
       .capability-list {
         display: grid;
-        gap: 10px;
-        margin-top: 14px;
+        gap: 8px;
+        margin-top: 10px;
       }
 
       .capability {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto;
-        gap: 12px;
-        align-items: center;
+        display: block;
         border: 1px solid rgba(16, 18, 20, 0.1);
         border-radius: var(--radius);
         background: rgba(255, 255, 255, 0.48);
-        padding: 12px;
+        padding: 9px;
         text-align: left;
         transition:
           background 260ms var(--ease),
@@ -470,10 +370,23 @@
         transform: translateX(3px);
       }
 
+      .capability-target {
+        display: grid;
+        width: 100%;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+        border: 0;
+        background: transparent;
+        padding: 0;
+        color: inherit;
+        text-align: left;
+      }
+
       .cap-icon {
         display: grid;
-        width: 42px;
-        height: 42px;
+        width: 34px;
+        height: 34px;
         place-items: center;
         border-radius: var(--radius);
         background: var(--ink);
@@ -485,14 +398,84 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 14px;
+        font-size: 12px;
       }
 
       .capability span {
         display: block;
-        margin-top: 4px;
+        margin-top: 2px;
         color: var(--muted);
-        font-size: 12px;
+        font-size: 10px;
+      }
+
+      .capability .cap-icon {
+        display: grid;
+        margin-top: 0;
+        color: #fff;
+      }
+
+      .capability .status-dot {
+        display: none;
+      }
+
+      .model-select-label {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .model-select-label select {
+        margin-top: 5px;
+      }
+
+      .enabled-model {
+        display: flex;
+        min-height: 24px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 7px;
+        border-radius: var(--pill);
+        background: rgba(186, 255, 115, 0.2);
+        padding: 0 8px;
+        color: var(--mint-deep);
+        font-size: 10px;
+        font-weight: 900;
+      }
+
+      .enabled-model strong {
+        display: inline;
+        margin: 0;
+        color: var(--mint-deep);
+        font-size: inherit;
+      }
+
+      .enable-model-button {
+        width: 100%;
+        min-height: 30px;
+        margin-top: 6px;
+        border: 1px solid rgba(36, 89, 255, 0.24);
+        border-radius: var(--pill);
+        background: var(--ink);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 900;
+        transition:
+          background 220ms var(--ease),
+          color 220ms var(--ease),
+          transform 220ms var(--ease);
+      }
+
+      .enable-model-button:not(:disabled):hover {
+        background: var(--blue);
+        transform: translateY(-1px);
+      }
+
+      .enable-model-button:disabled {
+        border-color: rgba(66, 107, 9, 0.24);
+        background: rgba(186, 255, 115, 0.22);
+        color: var(--mint-deep);
+        cursor: not-allowed;
       }
 
       .status-dot {
@@ -503,25 +486,16 @@
         box-shadow: 0 0 0 6px rgba(186, 255, 115, 0.22);
       }
 
-      .toggle-button {
-        min-height: 30px;
-        border: 1px solid rgba(66, 107, 9, 0.25);
-        background: rgba(186, 255, 115, 0.24);
-        padding: 0 10px;
-        color: var(--mint-deep);
-        font-size: 12px;
-      }
-
       .main-stack {
         display: grid;
-        gap: 16px;
+        gap: 12px;
         min-width: 0;
       }
 
       .config-card,
       .storage-card,
       .token-card {
-        padding: 18px;
+        padding: 12px;
         animation: revealUp 760ms var(--ease) 90ms both;
       }
 
@@ -529,31 +503,31 @@
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        gap: 16px;
-        margin-bottom: 16px;
+        gap: 12px;
+        margin-bottom: 10px;
       }
 
       .section-head h2 {
         margin: 0;
-        font-size: clamp(22px, 3vw, 34px);
+        font-size: clamp(18px, 2vw, 24px);
         line-height: 1;
       }
 
       .section-head p {
-        margin: 8px 0 0;
+        margin: 5px 0 0;
         color: var(--muted);
-        font-size: 13px;
+        font-size: 11px;
       }
 
       .success-pill,
       .warning-pill {
         display: inline-flex;
-        min-height: 34px;
+        min-height: 28px;
         align-items: center;
         gap: 8px;
         border-radius: var(--pill);
-        padding: 0 11px;
-        font-size: 12px;
+        padding: 0 9px;
+        font-size: 11px;
         font-weight: 900;
         white-space: nowrap;
       }
@@ -570,42 +544,53 @@
 
       .form-grid {
         display: grid;
-        gap: 14px;
+        gap: 10px;
       }
 
       .two-col {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
+        gap: 10px;
       }
 
       .three-col {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 14px;
+        gap: 10px;
       }
 
       label {
         display: grid;
-        gap: 7px;
+        gap: 5px;
         color: var(--ink-soft);
-        font-size: 13px;
+        font-size: 11px;
         font-weight: 900;
       }
 
-      input {
+      input,
+      select {
         width: 100%;
-        min-height: 46px;
+        min-height: 36px;
         border: 1px solid var(--line);
         border-radius: var(--radius);
         background: rgba(255, 255, 255, 0.62);
-        padding: 0 12px;
+        padding: 0 10px;
         color: var(--ink);
+        font-size: 12px;
         outline: none;
         transition:
           border-color 220ms var(--ease),
           box-shadow 220ms var(--ease),
           background 220ms var(--ease);
+      }
+
+      select {
+        appearance: none;
+        background:
+          linear-gradient(45deg, transparent 50%, var(--muted) 50%) calc(100% - 17px) 16px / 6px 6px no-repeat,
+          linear-gradient(135deg, var(--muted) 50%, transparent 50%) calc(100% - 12px) 16px / 6px 6px no-repeat,
+          rgba(255, 255, 255, 0.62);
+        padding-right: 32px;
       }
 
       input:focus {
@@ -614,79 +599,150 @@
         box-shadow: 0 0 0 4px rgba(36, 89, 255, 0.11);
       }
 
+      select:focus {
+        border-color: rgba(36, 89, 255, 0.55);
+        background:
+          linear-gradient(45deg, transparent 50%, var(--muted) 50%) calc(100% - 17px) 16px / 6px 6px no-repeat,
+          linear-gradient(135deg, var(--muted) 50%, transparent 50%) calc(100% - 12px) 16px / 6px 6px no-repeat,
+          #fff;
+        box-shadow: 0 0 0 4px rgba(36, 89, 255, 0.11);
+      }
+
       .hint {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 7px;
         border: 1px solid rgba(36, 89, 255, 0.16);
         border-radius: var(--radius);
         background: rgba(36, 89, 255, 0.08);
-        padding: 12px;
+        padding: 9px;
         color: var(--ink-soft);
-        font-size: 13px;
-        line-height: 1.7;
+        font-size: 11px;
+        line-height: 1.55;
       }
 
       .actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 16px;
+        gap: 8px;
+        margin-top: 10px;
       }
 
       .param-row {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
-        margin-top: 14px;
+        gap: 8px;
+        margin-top: 10px;
       }
 
       .param {
         border: 1px solid rgba(16, 18, 20, 0.1);
         border-radius: var(--radius);
         background: rgba(255, 255, 255, 0.5);
-        padding: 12px;
+        padding: 8px;
       }
 
       .param span {
         display: block;
         color: var(--muted);
-        font-size: 12px;
+        font-size: 10px;
       }
 
       .param strong {
         display: block;
-        margin-top: 6px;
-        font-size: 16px;
+        margin-top: 4px;
+        font-size: 13px;
       }
 
       .split {
         display: grid;
-        grid-template-columns: minmax(0, 1.12fr) minmax(280px, 0.88fr);
-        gap: 16px;
+        grid-template-columns: minmax(0, 1.18fr) minmax(220px, 0.82fr);
+        gap: 12px;
+      }
+
+      .config-fields {
+        display: flex;
+        min-height: 100%;
+        flex-direction: column;
+      }
+
+      .config-fields .actions {
+        margin-top: auto;
+        padding-top: 10px;
+      }
+
+      .model-config-panels {
+        display: grid;
+      }
+
+      .model-config-panel {
+        display: none;
+      }
+
+      .model-config-panel.active {
+        display: block;
+      }
+
+      .advanced-config {
+        margin-top: 10px;
+      }
+
+      .advanced-config summary {
+        display: flex;
+        min-height: 32px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--pill);
+        background: rgba(255, 253, 245, 0.74);
+        padding: 0 12px;
+        color: var(--ink-soft);
+        font-size: 12px;
+        font-weight: 900;
+        cursor: pointer;
+      }
+
+      .advanced-config summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .advanced-config summary::after {
+        color: var(--muted);
+        content: "+";
+        font-size: 16px;
+        line-height: 1;
+      }
+
+      .advanced-config[open] summary::after {
+        content: "-";
+      }
+
+      .advanced-body {
+        margin-top: 10px;
       }
 
       .connection-card {
         display: grid;
         align-content: start;
-        gap: 14px;
+        gap: 10px;
         border: 1px solid rgba(16, 18, 20, 0.1);
         border-radius: var(--radius);
         background:
           linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.32)),
           radial-gradient(circle at 90% 0%, rgba(186, 255, 115, 0.28), transparent 14rem);
-        padding: 16px;
+        padding: 12px;
       }
 
       .latency {
         display: grid;
         grid-template-columns: auto 1fr;
-        gap: 14px;
+        gap: 10px;
         align-items: center;
       }
 
       .latency strong {
-        font-size: clamp(36px, 6vw, 68px);
+        font-size: clamp(30px, 4.4vw, 52px);
         line-height: 0.88;
       }
 
@@ -709,60 +765,18 @@
       .storage-grid {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: 16px;
+        gap: 12px;
       }
 
       .token-card {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
-        gap: 16px;
+        gap: 12px;
         align-items: end;
       }
 
       .token-card label {
         min-width: 0;
-      }
-
-      .risk-panel {
-        border: 1px solid rgba(255, 176, 32, 0.35);
-        border-radius: var(--radius);
-        background: rgba(255, 176, 32, 0.12);
-        padding: 14px;
-        color: var(--ink-soft);
-        font-size: 13px;
-        line-height: 1.7;
-      }
-
-      .panel.dark {
-        background: rgba(16, 18, 20, 0.94);
-        color: #fff;
-      }
-
-      .panel.dark .label {
-        color: rgba(255, 255, 255, 0.64);
-      }
-
-      .health {
-        display: grid;
-        gap: 14px;
-      }
-
-      .health-main {
-        display: flex;
-        align-items: end;
-        justify-content: space-between;
-        gap: 16px;
-      }
-
-      .health-main strong {
-        font-size: clamp(38px, 5vw, 68px);
-        line-height: 0.88;
-      }
-
-      .health-main span {
-        color: rgba(255, 255, 255, 0.66);
-        font-size: 12px;
-        line-height: 1.6;
       }
 
       svg {
@@ -804,12 +818,6 @@
         }
       }
 
-      @keyframes sweep {
-        to {
-          transform: rotate(1turn);
-        }
-      }
-
       @keyframes grow {
         from {
           width: 18%;
@@ -838,19 +846,15 @@
       }
 
       @media (max-width: 1180px) {
-        .hero,
         .content,
         .split,
+        .advanced-body,
         .storage-grid {
           grid-template-columns: 1fr;
         }
 
         .side-stack {
           grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .panel.dark {
-          grid-column: 1 / -1;
         }
       }
 
@@ -895,7 +899,7 @@
         }
 
         .hero h1 {
-          font-size: clamp(42px, 12vw, 72px);
+          font-size: clamp(20px, 7vw, 34px);
         }
 
         .side-stack,
@@ -911,9 +915,6 @@
           flex-direction: column;
         }
 
-        .hero-metrics {
-          grid-template-columns: repeat(3, 1fr);
-        }
       }
 
       @media (max-width: 500px) {
@@ -926,7 +927,6 @@
           height: 42px;
         }
 
-        .hero-actions,
         .actions {
           align-items: stretch;
           flex-direction: column;
@@ -945,9 +945,6 @@
           padding: 14px;
         }
 
-        .hero-metrics {
-          grid-template-columns: 1fr;
-        }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -997,26 +994,6 @@
               <div>
                 <p class="eyebrow"><span class="pulse" aria-hidden="true"></span>SETTINGS / CONTROL PLANE</p>
                 <h1>把模型、存储与访问令牌调成一条稳定链路。</h1>
-                <p>Settings 是 Anchr 的控制平面：选择模型能力、验证连接、保存密钥、切换 Embedding 时提示重建索引风险，并确保导入与问答的底座稳定。</p>
-              </div>
-              <div class="hero-actions">
-                <a class="button" href="#">测试全部连接</a>
-                <a class="ghost-button" href="#">新增模型配置</a>
-                <a class="ghost-button" href="#">查看风险项</a>
-              </div>
-            </section>
-
-            <section class="hero-panel" aria-label="系统配置状态">
-              <p class="label">CONFIG TOPOLOGY <span>ONLINE</span></p>
-              <div class="control-map" aria-hidden="true">
-                <i></i>
-                <i></i>
-                <i></i>
-              </div>
-              <div class="hero-metrics">
-                <span><b>4</b>模型能力</span>
-                <span><b>126ms</b>延迟</span>
-                <span><b>92%</b>健康度</span>
               </div>
             </section>
           </header>
@@ -1026,102 +1003,324 @@
               <section class="panel">
                 <p class="label">MODEL CAPABILITIES <span>4</span></p>
                 <div class="capability-list">
-                  <article class="capability active">
-                    <span class="cap-icon">GEN</span>
-                    <span><strong>Generation</strong><span>qwen-plus · Chat & answer generation</span></span>
-                    <span class="status-dot" aria-label="使用中"></span>
+                  <article class="capability active" data-capability="generation" data-enabled-model="qwen-plus">
+                    <button class="capability-target" type="button" data-capability-target="generation" aria-pressed="true">
+                      <span class="cap-icon">GEN</span>
+                      <span><strong>Generation</strong><span>Chat & answer generation</span></span>
+                      <span class="status-dot" aria-label="使用中"></span>
+                    </button>
+                    <label class="model-select-label">
+                      生成模型
+                      <select data-model-select="generation" aria-label="选择 Generation 模型">
+                        <option value="qwen-plus" selected>qwen-plus · 已启用</option>
+                        <option value="qwen-max">qwen-max</option>
+                        <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                      </select>
+                    </label>
+                    <div class="enabled-model">当前启用 <strong data-enabled-model-label="generation">qwen-plus</strong></div>
+                    <button class="enable-model-button" type="button" data-enable-model="generation" disabled>当前已启用</button>
                   </article>
-                  <article class="capability">
-                    <span class="cap-icon">EMB</span>
-                    <span><strong>Embedding</strong><span>text-embedding-v4 · Text vectorization</span></span>
-                    <button class="toggle-button" type="button">启用</button>
+                  <article class="capability" data-capability="embedding" data-enabled-model="text-embedding-v4">
+                    <button class="capability-target" type="button" data-capability-target="embedding" aria-pressed="false">
+                      <span class="cap-icon">EMB</span>
+                      <span><strong>Embedding</strong><span>Text vectorization</span></span>
+                      <span class="status-dot" aria-label="已启用"></span>
+                    </button>
+                    <label class="model-select-label">
+                      向量模型
+                      <select data-model-select="embedding" aria-label="选择 Embedding 模型">
+                        <option value="text-embedding-v4" selected>text-embedding-v4 · 已启用</option>
+                        <option value="text-embedding-v3">text-embedding-v3</option>
+                        <option value="bge-m3">bge-m3</option>
+                      </select>
+                    </label>
+                    <div class="enabled-model">当前启用 <strong data-enabled-model-label="embedding">text-embedding-v4</strong></div>
+                    <button class="enable-model-button" type="button" data-enable-model="embedding" disabled>当前已启用</button>
                   </article>
-                  <article class="capability">
-                    <span class="cap-icon">RRK</span>
-                    <span><strong>Rerank</strong><span>gte-rerank-v2 · Search reranking</span></span>
-                    <span class="status-dot" aria-label="使用中"></span>
+                  <article class="capability" data-capability="rerank" data-enabled-model="gte-rerank-v2">
+                    <button class="capability-target" type="button" data-capability-target="rerank" aria-pressed="false">
+                      <span class="cap-icon">RRK</span>
+                      <span><strong>Rerank</strong><span>Search reranking</span></span>
+                      <span class="status-dot" aria-label="使用中"></span>
+                    </button>
+                    <label class="model-select-label">
+                      重排模型
+                      <select data-model-select="rerank" aria-label="选择 Rerank 模型">
+                        <option value="gte-rerank-v2" selected>gte-rerank-v2 · 已启用</option>
+                        <option value="bge-reranker-v2-m3">bge-reranker-v2-m3</option>
+                        <option value="cohere-rerank-v3.5">cohere-rerank-v3.5</option>
+                      </select>
+                    </label>
+                    <div class="enabled-model">当前启用 <strong data-enabled-model-label="rerank">gte-rerank-v2</strong></div>
+                    <button class="enable-model-button" type="button" data-enable-model="rerank" disabled>当前已启用</button>
                   </article>
-                  <article class="capability">
-                    <span class="cap-icon">IMG</span>
-                    <span><strong>Multi Embedding</strong><span>image/text vectorization</span></span>
-                    <button class="toggle-button" type="button">启用</button>
+                  <article class="capability" data-capability="multi" data-enabled-model="multimodal-embedding-v1">
+                    <button class="capability-target" type="button" data-capability-target="multi" aria-pressed="false">
+                      <span class="cap-icon">IMG</span>
+                      <span><strong>Multi Embedding</strong><span>Image/text vectorization</span></span>
+                      <span class="status-dot" aria-label="已启用"></span>
+                    </button>
+                    <label class="model-select-label">
+                      多模态模型
+                      <select data-model-select="multi" aria-label="选择 Multi Embedding 模型">
+                        <option value="multimodal-embedding-v1" selected>multimodal-embedding-v1 · 已启用</option>
+                        <option value="jina-clip-v2">jina-clip-v2</option>
+                        <option value="siglip-so400m">siglip-so400m</option>
+                      </select>
+                    </label>
+                    <div class="enabled-model">当前启用 <strong data-enabled-model-label="multi">multimodal-embedding-v1</strong></div>
+                    <button class="enable-model-button" type="button" data-enable-model="multi" disabled>当前已启用</button>
                   </article>
-                </div>
-              </section>
-
-              <section class="panel">
-                <p class="label">RISK NOTICE <span>EMBEDDING</span></p>
-                <div class="risk-panel">
-                  切换 Embedding 或 Multi Embedding 会导致已有向量失效，需要重新生成索引。建议在低峰时段切换。
-                </div>
-              </section>
-
-              <section class="panel dark">
-                <div class="health">
-                  <p class="label">CONTROL HEALTH <span>SYNCED</span></p>
-                  <div class="health-main">
-                    <strong>92%</strong>
-                    <span>模型、存储、令牌和连接测试综合评分。</span>
-                  </div>
-                  <div class="meter" aria-hidden="true"><i></i></div>
                 </div>
               </section>
             </aside>
 
             <section class="main-stack" aria-label="配置表单">
-              <section class="config-card">
-                <div class="section-head">
-                  <div>
-                    <h2>Generation 配置</h2>
-                    <p>当前使用 qwen-plus，负责问答生成与对话输出。</p>
+              <div class="model-config-panels">
+                <section class="config-card model-config-panel active" data-config-panel="generation">
+                  <div class="section-head">
+                    <div>
+                      <h2>Generation 配置</h2>
+                      <p>当前使用 <span data-current-model="generation">qwen-plus</span>，负责问答生成与对话输出。</p>
+                    </div>
+                    <span class="success-pill">连接成功 · 126ms</span>
                   </div>
-                  <span class="success-pill">连接成功 · 126ms</span>
-                </div>
 
-                <div class="split">
-                  <div>
-                    <div class="form-grid">
-                      <label>
-                        Base URL
-                        <input value="https://dashscope.aliyuncs.com/compatible-mode/v1" aria-label="Base URL" />
-                      </label>
-                      <div class="two-col">
+                  <div class="split">
+                    <div class="config-fields">
+                      <div class="form-grid">
                         <label>
-                          API Key
-                          <input value="(已保存: sk-••••••89)" aria-label="API Key" type="password" />
+                          Base URL
+                          <input value="https://dashscope.aliyuncs.com/compatible-mode/v1" aria-label="Generation Base URL" />
                         </label>
-                        <label>
-                          Model
-                          <input value="qwen-plus" aria-label="Model" />
-                        </label>
+                        <div class="two-col">
+                          <label>
+                            API Key
+                            <input value="(已保存: sk-••••••89)" aria-label="Generation API Key" type="password" />
+                          </label>
+                          <label>
+                            Model
+                            <input value="qwen-plus" aria-label="Generation Model" data-model-field="generation" />
+                          </label>
+                        </div>
+                      </div>
+
+                      <details class="advanced-config">
+                        <summary>参数配置</summary>
+                        <div class="advanced-body">
+                          <div class="param-row">
+                            <div class="param"><span>temperature</span><strong>0.2</strong></div>
+                            <div class="param"><span>max_tokens</span><strong>4096</strong></div>
+                            <div class="param"><span>timeout</span><strong>60s</strong></div>
+                          </div>
+                        </div>
+                      </details>
+
+                      <div class="actions">
+                        <button class="ghost-button" type="button">测试连接</button>
+                        <button class="button" type="button">保存</button>
+                        <button class="ghost-button" type="button">删除</button>
                       </div>
                     </div>
-                    <div class="param-row">
-                      <div class="param"><span>temperature</span><strong>0.2</strong></div>
-                      <div class="param"><span>max_tokens</span><strong>4096</strong></div>
-                      <div class="param"><span>timeout</span><strong>60s</strong></div>
+
+                    <aside class="connection-card" aria-label="Generation 连接测试结果">
+                      <p class="label">CONNECTION TEST <span>LIVE</span></p>
+                      <div class="latency">
+                        <strong>126</strong>
+                        <span class="success-pill">ms latency</span>
+                      </div>
+                      <div class="meter" aria-hidden="true"><i></i></div>
+                      <p class="hint">
+                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
+                        当前配置可用，问答生成、引用总结与续问链路已通过连接测试。
+                      </p>
+                    </aside>
+                  </div>
+                </section>
+
+                <section class="config-card model-config-panel" data-config-panel="embedding">
+                  <div class="section-head">
+                    <div>
+                      <h2>Embedding 配置</h2>
+                      <p>当前使用 <span data-current-model="embedding">text-embedding-v4</span>，负责文本向量化与召回索引。</p>
                     </div>
-                    <div class="actions">
-                      <button class="ghost-button" type="button">测试连接</button>
-                      <button class="button" type="button">保存</button>
-                      <button class="ghost-button" type="button">删除</button>
-                    </div>
+                    <span class="warning-pill">切换需重建</span>
                   </div>
 
-                  <aside class="connection-card" aria-label="连接测试结果">
-                    <p class="label">CONNECTION TEST <span>LIVE</span></p>
-                    <div class="latency">
-                      <strong>126</strong>
-                      <span class="success-pill">ms latency</span>
+                  <div class="split">
+                    <div class="config-fields">
+                      <div class="form-grid">
+                        <label>
+                          Base URL
+                          <input value="https://dashscope.aliyuncs.com/compatible-mode/v1" aria-label="Embedding Base URL" />
+                        </label>
+                        <div class="two-col">
+                          <label>
+                            API Key
+                            <input value="(已保存: sk-••••••89)" aria-label="Embedding API Key" type="password" />
+                          </label>
+                          <label>
+                            Model
+                            <input value="text-embedding-v4" aria-label="Embedding Model" data-model-field="embedding" />
+                          </label>
+                        </div>
+                      </div>
+
+                      <details class="advanced-config">
+                        <summary>参数配置</summary>
+                        <div class="advanced-body">
+                          <div class="param-row">
+                            <div class="param"><span>dimensions</span><strong>1024</strong></div>
+                            <div class="param"><span>batch_size</span><strong>32</strong></div>
+                            <div class="param"><span>normalize</span><strong>true</strong></div>
+                          </div>
+                        </div>
+                      </details>
+
+                      <div class="actions">
+                        <button class="ghost-button" type="button">测试连接</button>
+                        <button class="button" type="button">保存</button>
+                        <button class="ghost-button" type="button">重建索引</button>
+                      </div>
                     </div>
-                    <div class="meter" aria-hidden="true"><i></i></div>
-                    <p class="hint">
-                      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
-                      当前配置可用，问答生成、引用总结与续问链路已通过连接测试。
-                    </p>
-                  </aside>
-                </div>
-              </section>
+
+                    <aside class="connection-card" aria-label="Embedding 连接测试结果">
+                      <p class="label">VECTORIZATION TEST <span>READY</span></p>
+                      <div class="latency">
+                        <strong>94</strong>
+                        <span class="success-pill">ms/vector</span>
+                      </div>
+                      <div class="meter" aria-hidden="true"><i></i></div>
+                      <p class="hint">
+                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
+                        文本向量化可用。切换模型后会触发已有知识库向量重建确认。
+                      </p>
+                    </aside>
+                  </div>
+                </section>
+
+                <section class="config-card model-config-panel" data-config-panel="rerank">
+                  <div class="section-head">
+                    <div>
+                      <h2>Rerank 配置</h2>
+                      <p>当前使用 <span data-current-model="rerank">gte-rerank-v2</span>，负责检索结果重排。</p>
+                    </div>
+                    <span class="success-pill">连接成功 · 88ms</span>
+                  </div>
+
+                  <div class="split">
+                    <div class="config-fields">
+                      <div class="form-grid">
+                        <label>
+                          Base URL
+                          <input value="https://dashscope.aliyuncs.com/compatible-mode/v1" aria-label="Rerank Base URL" />
+                        </label>
+                        <div class="two-col">
+                          <label>
+                            API Key
+                            <input value="(已保存: sk-••••••89)" aria-label="Rerank API Key" type="password" />
+                          </label>
+                          <label>
+                            Model
+                            <input value="gte-rerank-v2" aria-label="Rerank Model" data-model-field="rerank" />
+                          </label>
+                        </div>
+                      </div>
+
+                      <details class="advanced-config">
+                        <summary>参数配置</summary>
+                        <div class="advanced-body">
+                          <div class="param-row">
+                            <div class="param"><span>top_n</span><strong>20</strong></div>
+                            <div class="param"><span>score_threshold</span><strong>0.12</strong></div>
+                            <div class="param"><span>timeout</span><strong>30s</strong></div>
+                          </div>
+                        </div>
+                      </details>
+
+                      <div class="actions">
+                        <button class="ghost-button" type="button">测试连接</button>
+                        <button class="button" type="button">保存</button>
+                        <button class="ghost-button" type="button">删除</button>
+                      </div>
+                    </div>
+
+                    <aside class="connection-card" aria-label="Rerank 连接测试结果">
+                      <p class="label">RERANK TEST <span>LIVE</span></p>
+                      <div class="latency">
+                        <strong>88</strong>
+                        <span class="success-pill">ms/query</span>
+                      </div>
+                      <div class="meter" aria-hidden="true"><i></i></div>
+                      <p class="hint">
+                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
+                        重排链路可用，搜索结果会在回答前按相关性重新排序。
+                      </p>
+                    </aside>
+                  </div>
+                </section>
+
+                <section class="config-card model-config-panel" data-config-panel="multi">
+                  <div class="section-head">
+                    <div>
+                      <h2>Multi Embedding 配置</h2>
+                      <p>当前使用 <span data-current-model="multi">multimodal-embedding-v1</span>，负责图片与文本统一向量化。</p>
+                    </div>
+                    <span class="warning-pill">切换需重建</span>
+                  </div>
+
+                  <div class="split">
+                    <div class="config-fields">
+                      <div class="form-grid">
+                        <label>
+                          Base URL
+                          <input value="https://dashscope.aliyuncs.com/compatible-mode/v1" aria-label="Multi Embedding Base URL" />
+                        </label>
+                        <div class="two-col">
+                          <label>
+                            API Key
+                            <input value="(已保存: sk-••••••89)" aria-label="Multi Embedding API Key" type="password" />
+                          </label>
+                          <label>
+                            Model
+                            <input value="multimodal-embedding-v1" aria-label="Multi Embedding Model" data-model-field="multi" />
+                          </label>
+                        </div>
+                      </div>
+
+                      <details class="advanced-config">
+                        <summary>参数配置</summary>
+                        <div class="advanced-body">
+                          <div class="param-row">
+                            <div class="param"><span>modalities</span><strong>text + image</strong></div>
+                            <div class="param"><span>image_size</span><strong>1024</strong></div>
+                            <div class="param"><span>batch_size</span><strong>16</strong></div>
+                          </div>
+                        </div>
+                      </details>
+
+                      <div class="actions">
+                        <button class="ghost-button" type="button">测试连接</button>
+                        <button class="button" type="button">保存</button>
+                        <button class="ghost-button" type="button">重建多模态索引</button>
+                      </div>
+                    </div>
+
+                    <aside class="connection-card" aria-label="Multi Embedding 连接测试结果">
+                      <p class="label">MULTI-MODAL TEST <span>READY</span></p>
+                      <div class="latency">
+                        <strong>148</strong>
+                        <span class="success-pill">ms/item</span>
+                      </div>
+                      <div class="meter" aria-hidden="true"><i></i></div>
+                      <p class="hint">
+                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
+                        多模态向量化可用，图片和文本可进入同一检索空间。
+                      </p>
+                    </aside>
+                  </div>
+                </section>
+              </div>
 
               <section class="storage-grid">
                 <article class="storage-card">
@@ -1179,27 +1378,92 @@
                   </div>
                 </article>
               </section>
-
-              <section class="config-card">
-                <div class="section-head">
-                  <div>
-                    <h2>切换确认</h2>
-                    <p>Embedding 模型切换会触发向量重建，属于高影响操作。</p>
-                  </div>
-                  <span class="warning-pill">需要确认</span>
-                </div>
-                <div class="risk-panel">
-                  确认切换 Embedding 模型后，已有向量数据将失效，系统会清除已有向量并重新生成。重建期间搜索和问答质量可能短暂下降。
-                </div>
-                <div class="actions">
-                  <button class="ghost-button" type="button">取消</button>
-                  <button class="button" type="button">确定切换并重建</button>
-                </div>
-              </section>
             </section>
           </div>
         </main>
       </div>
     </div>
+    <script>
+      const capabilityCards = Array.from(document.querySelectorAll("[data-capability]"));
+      const capabilityTargets = Array.from(document.querySelectorAll("[data-capability-target]"));
+      const configPanels = Array.from(document.querySelectorAll("[data-config-panel]"));
+      const modelSelects = Array.from(document.querySelectorAll("[data-model-select]"));
+      const enableButtons = Array.from(document.querySelectorAll("[data-enable-model]"));
+
+      function modelLabelFor(select, model) {
+        return Array.from(select.options).find((option) => option.value === model)?.textContent.replace(" · 已启用", "") ?? model;
+      }
+
+      function refreshModelState(capability) {
+        const card = document.querySelector(`[data-capability="${capability}"]`);
+        const select = document.querySelector(`[data-model-select="${capability}"]`);
+        const button = document.querySelector(`[data-enable-model="${capability}"]`);
+        const label = document.querySelector(`[data-enabled-model-label="${capability}"]`);
+        if (!card || !select || !button || !label) return;
+
+        const enabledModel = card.dataset.enabledModel;
+        const selectedModel = select.value;
+        label.textContent = enabledModel;
+
+        Array.from(select.options).forEach((option) => {
+          option.textContent = option.value === enabledModel ? `${option.value} · 已启用` : option.value;
+        });
+
+        button.disabled = selectedModel === enabledModel;
+        button.textContent = selectedModel === enabledModel ? "当前已启用" : `启用 ${modelLabelFor(select, selectedModel)}`;
+      }
+
+      function activateCapability(capability) {
+        capabilityCards.forEach((card) => {
+          card.classList.toggle("active", card.dataset.capability === capability);
+        });
+
+        capabilityTargets.forEach((target) => {
+          target.setAttribute("aria-pressed", String(target.dataset.capabilityTarget === capability));
+        });
+
+        configPanels.forEach((panel) => {
+          panel.classList.toggle("active", panel.dataset.configPanel === capability);
+        });
+      }
+
+      function syncModel(capability, model) {
+        document.querySelectorAll(`[data-current-model="${capability}"]`).forEach((node) => {
+          node.textContent = model;
+        });
+
+        document.querySelectorAll(`[data-model-field="${capability}"]`).forEach((input) => {
+          input.value = model;
+        });
+      }
+
+      capabilityTargets.forEach((target) => {
+        target.addEventListener("click", () => activateCapability(target.dataset.capabilityTarget));
+      });
+
+      modelSelects.forEach((select) => {
+        select.addEventListener("change", () => {
+          syncModel(select.dataset.modelSelect, select.value);
+          activateCapability(select.dataset.modelSelect);
+          refreshModelState(select.dataset.modelSelect);
+        });
+      });
+
+      enableButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const capability = button.dataset.enableModel;
+          const card = document.querySelector(`[data-capability="${capability}"]`);
+          const select = document.querySelector(`[data-model-select="${capability}"]`);
+          if (!card || !select) return;
+
+          card.dataset.enabledModel = select.value;
+          syncModel(capability, select.value);
+          activateCapability(capability);
+          refreshModelState(capability);
+        });
+      });
+
+      modelSelects.forEach((select) => refreshModelState(select.dataset.modelSelect));
+    </script>
   </body>
 </html>

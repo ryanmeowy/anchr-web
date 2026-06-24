@@ -489,7 +489,8 @@ a {
 }
 
 @media (max-height: 860px) and (min-width: 1280px) {
-  .library-premium-page .library-kb-card {
+  .library-premium-page .library-kb-card,
+  .library-premium-page .library-create-kb-card {
     gap: 0.375rem;
     padding: 0.5rem;
   }
