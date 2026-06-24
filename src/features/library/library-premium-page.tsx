@@ -655,7 +655,7 @@ function KnowledgeBaseCard({
     <article
       onClick={onSelect}
       className={[
-        "group relative grid h-full min-h-[168px] cursor-pointer grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 overflow-hidden rounded-[8px] border p-2.5 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(17,19,21,0.13)]",
+        "library-kb-card group relative grid h-full min-h-[168px] cursor-pointer grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 overflow-hidden rounded-[8px] border p-2.5 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(17,19,21,0.13)]",
         selected ? "border-[var(--premium-line-strong)] bg-[var(--premium-panel-strong)] ring-1 ring-black/5 dark:ring-white/10" : "border-[var(--premium-line)] bg-[var(--premium-panel)]",
       ].join(" ")}
     >
@@ -680,7 +680,7 @@ function KnowledgeBaseCard({
         </div>
       ) : (
         <div className="relative z-10 min-h-0 min-w-0 overflow-hidden">
-          <h3 className="line-clamp-1 break-words text-[16px] font-black leading-[1.08]">{item.name}</h3>
+          <h3 className="library-kb-title line-clamp-1 break-words text-[16px] font-black leading-[1.08]">{item.name}</h3>
           <p className="mt-1 line-clamp-1 min-h-4 text-[11px] leading-4 text-[var(--premium-ink-soft)]">{item.description || "暂无描述"}</p>
           <div className="mt-1.5 grid grid-cols-2 gap-1.5">
             <StatBox value={formatNumber(documentCount)} label="文档" />
@@ -690,8 +690,8 @@ function KnowledgeBaseCard({
         </div>
       )}
 
-      <div className="relative z-10 flex shrink-0 flex-col gap-1.5 border-t border-[var(--premium-line)] pt-2 sm:flex-row sm:items-center sm:justify-between">
-        <small className="text-xs text-[var(--premium-muted)]">更新于 {formatDateTime(lastUpdated)}</small>
+      <div className="library-kb-footer relative z-10 flex shrink-0 flex-col gap-1.5 border-t border-[var(--premium-line)] pt-2 sm:flex-row sm:items-center sm:justify-between">
+        <small className="library-kb-updated text-xs text-[var(--premium-muted)]">更新于 {formatDateTime(lastUpdated)}</small>
         {editing ? (
           <EditConfirmActions saving={saving} canSave={Boolean(editName.trim())} onSave={onSaveEdit} onCancel={onCancelEdit} />
         ) : archiveConfirming ? (
@@ -883,7 +883,7 @@ function IconActionButton({
         event.stopPropagation();
         onClick();
       }}
-      className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] transition hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)] disabled:cursor-not-allowed disabled:opacity-45"
+      className="library-icon-action grid size-8 shrink-0 place-items-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] transition hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)] disabled:cursor-not-allowed disabled:opacity-45"
     >
       {children}
     </button>
@@ -895,7 +895,7 @@ function AskKbLink({ item, label }: { item: KnowledgeBase; label: string }) {
     <Link
       href={askHrefForKb(item)}
       onClick={(event) => event.stopPropagation()}
-      className="inline-flex min-h-8 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-xs font-black text-[var(--premium-ink-soft)] transition hover:translate-x-1 hover:border-[rgba(187,255,102,0.72)] hover:bg-[rgba(187,255,102,0.26)] hover:text-[var(--premium-ink)] dark:hover:border-[rgba(187,255,102,0.72)] dark:hover:bg-[rgba(187,255,102,0.26)] dark:hover:text-[var(--premium-ink)] dark:hover:shadow-[0_0_0_3px_rgba(187,255,102,0.08)]"
+      className="library-kb-action inline-flex min-h-8 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-xs font-black text-[var(--premium-ink-soft)] transition hover:translate-x-1 hover:border-[rgba(187,255,102,0.72)] hover:bg-[rgba(187,255,102,0.26)] hover:text-[var(--premium-ink)] dark:hover:border-[rgba(187,255,102,0.72)] dark:hover:bg-[rgba(187,255,102,0.26)] dark:hover:text-[var(--premium-ink)] dark:hover:shadow-[0_0_0_3px_rgba(187,255,102,0.08)]"
     >
       {label} <ArrowRight size={14} />
     </Link>
@@ -947,7 +947,7 @@ function StatusBadge({ status, compact = false }: { status: string; compact?: bo
 
 function StatBox({ value, label }: { value: string; label: string }) {
   return (
-    <span className="min-h-9 rounded-[8px] border border-[var(--premium-line)] bg-white/45 p-1.5 text-[10px] text-[var(--premium-muted)] dark:bg-white/5">
+    <span className="library-stat-box min-h-9 rounded-[8px] border border-[var(--premium-line)] bg-white/45 p-1.5 text-[10px] text-[var(--premium-muted)] dark:bg-white/5">
       <b className="mb-0.5 block truncate text-sm text-[var(--premium-ink)]">{value}</b>
       {label}
     </span>
@@ -955,7 +955,7 @@ function StatBox({ value, label }: { value: string; label: string }) {
 }
 
 function ingestionPanelClass() {
-  return "mt-1.5 grid gap-1.5 rounded-[8px] border border-[var(--premium-line)] bg-[linear-gradient(135deg,var(--premium-panel-strong),rgba(255,255,255,0.34)),repeating-linear-gradient(135deg,rgba(17,19,21,0.025)_0_1px,transparent_1px_12px)] p-1.5 text-[11px] text-[var(--premium-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(10,12,14,0.58),rgba(10,12,14,0.42)),repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_1px,transparent_1px_12px)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
+  return "library-ingestion-panel mt-1.5 grid gap-1.5 rounded-[8px] border border-[var(--premium-line)] bg-[linear-gradient(135deg,var(--premium-panel-strong),rgba(255,255,255,0.34)),repeating-linear-gradient(135deg,rgba(17,19,21,0.025)_0_1px,transparent_1px_12px)] p-1.5 text-[11px] text-[var(--premium-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(10,12,14,0.58),rgba(10,12,14,0.42)),repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_1px,transparent_1px_12px)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
 }
 
 function RecentIngestionCard({
@@ -970,7 +970,7 @@ function RecentIngestionCard({
   if (!active) {
     return (
       <div className={ingestionPanelClass()}>
-        <div className="flex items-center justify-between gap-2">
+        <div className="library-ingestion-head flex items-center justify-between gap-2">
           <span className="font-black">最近导入</span>
           <span className="rounded-full bg-black/5 px-2 py-1 text-[10px] font-black dark:bg-black/30 dark:text-white/65">归档只读</span>
         </div>
@@ -988,7 +988,7 @@ function RecentIngestionCard({
 
   return (
     <div className={ingestionPanelClass()}>
-      <div className="flex items-center justify-between gap-2">
+      <div className="library-ingestion-head flex items-center justify-between gap-2">
         <span className="min-w-0 text-[11px] font-black text-[var(--premium-muted)]">
           <b className="block truncate text-[11px] text-[var(--premium-ink)]">{ingestedAt ? formatDateTime(ingestedAt) : "暂无导入"}</b>
           最近导入
@@ -1014,7 +1014,7 @@ function RecentIngestionCard({
 
 function IngestionCount({ value, label }: { value: number; label: string }) {
   return (
-    <span className="min-w-0 rounded-[8px] bg-white/50 p-1 text-[9px] leading-tight text-[var(--premium-muted)] dark:border dark:border-white/8 dark:bg-black/18">
+    <span className="library-ingestion-count min-w-0 rounded-[8px] bg-white/50 p-1 text-[9px] leading-tight text-[var(--premium-muted)] dark:border dark:border-white/8 dark:bg-black/18">
       <b className="mb-0.5 block truncate text-[11px] text-[var(--premium-ink)]">{formatNumber(value)}</b>
       {label}
     </span>
