@@ -910,23 +910,32 @@ function AskKbLink({ item, label }: { item: KnowledgeBase; label: string }) {
 
 function KnowledgeGlyph({ index, large = false, compact = false }: { index: number; large?: boolean; compact?: boolean }) {
   const accents = [
-    "bg-[var(--premium-accent)]",
-    "bg-[var(--premium-blue)]",
-    "bg-[#ff755f]",
+    "fill-[var(--premium-accent)]",
+    "fill-[var(--premium-blue)]",
+    "fill-[#ff755f]",
   ];
+  const accent = accents[index % accents.length];
 
   return (
     <span
       className={[
-        "relative grid shrink-0 place-items-center overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] shadow-[0_10px_22px_rgba(17,19,21,0.08)]",
+        "relative grid shrink-0 place-items-center overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)]",
         compact ? "size-10" : large ? "size-14" : "size-12",
       ].join(" ")}
       aria-hidden="true"
     >
-      <span className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(255,255,255,0.2))] dark:bg-[linear-gradient(135deg,rgba(255,255,255,0.1),rgba(255,255,255,0.035))]" />
-      <span className="relative block h-[58%] w-[48%] translate-x-1 rounded-[5px] border border-[var(--premium-line-strong)] bg-[var(--premium-panel)] shadow-[0_6px_14px_rgba(17,19,21,0.08)]" />
-      <span className="absolute left-[24%] top-[25%] block h-[58%] w-[48%] -translate-x-1 rounded-[5px] border border-[var(--premium-line-strong)] bg-[var(--premium-elevated)] shadow-[0_8px_18px_rgba(17,19,21,0.1)]" />
-      <span className={["absolute bottom-2 h-1 w-5 rounded-full", accents[index % accents.length]].join(" ")} />
+      <svg
+        viewBox="0 0 40 40"
+        className={compact ? "size-[30px]" : large ? "size-[38px]" : "size-[34px]"}
+        fill="none"
+      >
+        <circle cx="20" cy="20" r="15" className="fill-[var(--premium-ink-soft)]/[0.06]" />
+        <circle cx="20" cy="20" r="9" className="stroke-[var(--premium-ink-soft)]/20" strokeWidth="1.4" strokeDasharray="4 3" />
+        <circle cx="20" cy="20" r="5.5" className={accent} />
+        <circle cx="30" cy="13" r="2.8" className="fill-[var(--premium-ink-soft)]/15" />
+        <circle cx="10" cy="27" r="2.2" className="fill-[var(--premium-ink-soft)]/25" />
+        <circle cx="28" cy="28" r="1.8" className="fill-[var(--premium-ink-soft)]/12" />
+      </svg>
     </span>
   );
 }
