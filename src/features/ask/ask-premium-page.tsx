@@ -2,27 +2,20 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  BookOpen,
   Check,
   Database,
-  Download,
   Edit3,
   Folder,
   Loader2,
-  MessageSquare,
-  Moon,
   MoreHorizontal,
   PanelRight,
   Plus,
-  Search,
-  Settings,
   Sparkles,
-  Sun,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PremiumRail } from "@/components/app/premium-rail";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
@@ -83,14 +76,6 @@ const ANSWER_MODES: Array<{ value: ConversationAnswerMode; label: string; detail
   { value: "STRICT", label: "严格回答", detail: "证据门槛最高，证据不足时拒答" },
   { value: "SUMMARY", label: "摘要回答", detail: "更短输出，保留核心证据" },
   { value: "EXPLORE", label: "探索回答", detail: "允许建议方向，事实仍需引用" },
-];
-
-const navItems = [
-  { href: "/ask", label: "Ask", icon: MessageSquare },
-  { href: "/library", label: "Library", icon: BookOpen },
-  { href: "/search", label: "Search", icon: Search },
-  { href: "/imports", label: "Imports", icon: Download },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function AskPremiumPage() {
@@ -717,7 +702,7 @@ export function AskPremiumPage() {
 
       <div className="relative min-h-screen p-0 lg:p-6">
         <div className="ask-premium-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[72px_300px_minmax(0,1fr)_350px] lg:grid-rows-none lg:rounded-[8px]">
-          <Rail theme={theme} onThemeChange={setTheme} />
+          <PremiumRail theme={theme} onThemeChange={setTheme} />
 
           <aside className="ask-premium-history flex min-h-0 flex-col border-b border-black/10 bg-[#f7f7f2]/75 p-4 lg:border-b-0 lg:border-r">
             <p className="ask-premium-muted mb-4 flex items-center justify-between text-xs font-black text-slate-500">
@@ -949,65 +934,6 @@ export function AskPremiumPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function Rail({ theme, onThemeChange }: { theme: ThemeMode; onThemeChange: (theme: ThemeMode) => void }) {
-  return (
-    <aside className="flex items-center justify-between gap-3 overflow-x-auto border-b border-white/10 bg-[#111315] px-4 py-3 text-white lg:w-[72px] lg:flex-col lg:justify-start lg:overflow-visible lg:border-b-0 lg:border-r lg:px-3 lg:py-4">
-      <Link href="/ask" className="grid size-12 shrink-0 place-items-center rounded-[8px] border border-white/20 bg-white text-xl font-black leading-none" aria-label="Anchr 首页">
-        <span style={{ color: "#111315" }}>A</span>
-      </Link>
-      <nav className="flex gap-2 lg:mt-3 lg:grid lg:gap-2.5">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = item.href === "/ask";
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={[
-                "relative grid size-11 shrink-0 place-items-center rounded-[8px] transition hover:-translate-y-0.5 hover:bg-white/10",
-                active ? "bg-white/10 text-white" : "text-white/65 hover:text-white",
-              ].join(" ")}
-              aria-label={item.label}
-              title={item.label}
-            >
-              {active ? <span className="absolute -left-3 h-6 w-1 rounded-full bg-[#bbff66]" /> : null}
-              <Icon size={20} strokeWidth={1.9} />
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="ml-auto hidden h-20 w-11 shrink-0 grid-rows-2 overflow-hidden rounded-full border border-white/15 bg-white/10 lg:mt-auto lg:ml-0 lg:grid">
-        <button
-          type="button"
-          className={[
-            "grid place-items-center transition",
-            theme === "light" ? "bg-white text-blue-600" : "text-white/70 hover:bg-white/10 hover:text-white",
-          ].join(" ")}
-          aria-label="浅色主题"
-          aria-pressed={theme === "light"}
-          title="浅色主题"
-          onClick={() => onThemeChange("light")}
-        >
-          <Sun size={16} strokeWidth={1.9} />
-        </button>
-        <button
-          type="button"
-          className={[
-            "grid place-items-center transition",
-            theme === "dark" ? "bg-white text-blue-600" : "text-white/70 hover:bg-white/10 hover:text-white",
-          ].join(" ")}
-          aria-label="深色主题"
-          aria-pressed={theme === "dark"}
-          title="深色主题"
-          onClick={() => onThemeChange("dark")}
-        >
-          <Moon size={15} strokeWidth={1.9} />
-        </button>
-      </div>
-    </aside>
   );
 }
 
@@ -1258,7 +1184,7 @@ function PremiumConversationItem({
           event.preventDefault();
           onSubmitRename();
         }}
-        className="ask-premium-rename rounded-[8px] bg-white/80 p-2"
+        className="ask-premium-rename rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] p-2"
       >
         <input
           value={renameValue}
@@ -1267,7 +1193,7 @@ function PremiumConversationItem({
             if (event.key === "Escape") onCancelRename();
           }}
           autoFocus
-          className="h-10 w-full rounded-[8px] border border-blue-200 bg-white px-2 text-sm outline-none focus:border-blue-500"
+          className="h-10 w-full rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] px-2 text-sm text-[var(--premium-ink)] outline-none placeholder:text-[var(--premium-muted)] focus:border-[var(--premium-focus-line)] focus:shadow-[0_0_0_3px_var(--premium-focus-ring)]"
         />
       </form>
     );
@@ -1342,7 +1268,7 @@ function PremiumChatBubble({
   if (isUser) {
     return (
       <article data-turn-id={message.turnId} className="flex justify-end">
-        <div className="ask-premium-user-bubble max-w-[760px] rounded-[8px] bg-blue-600 px-5 py-4 text-[15px] font-semibold leading-7 text-white shadow-[0_18px_42px_rgba(49,88,255,0.24)]">
+        <div className="ask-premium-user-bubble max-w-[760px] rounded-[8px] border border-black/10 bg-white/80 px-5 py-4 text-[15px] font-semibold leading-7 text-[#111315] shadow-[0_14px_38px_rgba(17,19,21,0.1)] backdrop-blur-xl">
           {message.content}
         </div>
       </article>
@@ -1351,7 +1277,7 @@ function PremiumChatBubble({
 
   return (
     <article data-turn-id={message.turnId} className={["flex gap-3", highlighted ? "rounded-[10px] ring-2 ring-blue-500/70" : ""].join(" ")}>
-      <div className="ask-premium-assistant-avatar grid size-10 shrink-0 place-items-center rounded-full bg-blue-600 text-white shadow-[0_14px_32px_rgba(49,88,255,0.25)]">
+      <div className="ask-premium-assistant-avatar grid size-10 shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-[0_14px_32px_rgba(17,19,21,0.2)]">
         <Sparkles size={18} />
       </div>
       <div className="ask-premium-assistant-card min-w-0 flex-1 rounded-[8px] border border-black/10 bg-white/80 p-5 shadow-[0_14px_38px_rgba(17,19,21,0.1)] backdrop-blur-xl">

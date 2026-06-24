@@ -83,7 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
   }, [collapsed, sidebarHydrated]);
 
-  if (isAskPage) {
+  if (isAskPage || isLibraryPage) {
     return <>{children}</>;
   }
 

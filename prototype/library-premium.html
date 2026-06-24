@@ -203,7 +203,6 @@
       .hero {
         position: relative;
         display: grid;
-        grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.75fr);
         gap: 24px;
         min-height: 300px;
         border-bottom: 1px solid var(--line);
@@ -338,94 +337,6 @@
         transform: translateY(-2px);
       }
 
-      .hero-panel {
-        position: relative;
-        z-index: 1;
-        display: grid;
-        min-height: 252px;
-        grid-template-rows: auto 1fr auto;
-        gap: 18px;
-        overflow: hidden;
-        border: 1px solid rgba(16, 18, 20, 0.2);
-        border-radius: var(--radius);
-        background: var(--ink);
-        padding: 18px;
-        color: #fff;
-        box-shadow: var(--tight-shadow);
-        animation: revealMask 900ms var(--ease) 90ms both;
-      }
-
-      .hero-panel .label {
-        color: rgba(255, 255, 255, 0.68);
-      }
-
-      .radar {
-        position: relative;
-        min-height: 130px;
-        overflow: hidden;
-        border-radius: var(--radius);
-        background:
-          radial-gradient(circle at center, transparent 0 17%, rgba(255, 255, 255, 0.1) 18% 18.8%, transparent 19% 36%, rgba(255, 255, 255, 0.1) 37% 37.8%, transparent 38%),
-          linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-        background-size: auto, 28px 28px, 28px 28px;
-      }
-
-      .radar::before {
-        position: absolute;
-        inset: -40% 50% 50% -40%;
-        background: conic-gradient(from 0deg, rgba(198, 255, 74, 0), rgba(198, 255, 74, 0.48), rgba(198, 255, 74, 0));
-        transform-origin: 100% 100%;
-        animation: sweep 5s linear infinite;
-        content: "";
-      }
-
-      .radar i {
-        position: absolute;
-        width: 10px;
-        height: 10px;
-        border-radius: var(--pill);
-        background: var(--acid);
-        box-shadow: 0 0 0 7px rgba(198, 255, 74, 0.16);
-      }
-
-      .radar i:nth-child(1) {
-        top: 24px;
-        left: 20%;
-      }
-
-      .radar i:nth-child(2) {
-        top: 68px;
-        left: 58%;
-      }
-
-      .radar i:nth-child(3) {
-        top: 38px;
-        right: 18%;
-      }
-
-      .hero-metrics {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-      }
-
-      .hero-metrics span {
-        min-height: 64px;
-        border-radius: var(--radius);
-        background: rgba(255, 255, 255, 0.08);
-        padding: 10px;
-        color: rgba(255, 255, 255, 0.72);
-        font-size: 11px;
-      }
-
-      .hero-metrics b {
-        display: block;
-        margin-bottom: 6px;
-        color: #fff;
-        font-size: 20px;
-      }
-
       .content {
         display: grid;
         min-height: 0;
@@ -527,9 +438,9 @@
       .kb-card {
         position: relative;
         display: grid;
-        min-height: 246px;
+        min-height: 328px;
         grid-template-rows: auto 1fr auto;
-        gap: 18px;
+        gap: 14px;
         overflow: hidden;
         border: 1px solid var(--line);
         border-radius: var(--radius);
@@ -637,33 +548,37 @@
       }
 
       .kb-body h3 {
-        margin: 0 0 10px;
+        margin: 0 0 8px;
         overflow-wrap: anywhere;
         font-size: 22px;
         line-height: 1.08;
       }
 
       .kb-body p {
-        min-height: 54px;
+        display: -webkit-box;
+        min-height: 48px;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
         margin: 0;
         color: var(--ink-soft);
         font-size: 14px;
-        line-height: 1.75;
+        line-height: 1.7;
       }
 
       .stats {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
         gap: 8px;
-        margin-top: 18px;
+        margin-top: 14px;
       }
 
       .stats span {
-        min-height: 58px;
+        min-height: 54px;
         border: 1px solid rgba(16, 18, 20, 0.09);
         border-radius: var(--radius);
         background: rgba(255, 255, 255, 0.54);
-        padding: 9px;
+        padding: 8px;
         color: var(--muted);
         font-size: 11px;
       }
@@ -673,6 +588,101 @@
         margin-bottom: 4px;
         color: var(--ink);
         font-size: 18px;
+      }
+
+      .ingestion-card {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+        border: 1px solid rgba(16, 18, 20, 0.1);
+        border-radius: var(--radius);
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.32)),
+          repeating-linear-gradient(135deg, rgba(16, 18, 20, 0.025) 0 1px, transparent 1px 12px);
+        padding: 10px;
+      }
+
+      .ingestion-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .ingestion-title {
+        min-width: 0;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .ingestion-title b {
+        display: block;
+        overflow: hidden;
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 900;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .ingestion-badge {
+        flex: 0 0 auto;
+        border-radius: var(--pill);
+        background: rgba(198, 255, 74, 0.28);
+        padding: 5px 8px;
+        color: var(--acid-deep);
+        font-size: 10px;
+        font-weight: 900;
+      }
+
+      .ingestion-badge.failed {
+        background: rgba(255, 117, 95, 0.16);
+        color: #9c2b1d;
+      }
+
+      .ingestion-bar {
+        display: grid;
+        height: 8px;
+        grid-template-columns: var(--success) var(--failure) var(--running);
+        overflow: hidden;
+        border-radius: var(--pill);
+        background: rgba(16, 18, 20, 0.08);
+      }
+
+      .ingestion-bar i:nth-child(1) {
+        background: var(--acid);
+      }
+
+      .ingestion-bar i:nth-child(2) {
+        background: var(--coral);
+      }
+
+      .ingestion-bar i:nth-child(3) {
+        background: var(--blue);
+      }
+
+      .ingestion-counts {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+      }
+
+      .ingestion-counts span {
+        min-width: 0;
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.48);
+        padding: 7px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .ingestion-counts b {
+        display: block;
+        margin-bottom: 2px;
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 900;
       }
 
       .kb-bottom {
@@ -712,7 +722,7 @@
 
       .create-card {
         display: grid;
-        min-height: 246px;
+        min-height: 328px;
         place-items: center;
         border: 1px dashed rgba(16, 18, 20, 0.28);
         border-radius: var(--radius);
@@ -998,12 +1008,6 @@
         }
       }
 
-      @keyframes sweep {
-        to {
-          transform: rotate(1turn);
-        }
-      }
-
       @keyframes grow {
         from {
           width: 18%;
@@ -1041,7 +1045,6 @@
       }
 
       @media (max-width: 1180px) {
-        .hero,
         .content {
           grid-template-columns: 1fr;
         }
@@ -1116,8 +1119,8 @@
         }
 
         .stats,
-        .source-types,
-        .hero-metrics {
+        .ingestion-counts,
+        .source-types {
           grid-template-columns: 1fr 1fr;
         }
       }
@@ -1132,7 +1135,6 @@
           height: 42px;
         }
 
-        .hero-panel,
         .kb-card,
         .panel {
           padding: 14px;
@@ -1157,8 +1159,8 @@
         }
 
         .stats,
-        .source-types,
-        .hero-metrics {
+        .ingestion-counts,
+        .source-types {
           grid-template-columns: 1fr;
         }
       }
@@ -1224,27 +1226,11 @@
             <section class="hero-copy" aria-label="知识库概览">
               <div>
                 <p class="eyebrow"><span class="pulse" aria-hidden="true"></span>LIBRARY / KNOWLEDGE ASSET COMMAND</p>
-                <h1>让每个知识库都能被看见、被追踪、被提问。</h1>
-                <p>重构后的 Library 不再只是卡片列表，而是知识资产的控制台：搜索、创建、状态、引用和最近问题在同一个决策视野里。</p>
+                <h2>让每个知识库都能被看见、被追踪、被提问。</h2>
               </div>
               <div class="hero-actions">
                 <a class="button" href="#">新建知识库</a>
                 <a class="soft-button" href="#">导入文件</a>
-                <a class="soft-button" href="#">查看最近引用</a>
-              </div>
-            </section>
-
-            <section class="hero-panel" aria-label="知识库扫描状态">
-              <p class="label">LIVE INDEX MAP <span>ACTIVE</span></p>
-              <div class="radar" aria-hidden="true">
-                <i></i>
-                <i></i>
-                <i></i>
-              </div>
-              <div class="hero-metrics">
-                <span><b>24</b>知识库</span>
-                <span><b>1.8k</b>文档</span>
-                <span><b>92k</b>片段</span>
               </div>
             </section>
           </header>
@@ -1257,7 +1243,7 @@
                     <circle cx="11" cy="11" r="7" />
                     <path d="m20 20-3.5-3.5" />
                   </svg>
-                  <input aria-label="搜索知识库" placeholder="搜索知识库、文档主题或片段标签" />
+                  <input aria-label="搜索知识库" placeholder="搜索知识库" />
                   <button class="button" type="submit" aria-label="搜索">
                     <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M5 12h14" />
@@ -1316,11 +1302,25 @@
                     <div class="stats">
                       <span><b>146</b>文档</span>
                       <span><b>8.2k</b>片段</span>
-                      <span><b>2h</b>更新</span>
+                    </div>
+                    <div class="ingestion-card">
+                      <div class="ingestion-head">
+                        <span class="ingestion-title"><b>2026-06-24 09:30</b>最近导入</span>
+                        <span class="ingestion-badge">SUCCESS</span>
+                      </div>
+                      <div class="ingestion-bar" style="--success: 8fr; --failure: 1fr; --running: 1fr" aria-label="最近导入成功 8，失败 1，运行中 1">
+                        <i></i><i></i><i></i>
+                      </div>
+                      <div class="ingestion-counts">
+                        <span><b>10</b>总条目</span>
+                        <span><b>8</b>成功</span>
+                        <span><b>1</b>失败</span>
+                        <span><b>1</b>运行中</span>
+                      </div>
                     </div>
                   </div>
                   <div class="kb-bottom">
-                    <small>更新于 2026-06-23 14:30</small>
+                    <small>统计更新于 2026-06-24 09:30</small>
                     <a class="ask-link" href="#">进入提问
                       <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>
                     </a>
@@ -1343,11 +1343,25 @@
                     <div class="stats">
                       <span><b>88</b>文档</span>
                       <span><b>5.6k</b>片段</span>
-                      <span><b>1d</b>更新</span>
+                    </div>
+                    <div class="ingestion-card">
+                      <div class="ingestion-head">
+                        <span class="ingestion-title"><b>2026-06-22 18:04</b>最近导入</span>
+                        <span class="ingestion-badge">SUCCESS</span>
+                      </div>
+                      <div class="ingestion-bar" style="--success: 5fr; --failure: 0fr; --running: 0fr" aria-label="最近导入成功 5，失败 0，运行中 0">
+                        <i></i><i></i><i></i>
+                      </div>
+                      <div class="ingestion-counts">
+                        <span><b>5</b>总条目</span>
+                        <span><b>5</b>成功</span>
+                        <span><b>0</b>失败</span>
+                        <span><b>0</b>运行中</span>
+                      </div>
                     </div>
                   </div>
                   <div class="kb-bottom">
-                    <small>更新于 2026-06-22 18:04</small>
+                    <small>统计更新于 2026-06-22 18:04</small>
                     <a class="ask-link" href="#">进入提问
                       <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>
                     </a>
@@ -1371,11 +1385,25 @@
                     <div class="stats">
                       <span><b>234</b>文档</span>
                       <span><b>14k</b>片段</span>
-                      <span><b>3d</b>更新</span>
+                    </div>
+                    <div class="ingestion-card">
+                      <div class="ingestion-head">
+                        <span class="ingestion-title"><b>2026-06-20 09:12</b>最近导入</span>
+                        <span class="ingestion-badge failed">FAILED</span>
+                      </div>
+                      <div class="ingestion-bar" style="--success: 17fr; --failure: 7fr; --running: 0fr" aria-label="最近导入成功 17，失败 7，运行中 0">
+                        <i></i><i></i><i></i>
+                      </div>
+                      <div class="ingestion-counts">
+                        <span><b>24</b>总条目</span>
+                        <span><b>17</b>成功</span>
+                        <span><b>7</b>失败</span>
+                        <span><b>0</b>运行中</span>
+                      </div>
                     </div>
                   </div>
                   <div class="kb-bottom">
-                    <small>更新于 2026-06-20 09:12</small>
+                    <small>统计更新于 2026-06-20 09:12</small>
                     <a class="ask-link" href="#">进入提问
                       <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>
                     </a>
@@ -1450,7 +1478,7 @@
 
               <section class="panel light" aria-label="知识库健康度">
                 <div class="health">
-                  <p class="label">LIBRARY HEALTH <span>SYNCED</span></p>
+                  <p class="label">LIBRARY HEALTH <span>COMING SOON</span></p>
                   <div class="health-main">
                     <strong>92%</strong>
                     <span>片段索引、最近导入与可问答状态综合评分。</span>

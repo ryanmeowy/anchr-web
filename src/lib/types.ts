@@ -26,6 +26,64 @@ export type KnowledgeBase = {
   updatedAt?: string;
 };
 
+export type KnowledgeBaseQueryRequest = {
+  keyword?: string;
+  status?: string;
+  updateAfter?: string;
+  updateBefore?: string;
+  page?: number;
+  size?: number;
+};
+
+export type KnowledgeBaseUpdateRequest = {
+  name: string;
+  description?: string;
+};
+
+export type KnowledgeBaseListResponse = PagedList<KnowledgeBase>;
+
+export type KnowledgeBaseStats = {
+  kbId: string;
+  documentCount: number;
+  segmentCount: number;
+  lastIngestedAt?: string | null;
+  lastIngestionStatus?: string | null;
+  lastIngestionTotalCount: number;
+  lastIngestionSuccessCount: number;
+  lastIngestionFailureCount: number;
+  lastIngestionRunningCount: number;
+  updatedAt?: string | null;
+};
+
+export type KnowledgeBaseHealthDocuments = {
+  total: number;
+  indexed: number;
+  pending: number;
+  failed: number;
+};
+
+export type KnowledgeBaseHealthSegments = {
+  total: number;
+  indexed: number;
+};
+
+export type KnowledgeBaseHealthSourceType = {
+  type: string;
+  label: string;
+  count: number;
+  percentage: number;
+};
+
+export type KnowledgeBaseHealth = {
+  kbId: string;
+  kbName: string;
+  status: string;
+  score: number;
+  documents: KnowledgeBaseHealthDocuments;
+  segments: KnowledgeBaseHealthSegments;
+  sourceTypes: KnowledgeBaseHealthSourceType[];
+};
+
 export type DocumentAsset = {
   id: string;
   kbId: string;

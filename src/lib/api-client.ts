@@ -19,6 +19,11 @@ import type {
   IngestionTaskList,
   IngestionTask,
   KnowledgeBase,
+  KnowledgeBaseHealth,
+  KnowledgeBaseListResponse,
+  KnowledgeBaseQueryRequest,
+  KnowledgeBaseStats,
+  KnowledgeBaseUpdateRequest,
   PagedList,
   PreviewSegment,
   RecentCitationList,
@@ -219,14 +224,27 @@ export const apiClient = {
   recentDocument: (limit = 10, cursor?: string | null) =>
     request<RecentDocumentList>(`/api/v1/activity/recent-document?${activityQuery(limit, cursor)}`),
   listKnowledgeBases: (page = 1, size = 20) =>
-    request<PagedList<KnowledgeBase>>(`/api/v1/kbs?page=${page}&size=${size}`),
-  searchKnowledgeBases: (query: string, limit = 50) => {
-    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    request<PagedList<KnowledgeBase>>("/api/v1/kbs/search", { method: "POST", body: { page, size, status: "0" } }),
+  searchKnowledgeBases: async (query: string, limit = 50) => {
+    const result = await request<KnowledgeBaseListResponse>("/api/v1/kbs/search", {
+      method: "POST",
+      body: { keyword: query, page: 1, size: limit, status: "0" },
+    });
 
-    return request<KnowledgeBase[]>(`/api/v1/kbs/search?${params.toString()}`);
+    return result.items;
   },
+  queryKnowledgeBases: (body: KnowledgeBaseQueryRequest) =>
+    request<KnowledgeBaseListResponse>("/api/v1/kbs/search", { method: "POST", body }),
+  getKnowledgeBaseStats: (kbIds: string[]) =>
+    request<KnowledgeBaseStats[]>("/api/v1/kbs/stats", { method: "POST", body: { kbIds } }),
+  getKnowledgeBaseHealth: (kbId: string) =>
+    request<KnowledgeBaseHealth>(`/api/v1/kbs/${encodeURIComponent(kbId)}/health`),
   createKnowledgeBase: (body: { name: string; description?: string }) =>
     request<KnowledgeBase>("/api/v1/kbs", { method: "POST", body }),
+  updateKnowledgeBase: (kbId: string, body: KnowledgeBaseUpdateRequest) =>
+    request<KnowledgeBase>(`/api/v1/kbs/${encodeURIComponent(kbId)}`, { method: "PATCH", body }),
+  archiveKnowledgeBase: (kbId: string) =>
+    request<null>(`/api/v1/kbs/${encodeURIComponent(kbId)}`, { method: "DELETE" }),
   listDocuments: (kbId: string, page = 1, size = 20) =>
     request<PagedList<DocumentAsset>>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/documents?page=${page}&size=${size}`,

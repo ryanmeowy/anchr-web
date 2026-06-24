@@ -1,5 +1,5 @@
-import { LibraryPage } from "@/features/library/library-page";
+import { LibraryPremiumPage } from "@/features/library/library-premium-page";
 
 export default function Page() {
-  return <LibraryPage />;
+  return <LibraryPremiumPage />;
 }
