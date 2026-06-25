@@ -683,6 +683,12 @@ function ConfigPanel({
   const paramItems = paramsQuery.data?.params ?? EMPTY_PARAMS;
 
   useEffect(() => {
+    if (!testResult) return;
+    const timer = window.setTimeout(() => setTestResult(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [testResult]);
+
+  useEffect(() => {
     if (isNew || !config) {
       setBaseUrl("");
       setApiKey("");
@@ -1054,6 +1060,12 @@ function StoragePanel() {
       initialized.current = true;
     }
   }, [configQuery.data]);
+
+  useEffect(() => {
+    if (!testResult) return;
+    const timer = window.setTimeout(() => setTestResult(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [testResult]);
 
   const clearFeedback = () => {
     setSaved(false);
