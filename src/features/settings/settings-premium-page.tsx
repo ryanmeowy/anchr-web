@@ -46,13 +46,13 @@ const FORM_FIELD_CLASS = "settings-form-field";
 const PANEL_CLASS =
   "rounded-[8px] border border-[var(--premium-line)] bg-[rgba(255,253,245,0.76)] p-3 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl dark:bg-[var(--premium-panel)]";
 const BUTTON_PRIMARY_CLASS =
-  "inline-flex min-h-[34px] items-center justify-center gap-2 rounded-full border-0 bg-[var(--premium-ink)] px-3.5 text-[12px] font-black leading-none text-white shadow-[0_16px_38px_rgba(16,18,20,0.2)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] disabled:translate-y-0 disabled:opacity-50";
+  "settings-primary-action inline-flex min-h-[34px] items-center justify-center gap-2 rounded-full border-0 bg-[var(--premium-ink)] px-3.5 text-[12px] font-black leading-none text-white shadow-[0_16px_38px_rgba(16,18,20,0.2)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] disabled:translate-y-0 disabled:opacity-50";
 const BUTTON_SECONDARY_CLASS =
-  "inline-flex min-h-[34px] items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[rgba(255,253,245,0.7)] px-2.5 text-[12px] font-black leading-none text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:opacity-50 dark:bg-[var(--premium-panel-strong)]";
+  "settings-secondary-action inline-flex min-h-[34px] items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[rgba(255,253,245,0.7)] px-2.5 text-[12px] font-black leading-none text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:opacity-50 dark:bg-[var(--premium-panel-strong)]";
 const SUCCESS_PILL_CLASS =
-  "inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[rgba(187,255,102,0.28)] px-2.5 text-[11px] font-black text-[#426b09]";
+  "settings-success-pill inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[rgba(187,255,102,0.28)] px-2.5 text-[11px] font-black text-[#426b09]";
 const MUTED_PILL_CLASS =
-  "inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--premium-line)] bg-[rgba(255,253,245,0.7)] px-2.5 text-[11px] font-black text-[var(--premium-muted)] dark:bg-[var(--premium-panel-strong)]";
+  "settings-muted-pill inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--premium-line)] bg-[rgba(255,253,245,0.7)] px-2.5 text-[11px] font-black text-[var(--premium-muted)] dark:bg-[var(--premium-panel-strong)]";
 const ACTION_BUTTON_LABEL_CLASS =
   "block max-w-full truncate text-center text-[12px] font-black leading-none";
 const ENABLE_BUTTON_LABEL_CLASS =
@@ -522,7 +522,7 @@ function CapabilitySelector({
                 className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-left"
                 aria-pressed={active}
               >
-                <span className="grid size-[34px] place-items-center rounded-[8px] bg-[var(--premium-ink)] text-[11px] font-black text-white">
+                <span className="settings-capability-icon grid size-[34px] place-items-center rounded-[8px] bg-[var(--premium-ink)] text-[11px] font-black text-white">
                   {option.code}
                 </span>
                 <span className="min-w-0">
@@ -530,7 +530,7 @@ function CapabilitySelector({
                   <span className="block truncate text-xs text-[var(--premium-muted)]">{option.description}</span>
                 </span>
                 <span className="grid size-8 place-items-center" aria-label={enabled ? "已启用" : "未启用"} title={enabled ? "已启用" : "未启用"}>
-                  <span className={enabled ? "size-2 rounded-full bg-[#426b09] shadow-[0_0_0_6px_rgba(187,255,102,0.2)]" : "size-2 rounded-full bg-[var(--premium-muted)]/40"} />
+                  <span className={enabled ? "size-2 rounded-full bg-[#426b09]" : "size-2 rounded-full bg-[var(--premium-muted)]/40"} />
                 </span>
               </button>
 
@@ -566,13 +566,14 @@ function CapabilitySelector({
                 </span>
               </label>
 
-              <div className="text-[11px] font-black text-[var(--premium-muted)]">
+              <div className="settings-current-enabled text-[11px] font-black text-[var(--premium-muted)]">
                 当前启用 <strong className="text-[var(--premium-ink)]">{enabled?.modelName || enabled?.baseUrl || (configs.length > 0 ? "未启用" : "未配置")}</strong>
               </div>
 
               <button
                 type="button"
                 disabled={!selectedConfig || !canEnable || isCapabilityEnabling}
+                data-enable-state={isSelectedConfigEnabling ? "loading" : canEnable ? "available" : selectedConfig ? "current" : "empty"}
                 onClick={() => {
                   onTypeChange(option.value);
                   if (selectedConfig) {
@@ -580,7 +581,7 @@ function CapabilitySelector({
                     onEnable(option.value, selectedConfig.id);
                   }
                 }}
-                className="inline-flex min-h-[30px] w-full items-center justify-center rounded-full border border-[rgba(49,88,255,0.24)] bg-[var(--premium-ink)] px-3 text-[11px] font-black text-white transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] disabled:border-[rgba(66,107,9,0.24)] disabled:bg-[rgba(187,255,102,0.22)] disabled:text-[#426b09] disabled:opacity-100"
+                className="settings-enable-button inline-flex min-h-[30px] w-full items-center justify-center rounded-full border border-[rgba(49,88,255,0.24)] bg-[var(--premium-ink)] px-3 text-[11px] font-black text-white transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] disabled:border-[rgba(66,107,9,0.24)] disabled:bg-[rgba(187,255,102,0.22)] disabled:text-[#426b09] disabled:opacity-100"
               >
                 <span className={ENABLE_BUTTON_LABEL_CLASS}>
                   {isSelectedConfigEnabling ? "启用中..." : canEnable ? "启用选中模型" : selectedConfig ? "当前已启用" : "暂无可启用模型"}
@@ -864,7 +865,7 @@ function RuntimeStatusPanel({
       </div>
 
       <div className="grid gap-3">
-        <div className="grid gap-2 rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
+        <div className="settings-status-card grid gap-2 rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
           <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
             <span>模型启用状态</span>
             <strong className="text-[#426b09]">{enabledCount}/4 已启用</strong>
@@ -885,9 +886,10 @@ function RuntimeStatusPanel({
                 <div
                   key={option.value}
                   className={[
-                    "flex items-center justify-between gap-3 rounded-[8px] p-2 text-xs font-black",
+                    "settings-status-row flex items-center justify-between gap-3 rounded-[8px] p-2 text-xs font-black",
                     rowStatusClass,
                   ].join(" ")}
+                  data-status={enabled ? "enabled" : configured ? "disabled" : "empty"}
                 >
                   <span className="shrink-0 text-[var(--premium-muted)]">{option.label}</span>
                   <strong className={["min-w-0 text-right [overflow-wrap:anywhere]", statusClass].join(" ")}>
@@ -899,14 +901,14 @@ function RuntimeStatusPanel({
           </div>
         </div>
 
-        <div className="rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
+        <div className="settings-status-card rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
           <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
             <span>存储配置状态</span>
             <strong className="text-[#426b09]">{storageConfigured ? "已配置" : "未配置"}</strong>
           </div>
         </div>
 
-        <div className="rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
+        <div className="settings-status-card rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
           <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
             <span>Token 配置状态</span>
             <strong className="text-[#426b09]">{token ? "已启用" : "未配置"}</strong>

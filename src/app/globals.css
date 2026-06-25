@@ -595,6 +595,192 @@ a {
   background: var(--premium-panel);
 }
 
+.settings-premium-page[data-premium-theme="dark"] {
+  --premium-bg: #070908;
+  --premium-bg-grid: rgba(244, 247, 236, 0.055);
+  --premium-line: rgba(255, 255, 255, 0.1);
+  --premium-line-strong: rgba(255, 255, 255, 0.14);
+  --premium-panel: rgba(12, 14, 13, 0.86);
+  --premium-panel-strong: rgba(15, 17, 16, 0.94);
+  --premium-panel-muted: rgba(18, 20, 19, 0.74);
+  --premium-elevated: rgba(14, 16, 15, 0.98);
+  --premium-glow-primary: rgba(187, 255, 102, 0.18);
+  --premium-glow-secondary: rgba(49, 88, 255, 0.2);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .ask-premium-glow-bg {
+  background:
+    radial-gradient(circle at 80% 8%, var(--premium-glow-primary), transparent 28rem),
+    radial-gradient(circle at 15% 88%, var(--premium-glow-secondary), transparent 30rem),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.035), transparent 34rem);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .ask-premium-shell {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(10, 12, 11, 0.76);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .ask-premium-main {
+  background:
+    linear-gradient(90deg, rgba(13, 15, 14, 0.92), rgba(13, 15, 14, 0.64)),
+    radial-gradient(circle at 84% 4%, var(--premium-glow-primary), transparent 27rem),
+    radial-gradient(circle at 10% 86%, var(--premium-glow-secondary), transparent 30rem);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .ask-premium-hero {
+  background: transparent;
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-field {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(12, 14, 13, 0.9);
+  color: var(--premium-ink);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-field:focus {
+  border-color: var(--premium-focus-line);
+  background: rgba(16, 18, 17, 0.98);
+}
+
+.settings-premium-page[data-premium-theme="dark"] aside[aria-label="能力配置导航"] article {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(15, 17, 16, 0.74);
+}
+
+.settings-premium-page[data-premium-theme="dark"] aside[aria-label="能力配置导航"] article:hover {
+  border-color: rgba(187, 255, 102, 0.24);
+  background: rgba(18, 20, 19, 0.9);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-capability-icon {
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  background: rgba(244, 247, 236, 0.94);
+  color: #111315;
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-current-enabled strong {
+  color: var(--premium-ink);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-primary-action {
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  background: rgba(244, 247, 236, 0.94);
+  color: #111315;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-primary-action:hover {
+  border-color: #fff;
+  background: #fff;
+  color: #111315;
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-primary-action:disabled {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--premium-muted);
+  opacity: 1;
+  box-shadow: none;
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-secondary-action {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(15, 17, 16, 0.92);
+  color: var(--premium-ink-soft);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-secondary-action:hover {
+  border-color: rgba(187, 255, 102, 0.32);
+  background: rgba(187, 255, 102, 0.14);
+  color: var(--premium-accent);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-enable-button {
+  border-color: rgba(255, 255, 255, 0.86);
+  background: rgba(244, 247, 236, 0.94);
+  color: #111315;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.26);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-enable-button:hover {
+  border-color: #fff;
+  background: #fff;
+  color: #111315;
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-enable-button:disabled {
+  opacity: 1;
+  box-shadow: none;
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-enable-button[data-enable-state="current"],
+.settings-premium-page[data-premium-theme="dark"] .settings-enable-button[data-enable-state="loading"] {
+  border-color: rgba(187, 255, 102, 0.28);
+  background: rgba(187, 255, 102, 0.26);
+  color: var(--premium-accent);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-enable-button[data-enable-state="empty"] {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--premium-muted);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-success-pill {
+  border: 1px solid rgba(187, 255, 102, 0.28);
+  background: rgba(187, 255, 102, 0.26);
+  color: var(--premium-accent);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-muted-pill {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--premium-muted);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-status-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(12, 14, 13, 0.82);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-status-card > div:first-child strong {
+  color: var(--premium-accent);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-status-row {
+  border: 1px solid transparent;
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-status-row[data-status="enabled"] {
+  border-color: rgba(187, 255, 102, 0.28);
+  background: rgba(187, 255, 102, 0.26);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-status-row[data-status="disabled"] {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-status-row[data-status="empty"] {
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-status-row[data-status="enabled"] strong {
+  color: var(--premium-accent);
+}
+
+.settings-premium-page[data-premium-theme="dark"] [aria-label="运行状态"] .bg-white\/50:not(.settings-status-card):not(.settings-status-row),
+.settings-premium-page[data-premium-theme="dark"] [aria-label="运行状态"] .bg-white\/65:not(.settings-status-card):not(.settings-status-row),
+.settings-premium-page[data-premium-theme="dark"] [aria-label="存储设置"] .bg-white\/50,
+.settings-premium-page[data-premium-theme="dark"] [aria-label="访问令牌"] .bg-white\/50 {
+  background: rgba(14, 16, 15, 0.78);
+}
+
+.settings-premium-page[data-premium-theme="dark"] [aria-label="运行状态"] .dark\:bg-white\/10:not(.settings-status-row) {
+  background: rgba(255, 255, 255, 0.055);
+}
+
 @media (max-width: 640px) {
   .ask-premium-composer .ask-premium-control-button span {
     max-width: 112px;
