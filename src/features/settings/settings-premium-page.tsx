@@ -123,7 +123,15 @@ function splitParenLabel(label: string) {
 }
 
 function enabledConfig(configs: CapabilityConfig[]) {
-  return configs.find((config) => config.enabled) ?? configs[0] ?? null;
+  return configs.find((config) => config.enabled) ?? null;
+}
+
+function preferredConfig(configs: CapabilityConfig[]) {
+  return enabledConfig(configs) ?? configs[0] ?? null;
+}
+
+function embeddingSwitchAffects(capability: CapabilityName) {
+  return capability === "EMBEDDING" || capability === "MULTI_EMBEDDING";
 }
 
 function PendingNotice({ message }: { message: string }) {
@@ -161,6 +169,8 @@ export function SettingsPremiumPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [pendingEnable, setPendingEnable] = useState<{ capability: CapabilityName; id: number } | null>(null);
+  const [enablingTarget, setEnablingTarget] = useState<{ capability: CapabilityName; id: number } | null>(null);
+  const [enableError, setEnableError] = useState<{ capability: CapabilityName; message: string } | null>(null);
   const [tokenRevision, setTokenRevision] = useState(0);
 
   useEffect(() => {
@@ -176,6 +186,12 @@ export function SettingsPremiumPage() {
     if (!themeHydrated) return;
     applyPremiumTheme(theme);
   }, [theme, themeHydrated]);
+
+  useEffect(() => {
+    if (!enableError) return;
+    const timer = window.setTimeout(() => setEnableError(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [enableError]);
 
   const generationQuery = useQuery({
     queryKey: capabilityQueryKey("GENERATION"),
@@ -220,19 +236,69 @@ export function SettingsPremiumPage() {
       setIsAdding(true);
       return;
     }
-    const selected = enabledConfig(configs);
-    setSelectedId(selected?.id ?? null);
+    if (isAdding) return;
+    setSelectedId((currentSelectedId) => {
+      if (currentSelectedId != null && configs.some((config) => config.id === currentSelectedId)) {
+        return currentSelectedId;
+      }
+      return preferredConfig(configs)?.id ?? null;
+    });
     setIsAdding(false);
-  }, [configs, selectedType]);
+  }, [configs, isAdding]);
+
+  const refreshCapabilityConfigs = useCallback(async (capability: CapabilityName) => {
+    const affectedCapabilities = embeddingSwitchAffects(capability)
+      ? (["EMBEDDING", "MULTI_EMBEDDING"] as CapabilityName[])
+      : [capability];
+
+    await Promise.all(
+      affectedCapabilities.map((affectedCapability) =>
+        queryClient.invalidateQueries({ queryKey: capabilityQueryKey(affectedCapability) }),
+      ),
+    );
+    await Promise.all(
+      affectedCapabilities.map((affectedCapability) =>
+        queryClient.refetchQueries({ queryKey: capabilityQueryKey(affectedCapability), type: "active" }),
+      ),
+    );
+  }, [queryClient]);
+
+  const markCapabilityConfigEnabled = useCallback((capability: CapabilityName, id: number) => {
+    const affectedCapabilities = embeddingSwitchAffects(capability)
+      ? (["EMBEDDING", "MULTI_EMBEDDING"] as CapabilityName[])
+      : [capability];
+
+    affectedCapabilities.forEach((affectedCapability) => {
+      queryClient.setQueryData<CapabilityConfig[]>(capabilityQueryKey(affectedCapability), (currentConfigs) => {
+        if (!currentConfigs) return currentConfigs;
+        return currentConfigs.map((config) => ({
+          ...config,
+          enabled: affectedCapability === capability ? config.id === id : false,
+        }));
+      });
+    });
+  }, [queryClient]);
 
   const enableMutation = useMutation({
     mutationFn: ({ capability, id }: { capability: CapabilityName; id: number }) => apiClient.selectCapabilityConfig(capability, id),
-    onSuccess: async (_, variables) => {
-      await queryClient.invalidateQueries({ queryKey: capabilityQueryKey(variables.capability) });
-      if (variables.capability === "EMBEDDING" || variables.capability === "MULTI_EMBEDDING") {
-        await queryClient.invalidateQueries({ queryKey: capabilityQueryKey("EMBEDDING") });
-        await queryClient.invalidateQueries({ queryKey: capabilityQueryKey("MULTI_EMBEDDING") });
-      }
+    onMutate: (variables) => {
+      setEnablingTarget(variables);
+      setEnableError(null);
+    },
+    onSuccess: (_, variables) => {
+      markCapabilityConfigEnabled(variables.capability, variables.id);
+      void refreshCapabilityConfigs(variables.capability).finally(() => {
+        markCapabilityConfigEnabled(variables.capability, variables.id);
+      });
+    },
+    onError: (error, variables) => {
+      setEnableError({
+        capability: variables.capability,
+        message: getErrorMessage(error, "启用失败，请稍后重试"),
+      });
+    },
+    onSettled: () => {
+      setEnablingTarget(null);
     },
   });
 
@@ -241,7 +307,7 @@ export function SettingsPremiumPage() {
   });
 
   const handleEnable = useCallback((capability: CapabilityName, id: number) => {
-    if (capability === "EMBEDDING" || capability === "MULTI_EMBEDDING") {
+    if (embeddingSwitchAffects(capability)) {
       setPendingEnable({ capability, id });
       return;
     }
@@ -256,7 +322,7 @@ export function SettingsPremiumPage() {
       { capability, id },
       {
         onSuccess: () => {
-          if (capability === "EMBEDDING" || capability === "MULTI_EMBEDDING") {
+          if (embeddingSwitchAffects(capability)) {
             reindexMutation.mutate();
           }
         },
@@ -273,17 +339,6 @@ export function SettingsPremiumPage() {
     }),
     [configsByCapability],
   );
-  const selectedConfigsByCapability = useMemo(
-    () => Object.fromEntries(CAPABILITY_OPTIONS.map((option) => {
-      const capabilityConfigs = configsByCapability[option.value];
-      const activeSelection = option.value === selectedType && !isAdding && selectedId != null
-        ? capabilityConfigs.find((config) => config.id === selectedId)
-        : null;
-      return [option.value, activeSelection ?? enabledConfig(capabilityConfigs)];
-    })) as Record<CapabilityName, CapabilityConfig | null>,
-    [configsByCapability, isAdding, selectedId, selectedType],
-  );
-
   return (
     <div className="premium-theme ask-premium-page settings-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] tracking-normal text-[#111315]" data-theme={theme} data-premium-theme={theme}>
       <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
@@ -328,6 +383,8 @@ export function SettingsPremiumPage() {
                     setIsAdding(false);
                   }}
                   onEnable={handleEnable}
+                  enablingTarget={enablingTarget}
+                  enableError={enableError}
                   onAdd={(type) => {
                     setSelectedType(type);
                     setSelectedId(null);
@@ -342,10 +399,14 @@ export function SettingsPremiumPage() {
                       capability={selectedType}
                       config={selectedConfig}
                       isNew={isAdding}
-                      onSaved={() => void queryClient.invalidateQueries({ queryKey: capabilityQueryKey(selectedType) })}
+                      onSaved={(savedConfig) => {
+                        setSelectedId(savedConfig.id);
+                        setIsAdding(false);
+                      }}
                     />
                     <RuntimeStatusPanel
-                      selectedConfigs={selectedConfigsByCapability}
+                      enabledConfigs={enabledConfigsByCapability}
+                      configsByCapability={configsByCapability}
                       storageConfigured={Boolean(storageStatusQuery.data?.endpoint && storageStatusQuery.data?.bucket)}
                       tokenRevision={tokenRevision}
                     />
@@ -407,6 +468,8 @@ function CapabilitySelector({
   onTypeChange,
   onSelect,
   onEnable,
+  enablingTarget,
+  enableError,
   onAdd,
 }: {
   selectedType: CapabilityName;
@@ -416,6 +479,8 @@ function CapabilitySelector({
   onTypeChange: (type: CapabilityName) => void;
   onSelect: (id: number) => void;
   onEnable: (capability: CapabilityName, id: number) => void;
+  enablingTarget: { capability: CapabilityName; id: number } | null;
+  enableError: { capability: CapabilityName; message: string } | null;
   onAdd: (type: CapabilityName) => void;
 }) {
   return (
@@ -430,9 +495,13 @@ function CapabilitySelector({
           const configs = configsByCapability[option.value];
           const enabled = enabledConfig(configs);
           const active = option.value === selectedType;
-          const selectedConfigId = active && isAdding ? ADD_CONFIG_VALUE : active && selectedId != null ? selectedId : enabled?.id ?? configs[0]?.id ?? "";
-          const selectedConfig = configs.find((config) => config.id === selectedConfigId) ?? enabled ?? configs[0] ?? null;
+          const defaultConfig = enabled ?? configs[0] ?? null;
+          const selectedConfigId = active && isAdding ? ADD_CONFIG_VALUE : active && selectedId != null ? selectedId : defaultConfig?.id ?? "";
+          const selectedConfig = configs.find((config) => config.id === selectedConfigId) ?? defaultConfig;
           const canEnable = Boolean(selectedConfig && !selectedConfig.enabled);
+          const isCapabilityEnabling = enablingTarget?.capability === option.value;
+          const isSelectedConfigEnabling = isCapabilityEnabling && enablingTarget?.id === selectedConfig?.id;
+          const currentEnableError = enableError?.capability === option.value ? enableError.message : null;
 
           return (
             <article
@@ -498,12 +567,12 @@ function CapabilitySelector({
               </label>
 
               <div className="text-[11px] font-black text-[var(--premium-muted)]">
-                当前启用 <strong className="text-[var(--premium-ink)]">{enabled?.modelName || enabled?.baseUrl || "未配置"}</strong>
+                当前启用 <strong className="text-[var(--premium-ink)]">{enabled?.modelName || enabled?.baseUrl || (configs.length > 0 ? "未启用" : "未配置")}</strong>
               </div>
 
               <button
                 type="button"
-                disabled={!selectedConfig || !canEnable}
+                disabled={!selectedConfig || !canEnable || isCapabilityEnabling}
                 onClick={() => {
                   onTypeChange(option.value);
                   if (selectedConfig) {
@@ -513,8 +582,15 @@ function CapabilitySelector({
                 }}
                 className="inline-flex min-h-[30px] w-full items-center justify-center rounded-full border border-[rgba(49,88,255,0.24)] bg-[var(--premium-ink)] px-3 text-[11px] font-black text-white transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] disabled:border-[rgba(66,107,9,0.24)] disabled:bg-[rgba(187,255,102,0.22)] disabled:text-[#426b09] disabled:opacity-100"
               >
-                <span className={ENABLE_BUTTON_LABEL_CLASS}>{canEnable ? "启用选中模型" : selectedConfig ? "当前已启用" : "暂无可启用模型"}</span>
+                <span className={ENABLE_BUTTON_LABEL_CLASS}>
+                  {isSelectedConfigEnabling ? "启用中..." : canEnable ? "启用选中模型" : selectedConfig ? "当前已启用" : "暂无可启用模型"}
+                </span>
               </button>
+              {currentEnableError ? (
+                <div className="rounded-[8px] bg-rose-50 px-2.5 py-2 text-[11px] font-black leading-[1.45] text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+                  {currentEnableError}
+                </div>
+              ) : null}
             </article>
           );
         })}
@@ -533,7 +609,7 @@ function ConfigPanel({
   capability: CapabilityName;
   config: CapabilityConfig | null;
   isNew: boolean;
-  onSaved: () => void;
+  onSaved: (savedConfig: CapabilityConfig) => void;
 }) {
   const queryClient = useQueryClient();
   const option = CAPABILITY_OPTIONS.find((item) => item.value === capability) ?? CAPABILITY_OPTIONS[0];
@@ -605,12 +681,13 @@ function ConfigPanel({
       }
       return apiClient.updateCapabilityConfig(capability, config.id, body);
     },
-    onSuccess: async () => {
+    onSuccess: async (savedConfig) => {
       setApiKey("");
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
       await queryClient.invalidateQueries({ queryKey: capabilityQueryKey(capability) });
-      onSaved();
+      await queryClient.refetchQueries({ queryKey: capabilityQueryKey(capability), type: "active" });
+      onSaved(savedConfig);
     },
   });
 
@@ -763,16 +840,18 @@ function ConfigPanel({
 }
 
 function RuntimeStatusPanel({
-  selectedConfigs,
+  enabledConfigs,
+  configsByCapability,
   storageConfigured,
   tokenRevision,
 }: {
-  selectedConfigs: Record<CapabilityName, CapabilityConfig | null>;
+  enabledConfigs: Record<CapabilityName, CapabilityConfig | null>;
+  configsByCapability: Record<CapabilityName, CapabilityConfig[]>;
   storageConfigured: boolean;
   tokenRevision: number;
 }) {
   const token = useMemo(() => getAccessToken(), [tokenRevision]);
-  const enabledCount = Object.values(selectedConfigs).filter((config) => config?.enabled).length;
+  const enabledCount = Object.values(enabledConfigs).filter(Boolean).length;
 
   return (
     <article className={`${PANEL_CLASS} grid content-start gap-3`} aria-label="运行状态">
@@ -792,19 +871,27 @@ function RuntimeStatusPanel({
           </div>
           <div className="grid gap-2">
             {CAPABILITY_OPTIONS.map((option) => {
-              const selectedConfig = selectedConfigs[option.value];
-              const enabled = Boolean(selectedConfig?.enabled);
+              const enabledConfig = enabledConfigs[option.value];
+              const configured = configsByCapability[option.value].length > 0;
+              const enabled = Boolean(enabledConfig);
+              const statusLabel = enabled ? enabledConfig?.modelName || enabledConfig?.baseUrl : configured ? "未启用" : "未配置";
+              const rowStatusClass = enabled
+                ? "bg-[rgba(187,255,102,0.14)]"
+                : configured
+                  ? "bg-[rgba(143,150,157,0.14)] dark:bg-white/10"
+                  : "bg-white/65 dark:bg-white/10";
+              const statusClass = enabled ? "text-[#426b09]" : "text-[var(--premium-muted)]";
               return (
                 <div
                   key={option.value}
                   className={[
                     "flex items-center justify-between gap-3 rounded-[8px] p-2 text-xs font-black",
-                    enabled ? "bg-[rgba(187,255,102,0.14)]" : "bg-white/65 dark:bg-white/10",
+                    rowStatusClass,
                   ].join(" ")}
                 >
                   <span className="shrink-0 text-[var(--premium-muted)]">{option.label}</span>
-                  <strong className={["min-w-0 text-right [overflow-wrap:anywhere]", enabled ? "text-[#426b09]" : "text-[var(--premium-muted)]"].join(" ")}>
-                    {enabled ? selectedConfig?.modelName || selectedConfig?.baseUrl : selectedConfig ? "未启用" : "未配置"}
+                  <strong className={["min-w-0 text-right [overflow-wrap:anywhere]", statusClass].join(" ")}>
+                    {statusLabel}
                   </strong>
                 </div>
               );
