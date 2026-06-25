@@ -89,8 +89,8 @@ function extensionOf(value: string) {
 
 function buildObjectKey(prefix: string, fileName: string) {
   const cleanPrefix = prefix.trim().replace(/^\/+|\/+$/g, "");
-  const cleanName = fileName.replace(/[^\w.-]+/g, "_");
-  const key = `${crypto.randomUUID()}_${cleanName}`;
+  const cleanName = fileName.trim().replace(/[\\/]+/g, "_");
+  const key = cleanName || "untitled";
   return cleanPrefix ? `${cleanPrefix}/${key}` : key;
 }
 

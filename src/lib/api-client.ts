@@ -7,6 +7,7 @@ import type {
   CapabilityConnectionTestRequest,
   CapabilityConnectionTestResult,
   CapabilityParams,
+  ConversationAnswerMode,
   ConversationCitation,
   ConversationMessage,
   ConversationMessageList,
@@ -18,10 +19,17 @@ import type {
   IngestionTaskList,
   IngestionTask,
   KnowledgeBase,
+  KnowledgeBaseHealth,
+  KnowledgeBaseListResponse,
+  KnowledgeBaseQueryRequest,
+  KnowledgeBaseStats,
+  KnowledgeBaseUpdateRequest,
   PagedList,
   PreviewSegment,
   RecentCitationList,
+  RecentDocumentList,
   RecentQuestionList,
+  RecentSearchList,
   SearchRequest,
   SearchPage,
   StorageConfig,
@@ -40,10 +48,20 @@ type RequestOptions = {
 };
 
 type StreamMessageCallbacks = {
-  onTrace?: (event: { stage?: string; message?: string }) => void;
+  onTrace?: (event: { stage?: string; message?: string; answerMode?: ConversationAnswerMode | string }) => void;
   onDelta?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; title?: string | null }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }) => void;
+};
+
+type ConversationMessageRequest = {
+  query: string;
+  limit?: number;
+  kbIds?: string[];
+  answerMode?: ConversationAnswerMode;
+  preferredModalities?: Array<"TEXT" | "IMAGE" | "MIXED">;
+  debug?: boolean;
+  stream?: boolean;
 };
 
 export class ApiError extends Error {
@@ -151,7 +169,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "trace") {
-    callbacks.onTrace?.(parseSseJson<{ stage?: string; message?: string }>(data) ?? {});
+    callbacks.onTrace?.(parseSseJson<{ stage?: string; message?: string; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
     return;
   }
 
@@ -167,7 +185,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "done") {
-    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; title?: string | null }>(data) ?? {});
+    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
     return;
   }
 
@@ -201,15 +219,32 @@ export const apiClient = {
     request<RecentQuestionList>(`/api/v1/activity/recent-questions?${activityQuery(limit, cursor)}`),
   recentCitations: (limit = 10, cursor?: string | null) =>
     request<RecentCitationList>(`/api/v1/activity/recent-citations?${activityQuery(limit, cursor)}`),
+  recentSearch: (limit = 10, cursor?: string | null) =>
+    request<RecentSearchList>(`/api/v1/activity/recent-search?${activityQuery(limit, cursor)}`),
+  recentDocument: (limit = 10, cursor?: string | null) =>
+    request<RecentDocumentList>(`/api/v1/activity/recent-document?${activityQuery(limit, cursor)}`),
   listKnowledgeBases: (page = 1, size = 20) =>
-    request<PagedList<KnowledgeBase>>(`/api/v1/kbs?page=${page}&size=${size}`),
-  searchKnowledgeBases: (query: string, limit = 50) => {
-    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    request<PagedList<KnowledgeBase>>("/api/v1/kbs/search", { method: "POST", body: { page, size, status: "0" } }),
+  searchKnowledgeBases: async (query: string, limit = 50) => {
+    const result = await request<KnowledgeBaseListResponse>("/api/v1/kbs/search", {
+      method: "POST",
+      body: { keyword: query, page: 1, size: limit, status: "0" },
+    });
 
-    return request<KnowledgeBase[]>(`/api/v1/kbs/search?${params.toString()}`);
+    return result.items;
   },
+  queryKnowledgeBases: (body: KnowledgeBaseQueryRequest) =>
+    request<KnowledgeBaseListResponse>("/api/v1/kbs/search", { method: "POST", body }),
+  getKnowledgeBaseStats: (kbIds: string[]) =>
+    request<KnowledgeBaseStats[]>("/api/v1/kbs/stats", { method: "POST", body: { kbIds } }),
+  getKnowledgeBaseHealth: (kbId: string) =>
+    request<KnowledgeBaseHealth>(`/api/v1/kbs/${encodeURIComponent(kbId)}/health`),
   createKnowledgeBase: (body: { name: string; description?: string }) =>
     request<KnowledgeBase>("/api/v1/kbs", { method: "POST", body }),
+  updateKnowledgeBase: (kbId: string, body: KnowledgeBaseUpdateRequest) =>
+    request<KnowledgeBase>(`/api/v1/kbs/${encodeURIComponent(kbId)}`, { method: "PATCH", body }),
+  archiveKnowledgeBase: (kbId: string) =>
+    request<null>(`/api/v1/kbs/${encodeURIComponent(kbId)}`, { method: "DELETE" }),
   listDocuments: (kbId: string, page = 1, size = 20) =>
     request<PagedList<DocumentAsset>>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/documents?page=${page}&size=${size}`,
@@ -279,14 +314,14 @@ export const apiClient = {
     request<null>(`/api/conversations/${encodeURIComponent(sessionId)}`, {
       method: "DELETE",
     }),
-  sendMessage: (sessionId: string, body: { query: string; kbIds: string[]; answerMode: string }) =>
+  sendMessage: (sessionId: string, body: ConversationMessageRequest) =>
     request<ConversationMessage>(`/api/conversations/${encodeURIComponent(sessionId)}/messages`, {
       method: "POST",
       body,
     }),
   sendMessageStream: async (
     sessionId: string,
-    body: { query: string; kbIds?: string[]; answerMode?: string; stream?: boolean },
+    body: ConversationMessageRequest,
     callbacks: StreamMessageCallbacks,
     signal?: AbortSignal,
   ) => {
@@ -339,6 +374,10 @@ export const apiClient = {
     ),
   previewSegment: (segmentId: string) =>
     request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}`),
+  refreshSegmentPreview: (segmentId: string) =>
+    request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}/refresh`, {
+      method: "POST",
+    }),
   previewNeighbors: (segmentId: string) =>
     request<{ items?: PreviewSegment["surroundingChunks"] }>(
       `/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}/neighbors?before=2&after=2`,
@@ -371,6 +410,8 @@ export const apiClient = {
     request<StorageConfig | null>("/api/v1/settings/storage"),
   updateStorageConfig: (body: StorageConfigUpdateRequest) =>
     request<StorageConfig>("/api/v1/settings/storage", { method: "PATCH", body }),
+  deleteStorageConfig: (id: number) =>
+    request<null>(`/api/v1/settings/storage/${id}`, { method: "DELETE" }),
   testStorage: (body: { endpoint: string; accessKey?: string; secretKey?: string; bucket: string; configId?: number }) =>
     request<StorageConnectionTestResult>("/api/v1/settings/storage/test", { method: "POST", body }),
 };

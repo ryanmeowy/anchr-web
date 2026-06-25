@@ -1,17 +1,12 @@
 "use client";
 
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Check,
   ChevronDown,
   ChevronRight,
   Database,
-  FileArchive,
-  FileImage,
-  FileSpreadsheet,
-  FileText,
-  FileType2,
   FileUp,
   Folder,
   Info,
@@ -21,32 +16,22 @@ import {
   ShieldCheck,
   Sparkles,
   Upload,
-  X,
 } from "lucide-react";
+import { FileTypeIcon, normalizeExtension } from "@/components/shared/file-type-icon";
 import { useMemo, useRef, useState } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
-import { formatDateTime, formatFileSize, statusText } from "@/lib/format";
+import { formatDateTime, formatFileSize, formatNumber, statusText } from "@/lib/format";
 import { buildDisplayNameFromUrl, inferFileType, uploadFilesToOss } from "@/lib/ingestion-files";
-import type { IngestionTask, IngestionTaskItem, KnowledgeBase, SupportedFormat } from "@/lib/types";
+import type { IngestionTask, KnowledgeBase, RecentDocument, SupportedFormat } from "@/lib/types";
 
-const RECENT_TASK_LIMIT = 10;
-const RECENT_ITEM_LIMIT = 8;
+const RECENT_DOCUMENT_LIMIT = 8;
 const FLOW_STEPS = [
   { key: "UPLOAD", label: "上传", helper: "文件接收与入队" },
   { key: "PARSE", label: "解析", helper: "提取文本与结构" },
   { key: "EMBED", label: "向量化", helper: "生成语义向量" },
   { key: "ASKABLE", label: "可问答", helper: "写入索引后可检索" },
 ];
-
-type RecentImportItem = {
-  taskId: string;
-  taskStatus: string;
-  sourceType: string;
-  kbId: string;
-  createdAt?: string;
-  item: IngestionTaskItem;
-};
 
 export function ImportsPage() {
   const queryClient = useQueryClient();
@@ -85,24 +70,11 @@ export function ImportsPage() {
 
   const accept = useMemo(() => buildAccept(supportedFormats), [supportedFormats]);
 
-  const tasksQuery = useQuery({
-    queryKey: ["ingestion-tasks", selectedKbId],
-    queryFn: () => apiClient.listIngestionTasks(selectedKbId, RECENT_TASK_LIMIT),
-    enabled: Boolean(selectedKbId),
-    refetchInterval: (query) => (hasRunningTask(query.state.data?.items) ? 2000 : false),
+  const recentDocumentsQuery = useQuery({
+    queryKey: ["activity", "recent-document", RECENT_DOCUMENT_LIMIT],
+    queryFn: () => apiClient.recentDocument(RECENT_DOCUMENT_LIMIT),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-  });
-
-  const taskDetailsQueries = useQueries({
-    queries: (tasksQuery.data?.items ?? []).map((task) => ({
-      queryKey: ["ingestion-task", selectedKbId, task.taskId],
-      queryFn: () => apiClient.getIngestionTask(selectedKbId, task.taskId),
-      enabled: Boolean(selectedKbId),
-      refetchInterval: isFinishedTaskStatus(task.status) ? false : 2000,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    })),
   });
 
   const currentTaskQuery = useQuery({
@@ -114,17 +86,7 @@ export function ImportsPage() {
     refetchOnReconnect: false,
   });
 
-  const taskDetails = useMemo(
-    () => taskDetailsQueries.map((query) => query.data).filter(Boolean) as IngestionTask[],
-    [taskDetailsQueries],
-  );
-
-  const recentItems = useMemo(
-    () => flattenRecentItems(taskDetails).slice(0, RECENT_ITEM_LIMIT),
-    [taskDetails],
-  );
-
-  const currentTask = currentTaskId ? currentTaskQuery.data ?? taskDetails.find((task) => task.taskId === currentTaskId) : undefined;
+  const currentTask = currentTaskId ? currentTaskQuery.data : undefined;
   const selectedFilesSize = files.reduce((total, file) => total + file.size, 0);
   const defaultDedupeStrategy = capabilitiesQuery.data?.defaultDedupeStrategy ?? "SKIP";
   const dedupeOptions = capabilitiesQuery.data?.dedupeStrategies ?? [defaultDedupeStrategy];
@@ -197,17 +159,6 @@ export function ImportsPage() {
 
   const retryTaskMutation = useMutation({
     mutationFn: (taskId: string) => apiClient.retryFailedIngestionTask(selectedKbId, taskId),
-    onSuccess: (task) => {
-      setCurrentTaskId(task.taskId);
-      queryClient.setQueryData(["ingestion-task", selectedKbId, task.taskId], task);
-      invalidateIngestionQueries(queryClient, selectedKbId);
-      queryClient.invalidateQueries({ queryKey: ["kbs"] });
-    },
-  });
-
-  const retryItemMutation = useMutation({
-    mutationFn: ({ taskId, itemId }: { taskId: string; itemId: string }) =>
-      apiClient.retryIngestionTaskItem(selectedKbId, taskId, itemId),
     onSuccess: (task) => {
       setCurrentTaskId(task.taskId);
       queryClient.setQueryData(["ingestion-task", selectedKbId, task.taskId], task);
@@ -414,34 +365,27 @@ export function ImportsPage() {
               <h2 className="text-base font-semibold text-slate-950 dark:text-slate-200">最近导入</h2>
               <button
                 type="button"
-                onClick={() => tasksQuery.refetch()}
+                onClick={() => recentDocumentsQuery.refetch()}
                 className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300"
               >
-                查看全部
+                刷新
               </button>
             </div>
 
-            {tasksQuery.isLoading ? <LoadingBlock label="正在加载导入任务" /> : null}
-            {tasksQuery.isError ? <ErrorBlock message={(tasksQuery.error as Error).message} onRetry={() => tasksQuery.refetch()} /> : null}
-            {!tasksQuery.isLoading && !tasksQuery.isError && recentItems.length === 0 ? (
+            {recentDocumentsQuery.isLoading ? <LoadingBlock label="正在加载导入任务" /> : null}
+            {recentDocumentsQuery.isError ? <ErrorBlock message={(recentDocumentsQuery.error as Error).message} onRetry={() => recentDocumentsQuery.refetch()} /> : null}
+            {!recentDocumentsQuery.isLoading && !recentDocumentsQuery.isError && (recentDocumentsQuery.data?.items ?? []).length === 0 ? (
               <div className="flex min-h-36 items-center justify-center rounded-[8px] border border-dashed border-[var(--line)] text-sm text-slate-500 dark:text-slate-400">
                 暂无导入记录
               </div>
             ) : null}
-            {recentItems.length > 0 ? (
+            {(recentDocumentsQuery.data?.items ?? []).length > 0 ? (
               <div className="divide-y divide-[var(--line)]">
-                {recentItems.map((recentItem) => (
-                  <RecentImportRow
-                    key={`${recentItem.taskId}-${recentItem.item.itemId}`}
-                    recentItem={recentItem}
-                    kbName={findKbName(kbsQuery.data?.items, recentItem.kbId)}
-                    onRetry={() => retryItemMutation.mutate({ taskId: recentItem.taskId, itemId: recentItem.item.itemId })}
-                    retrying={retryItemMutation.isPending && retryItemMutation.variables?.itemId === recentItem.item.itemId}
-                  />
+                {(recentDocumentsQuery.data?.items ?? []).map((item) => (
+                  <RecentDocumentRow key={item.taskId} item={item} />
                 ))}
               </div>
             ) : null}
-            {retryItemMutation.error ? <div className="mt-4"><ErrorBlock message={(retryItemMutation.error as Error).message} /></div> : null}
             {retryTaskMutation.error ? <div className="mt-4"><ErrorBlock message={(retryTaskMutation.error as Error).message} /></div> : null}
           </div>
         </section>
@@ -536,60 +480,45 @@ export function ImportsPage() {
 
 function invalidateIngestionQueries(queryClient: ReturnType<typeof useQueryClient>, kbId: string) {
   queryClient.invalidateQueries({ queryKey: ["ingestion-tasks", kbId] });
+  queryClient.invalidateQueries({ queryKey: ["activity", "recent-document"] });
 }
 
-function RecentImportRow({
-  recentItem,
-  kbName,
-  onRetry,
-  retrying,
-}: {
-  recentItem: RecentImportItem;
-  kbName: string;
-  onRetry: () => void;
-  retrying: boolean;
-}) {
-  const item = recentItem.item;
-  const title = item.fileName || item.sourceUrl || "未命名资料";
-  const failed = item.status === "FAILED";
-  const running = item.status === "RUNNING" || item.status === "PENDING";
+function RecentDocumentRow({ item }: { item: RecentDocument }) {
+  const kbName = item.knowledgeBaseName || item.kbId || "知识库";
+  const progress = item.totalCount > 0 ? Math.round((item.successCount / item.totalCount) * 100) : 0;
 
   return (
     <div className="grid min-h-[68px] grid-cols-[auto_minmax(0,1fr)] items-center gap-3 py-3 lg:grid-cols-[auto_minmax(0,1fr)_110px_92px_88px_auto]">
       <TimelineDot status={item.status} />
       <div className="flex min-w-0 items-center gap-3">
-        <FileTypeIcon fileName={title} sourceType={recentItem.sourceType} />
+        <span className="grid size-11 shrink-0 place-items-center rounded-[8px] border border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-500/20 dark:bg-blue-500/15 dark:text-blue-300">
+          <FileUp size={22} />
+        </span>
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</div>
-          <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">导入至：{kbName}</div>
-          {failed && item.errorMessage ? (
-            <div className="mt-1 truncate text-xs font-medium text-red-500">{item.errorMessage}</div>
-          ) : null}
+          <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{kbName}</div>
+          <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">任务：{item.taskId}</div>
         </div>
       </div>
       <div className="hidden lg:block">
-        <StatusPill status={item.status} progress={item.progress} />
+        <StatusPill status={item.status} progress={progress} />
       </div>
       <div className="hidden text-sm text-slate-500 dark:text-slate-400 lg:block">
-        {running ? stageText(item.stage) : item.status === "SUCCESS" || item.status === "SKIPPED" ? "已完成" : "未完成"}
+        共 {formatNumber(item.totalCount)} 项
       </div>
-      <div className="hidden text-sm text-slate-500 dark:text-slate-400 lg:block">{formatDateTime(item.finishedAt ?? item.updatedAt ?? recentItem.createdAt)}</div>
-      <div className="flex justify-end gap-2">
-        {failed ? (
-          <button
-            type="button"
-            onClick={onRetry}
-            disabled={retrying}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[var(--line)] bg-[var(--surface)] px-2.5 text-xs font-medium text-slate-700 hover:bg-[var(--surface-hover)] disabled:text-slate-400 dark:text-slate-200"
-          >
-            {retrying ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-            重试
-          </button>
-        ) : null}
+      <div className="hidden text-sm text-slate-500 dark:text-slate-400 lg:block">{formatDateTime(item.importedAt)}</div>
+      <div className="flex justify-end">
         <ChevronRight size={18} className="mt-1 text-slate-400" />
       </div>
       <div className="col-span-2 lg:hidden">
-        <StatusPill status={item.status} progress={item.progress} />
+        <StatusPill status={item.status} progress={progress} />
+      </div>
+      <div className="col-span-2 text-xs text-slate-500 dark:text-slate-400 lg:hidden">
+        共 {formatNumber(item.totalCount)} 项 · {formatDateTime(item.importedAt)}
+      </div>
+      <div className="col-span-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400 lg:col-start-2 lg:col-end-6">
+        <span>成功 {formatNumber(item.successCount)}</span>
+        <span>失败 {formatNumber(item.failureCount)}</span>
+        <span>运行中 {formatNumber(item.runningCount)}</span>
       </div>
     </div>
   );
@@ -750,46 +679,8 @@ function SupportedFormatBadge({ format }: { format: SupportedFormat }) {
   );
 }
 
-function FileTypeIcon({
-  fileName,
-  sourceType,
-  compact = false,
-  className = "",
-}: {
-  fileName: string;
-  sourceType?: string;
-  compact?: boolean;
-  className?: string;
-}) {
-  const type = sourceType === "URL" ? "URL" : inferIconType(fileName, sourceType);
-  const size = compact ? "size-5" : "size-11";
-  const iconSize = compact ? 14 : 24;
-  const shared = `${size} grid place-items-center rounded-[8px] ${className}`;
-
-  if (type === "PDF") {
-    return <span className={`${shared} border border-red-200 bg-red-50 text-red-500`}><FileText size={iconSize} /></span>;
-  }
-  if (type === "DOCX") {
-    return <span className={`${shared} border border-blue-200 bg-blue-50 text-blue-600`}><FileType2 size={iconSize} /></span>;
-  }
-  if (type === "XLSX" || type === "CSV") {
-    return <span className={`${shared} border border-emerald-200 bg-emerald-50 text-emerald-600`}><FileSpreadsheet size={iconSize} /></span>;
-  }
-  if (type === "IMAGE") {
-    return <span className={`${shared} border border-violet-200 bg-violet-50 text-violet-600`}><FileImage size={iconSize} /></span>;
-  }
-  if (type === "ZIP") {
-    return <span className={`${shared} border border-amber-200 bg-amber-50 text-amber-600`}><FileArchive size={iconSize} /></span>;
-  }
-  if (type === "URL") {
-    return <span className={`${shared} border border-slate-200 bg-slate-100 text-slate-600`}><Link2 size={iconSize} /></span>;
-  }
-
-  return <span className={`${shared} border border-slate-200 bg-slate-50 text-slate-600`}><FileText size={iconSize} /></span>;
-}
-
 function TimelineDot({ status }: { status: string }) {
-  if (status === "SUCCESS" || status === "SKIPPED") {
+  if (status === "SUCCESS" || status === "COMPLETED" || status === "SKIPPED") {
     return (
       <span className="grid size-5 place-items-center rounded-full border border-emerald-300 bg-emerald-50 text-emerald-600">
         <Check size={13} strokeWidth={2.4} />
@@ -815,7 +706,7 @@ function StatusPill({ status, progress }: { status: string; progress: number }) 
       </span>
     );
   }
-  if (status === "SUCCESS" || status === "SKIPPED") {
+  if (status === "SUCCESS" || status === "COMPLETED" || status === "SKIPPED") {
     return (
       <span className="inline-flex h-7 items-center rounded-full bg-emerald-50 px-3 text-xs font-semibold text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">
         {status === "SKIPPED" ? "已跳过" : "已完成"}
@@ -893,35 +784,12 @@ function validateUploadInput(files: File[], maxFileSizeBytes?: number, maxFilesP
   }
 }
 
-function hasRunningTask(tasks?: Array<{ status: string }>) {
-  return Boolean(tasks?.some((task) => !isFinishedTaskStatus(task.status)));
-}
-
 function isFinishedTaskStatus(status: string) {
-  return status === "SUCCESS" || status === "FAILED" || status === "PARTIAL_SUCCESS" || status === "SKIPPED";
+  return status === "SUCCESS" || status === "COMPLETED" || status === "FAILED" || status === "PARTIAL_SUCCESS" || status === "SKIPPED";
 }
 
 function canRetryTask(task: { status: string; failureCount: number }) {
   return task.failureCount > 0 && task.status !== "RUNNING";
-}
-
-function flattenRecentItems(tasks: IngestionTask[]) {
-  return tasks
-    .flatMap((task) =>
-      (task.items ?? []).map((item) => ({
-        taskId: task.taskId,
-        taskStatus: task.status,
-        sourceType: task.sourceType,
-        kbId: task.kbId,
-        createdAt: task.createdAt,
-        item,
-      })),
-    )
-    .toSorted((first, second) => {
-      const firstTime = new Date(first.item.updatedAt ?? first.createdAt ?? 0).getTime();
-      const secondTime = new Date(second.item.updatedAt ?? second.createdAt ?? 0).getTime();
-      return secondTime - firstTime;
-    });
 }
 
 function summarizeTaskProgress(task?: IngestionTask, submitting = false) {
@@ -955,44 +823,11 @@ function flowStepOrder(step: string) {
   return FLOW_STEPS.findIndex((item) => item.key === step);
 }
 
-function stageText(stage: string) {
-  const map: Record<string, string> = {
-    UPLOAD: "上传",
-    PARSE: "解析",
-    CHUNK: "分块",
-    EMBED: "向量化",
-    INDEX: "索引",
-    ASKABLE: "可问答",
-  };
-
-  return map[stage] ?? stage;
-}
-
-function inferIconType(fileName: string, sourceType?: string) {
-  if (sourceType && sourceType !== "UPLOAD") {
-    return sourceType;
-  }
-
-  const extension = fileName.split("?")[0]?.split("#")[0]?.split(".").at(-1)?.toLowerCase() ?? "";
-  if (extension === "pdf") return "PDF";
-  if (extension === "docx" || extension === "doc") return "DOCX";
-  if (extension === "xlsx" || extension === "xls" || extension === "csv") return "XLSX";
-  if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension)) return "IMAGE";
-  if (extension === "zip") return "ZIP";
-  if (extension === "md" || extension === "markdown") return "MD";
-
-  return "TEXT";
-}
-
 function buildAccept(formats: SupportedFormat[]) {
   return formats
     .flatMap((item) => item.extensions)
     .map((extension) => `.${normalizeExtension(extension)}`)
     .join(",");
-}
-
-function normalizeExtension(extension: string) {
-  return extension.trim().replace(/^\./, "").toLowerCase();
 }
 
 function formatLabel(fileType: string) {
@@ -1021,8 +856,4 @@ function dedupeLabel(strategy: string) {
   };
 
   return map[strategy] ?? strategy;
-}
-
-function findKbName(items: KnowledgeBase[] | undefined, kbId: string) {
-  return items?.find((item) => item.id === kbId)?.name ?? "知识库";
 }

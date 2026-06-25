@@ -106,7 +106,7 @@ export function LibraryPage() {
       <div className="mx-auto grid max-w-[1320px] grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-8">
         <main className="min-w-0">
           <div className="mb-7 lg:mb-9">
-            <div className="flex h-[46px] items-center gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] px-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)] dark:border-[var(--line)] dark:bg-[var(--surface)] sm:h-[52px] sm:gap-4 sm:px-5">
+            <div className="flex h-[46px] items-center gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--surface)] pl-4 pr-1 shadow-[0_18px_40px_rgba(15,23,42,0.06)] dark:border-[var(--line)] dark:bg-[var(--surface)] sm:h-[52px] sm:gap-4 sm:pl-5 sm:pr-1.3">
               <Search size={23} className="shrink-0 text-slate-500 dark:text-slate-400" />
               <input
                 value={keyword}
@@ -630,7 +630,7 @@ function RecentCitationPanel({
         {isError ? <div className="py-6 text-sm text-slate-500 dark:text-slate-400">最近引用暂不可用。</div> : null}
         {!isLoading && !isError ? (
           <div className="divide-y divide-[var(--line)] dark:divide-[var(--line)]">
-            {items.length > 0 ? items.map((item, index) => <CitationRow key={item.segmentId} item={item} index={index} />) : (
+            {items.length > 0 ? items.map((item, index) => <CitationRow key={`${item.segmentId}-${item.openedAt ?? "unknown"}-${index}`} item={item} index={index} />) : (
               <div className="py-6 text-sm text-slate-500 dark:text-slate-400">暂无最近引用。</div>
             )}
           </div>
@@ -698,8 +698,12 @@ function RecentQuestionPanel({
 }
 
 function QuestionRow({ item }: { item: RecentQuestion }) {
+  const session = item.sessionId ? `session=${encodeURIComponent(item.sessionId)}` : "";
+  const turn = item.turnId ? `turn=${encodeURIComponent(item.turnId)}` : "";
+  const query = [session, turn].filter(Boolean).join("&");
+  const href = query ? `/ask?${query}` : "/ask";
   return (
-    <Link href="/ask" className="grid grid-cols-[1fr_auto] gap-3 py-3">
+    <Link href={href} className="grid grid-cols-[1fr_auto] gap-3 py-3">
       <div className="flex min-w-0 gap-3">
         <MessageCircle size={18} className="mt-0.5 shrink-0 text-blue-600 dark:text-blue-300" />
         <div className="min-w-0">

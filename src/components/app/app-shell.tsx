@@ -45,6 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAskPage = pathname === "/ask";
   const isLibraryPage = pathname === "/library";
+  const isSettingsPage = pathname === "/settings";
   const isSimpleHeaderPage =
     isAskPage || isLibraryPage || pathname === "/search" || pathname === "/imports" || pathname === "/settings" || pathname.startsWith("/preview");
   const [theme, setTheme] = useState<ThemeMode>("light");
@@ -82,6 +83,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
   }, [collapsed, sidebarHydrated]);
+
+  if (isAskPage || isLibraryPage || isSettingsPage) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--background)] text-slate-950 dark:bg-[var(--background)] dark:text-slate-200 lg:flex-row">
@@ -151,10 +156,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {isAskPage && !collapsed ? (
+        {isAskPage ? (
           <div
             id="ask-conversations-slot"
-            className="-mx-1 mt-4 hidden min-h-0 flex-1 flex-col border-t border-[var(--line)] pt-4 dark:border-[var(--line)] lg:flex"
+            className={[
+              "-mx-1 mt-4 min-h-0 flex-1 flex-col border-t border-[var(--line)] pt-4 dark:border-[var(--line)]",
+              collapsed ? "hidden" : "hidden lg:flex",
+            ].join(" ")}
           />
         ) : null}
 

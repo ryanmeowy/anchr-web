@@ -26,6 +26,64 @@ export type KnowledgeBase = {
   updatedAt?: string;
 };
 
+export type KnowledgeBaseQueryRequest = {
+  keyword?: string;
+  status?: string;
+  updateAfter?: string;
+  updateBefore?: string;
+  page?: number;
+  size?: number;
+};
+
+export type KnowledgeBaseUpdateRequest = {
+  name: string;
+  description?: string;
+};
+
+export type KnowledgeBaseListResponse = PagedList<KnowledgeBase>;
+
+export type KnowledgeBaseStats = {
+  kbId: string;
+  documentCount: number;
+  segmentCount: number;
+  lastIngestedAt?: string | null;
+  lastIngestionStatus?: string | null;
+  lastIngestionTotalCount: number;
+  lastIngestionSuccessCount: number;
+  lastIngestionFailureCount: number;
+  lastIngestionRunningCount: number;
+  updatedAt?: string | null;
+};
+
+export type KnowledgeBaseHealthDocuments = {
+  total: number;
+  indexed: number;
+  pending: number;
+  failed: number;
+};
+
+export type KnowledgeBaseHealthSegments = {
+  total: number;
+  indexed: number;
+};
+
+export type KnowledgeBaseHealthSourceType = {
+  type: string;
+  label: string;
+  count: number;
+  percentage: number;
+};
+
+export type KnowledgeBaseHealth = {
+  kbId: string;
+  kbName: string;
+  status: string;
+  score: number;
+  documents: KnowledgeBaseHealthDocuments;
+  segments: KnowledgeBaseHealthSegments;
+  sourceTypes: KnowledgeBaseHealthSourceType[];
+};
+
 export type DocumentAsset = {
   id: string;
   kbId: string;
@@ -64,6 +122,35 @@ export type RecentCitation = {
   openedAt?: string;
 };
 
+export type RecentSearch = {
+  query: string;
+  kbIds: string[];
+  knowledgeBaseNames?: string[];
+  total: number;
+  searchedAt?: string;
+  assetTypes?: string[];
+  dateRange?: {
+    from?: number | null;
+    to?: number | null;
+  } | null;
+  withAnswer?: boolean | null;
+  answerMode?: string | null;
+};
+
+export type ConversationAnswerMode = "STRICT" | "SUMMARY" | "EXPLORE";
+
+export type RecentDocument = {
+  taskId: string;
+  kbId: string;
+  knowledgeBaseName?: string | null;
+  status: string;
+  totalCount: number;
+  successCount: number;
+  failureCount: number;
+  runningCount: number;
+  importedAt?: string;
+};
+
 export type RecentQuestionList = {
   items: RecentQuestion[];
   nextCursor?: string | null;
@@ -71,6 +158,16 @@ export type RecentQuestionList = {
 
 export type RecentCitationList = {
   items: RecentCitation[];
+  nextCursor?: string | null;
+};
+
+export type RecentSearchList = {
+  items: RecentSearch[];
+  nextCursor?: string | null;
+};
+
+export type RecentDocumentList = {
+  items: RecentDocument[];
   nextCursor?: string | null;
 };
 
@@ -175,8 +272,8 @@ export type UploadIngestionItem = {
   fileHash?: string;
 };
 
-export type SearchAssetType = "PDF" | "IMAGE" | "TXT" | "MARKDOWN";
-export type SearchHitType = "TEXT" | "IMAGE" | "MIXED";
+export type SearchAssetType = string;
+export type SearchHitType = "TEXT_CHUNK" | "IMAGE_OCR_BLOCK";
 export type SearchStrategy = "KB_RRF" | "KB_RRF_RERANK";
 export type SearchAnswerMode = "STRICT";
 
@@ -187,7 +284,7 @@ export type SearchRequest = {
   strategy?: SearchStrategy;
   kbIds?: string[];
   assetTypes?: SearchAssetType[];
-  hitTypes?: SearchHitType[];
+  hitType?: SearchHitType[];
   dateRange?: {
     from?: number;
     to?: number;
@@ -265,6 +362,7 @@ export type PreviewSegment = {
   segmentId: string;
   assetId?: string;
   kbId?: string;
+  kbName?: string;
   assetType?: string;
   segmentType?: string;
   fileName?: string;
@@ -279,7 +377,7 @@ export type PreviewSegment = {
   anchor?: {
     pageNo?: number;
     chunkOrder?: number;
-    bbox?: unknown;
+    bbox?: PreviewBBoxRecord[] | null;
     imageWidth?: number;
     imageHeight?: number;
   };
@@ -287,6 +385,7 @@ export type PreviewSegment = {
     segmentId: string;
     content?: string;
     snippet?: string;
+    title?: string;
     pageNo?: number;
     chunkOrder?: number;
     relation?: string;
@@ -297,6 +396,20 @@ export type PreviewSegment = {
     citationIndex?: number;
     citationReason?: string;
   };
+};
+
+export type PreviewBBox = {
+  l: number;
+  t: number;
+  r: number;
+  b: number;
+  coordOrigin?: string;
+  coord_origin?: string;
+};
+
+export type PreviewBBoxRecord = {
+  bbox?: PreviewBBox | null;
+  pageNo?: number | null;
 };
 
 // ── capability config ──────────────────────────────────────────────────
@@ -322,6 +435,7 @@ export type CapabilityConnectionTestRequest = {
   baseUrl: string;
   apiKey?: string;
   modelName?: string;
+  extraConfig?: Record<string, unknown>;
   configId?: number;
 };
 
