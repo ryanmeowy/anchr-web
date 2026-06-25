@@ -325,6 +325,7 @@
       .panel,
       .config-card,
       .storage-card,
+      .health-card,
       .token-card {
         border: 1px solid var(--line);
         border-radius: var(--radius);
@@ -494,6 +495,7 @@
 
       .config-card,
       .storage-card,
+      .health-card,
       .token-card {
         padding: 12px;
         animation: revealUp 760ms var(--ease) 90ms both;
@@ -655,9 +657,7 @@
       }
 
       .split {
-        display: grid;
-        grid-template-columns: minmax(0, 1.18fr) minmax(220px, 0.82fr);
-        gap: 12px;
+        display: block;
       }
 
       .config-fields {
@@ -673,6 +673,8 @@
 
       .model-config-panels {
         display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px;
       }
 
       .model-config-panel {
@@ -722,61 +724,76 @@
         margin-top: 10px;
       }
 
-      .connection-card {
-        display: grid;
-        align-content: start;
-        gap: 10px;
-        border: 1px solid rgba(16, 18, 20, 0.1);
-        border-radius: var(--radius);
-        background:
-          linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.32)),
-          radial-gradient(circle at 90% 0%, rgba(186, 255, 115, 0.28), transparent 14rem);
-        padding: 12px;
-      }
-
-      .latency {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 10px;
-        align-items: center;
-      }
-
-      .latency strong {
-        font-size: clamp(30px, 4.4vw, 52px);
-        line-height: 0.88;
-      }
-
-      .meter {
-        height: 8px;
-        overflow: hidden;
-        border-radius: var(--pill);
-        background: rgba(16, 18, 20, 0.1);
-      }
-
-      .meter i {
-        display: block;
-        width: 92%;
-        height: 100%;
-        border-radius: inherit;
-        background: linear-gradient(90deg, var(--blue), var(--mint));
-        animation: grow 1000ms var(--ease) 260ms both;
-      }
-
       .storage-grid {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 12px;
       }
 
+      .health-card,
       .token-card {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
         gap: 12px;
-        align-items: end;
+        align-content: start;
       }
 
-      .token-card label {
+      .runtime-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .runtime-item {
+        display: grid;
+        gap: 8px;
+        border: 1px solid rgba(16, 18, 20, 0.1);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.48);
+        padding: 10px;
+      }
+
+      .runtime-item-head,
+      .runtime-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        color: var(--ink-soft);
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .runtime-models {
+        display: grid;
+        gap: 7px;
+      }
+
+      .runtime-model,
+      .runtime-row strong {
+        color: var(--mint-deep);
+      }
+
+      .runtime-model {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border-radius: var(--radius);
+        background: rgba(186, 255, 115, 0.14);
+        padding: 8px;
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      .runtime-model span {
+        flex: 0 0 auto;
+        color: var(--muted);
+      }
+
+      .runtime-model strong,
+      .runtime-row strong {
         min-width: 0;
+        overflow-wrap: anywhere;
+        text-align: right;
       }
 
       svg {
@@ -847,8 +864,8 @@
 
       @media (max-width: 1180px) {
         .content,
-        .split,
         .advanced-body,
+        .model-config-panels,
         .storage-grid {
           grid-template-columns: 1fr;
         }
@@ -940,6 +957,7 @@
 
         .config-card,
         .storage-card,
+        .health-card,
         .token-card,
         .panel {
           padding: 14px;
@@ -1117,24 +1135,12 @@
                       </details>
 
                       <div class="actions">
-                        <button class="ghost-button" type="button">测试连接</button>
                         <button class="button" type="button">保存</button>
                         <button class="ghost-button" type="button">删除</button>
+                        <button class="ghost-button" type="button">测试连接</button>
                       </div>
                     </div>
 
-                    <aside class="connection-card" aria-label="Generation 连接测试结果">
-                      <p class="label">CONNECTION TEST <span>LIVE</span></p>
-                      <div class="latency">
-                        <strong>126</strong>
-                        <span class="success-pill">ms latency</span>
-                      </div>
-                      <div class="meter" aria-hidden="true"><i></i></div>
-                      <p class="hint">
-                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
-                        当前配置可用，问答生成、引用总结与续问链路已通过连接测试。
-                      </p>
-                    </aside>
                   </div>
                 </section>
 
@@ -1144,7 +1150,7 @@
                       <h2>Embedding 配置</h2>
                       <p>当前使用 <span data-current-model="embedding">text-embedding-v4</span>，负责文本向量化与召回索引。</p>
                     </div>
-                    <span class="warning-pill">切换需重建</span>
+                    <span class="success-pill">连接成功 · 94ms</span>
                   </div>
 
                   <div class="split">
@@ -1178,24 +1184,12 @@
                       </details>
 
                       <div class="actions">
-                        <button class="ghost-button" type="button">测试连接</button>
                         <button class="button" type="button">保存</button>
-                        <button class="ghost-button" type="button">重建索引</button>
+                        <button class="ghost-button" type="button">删除</button>
+                        <button class="ghost-button" type="button">测试连接</button>
                       </div>
                     </div>
 
-                    <aside class="connection-card" aria-label="Embedding 连接测试结果">
-                      <p class="label">VECTORIZATION TEST <span>READY</span></p>
-                      <div class="latency">
-                        <strong>94</strong>
-                        <span class="success-pill">ms/vector</span>
-                      </div>
-                      <div class="meter" aria-hidden="true"><i></i></div>
-                      <p class="hint">
-                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
-                        文本向量化可用。切换模型后会触发已有知识库向量重建确认。
-                      </p>
-                    </aside>
                   </div>
                 </section>
 
@@ -1239,24 +1233,12 @@
                       </details>
 
                       <div class="actions">
-                        <button class="ghost-button" type="button">测试连接</button>
                         <button class="button" type="button">保存</button>
                         <button class="ghost-button" type="button">删除</button>
+                        <button class="ghost-button" type="button">测试连接</button>
                       </div>
                     </div>
 
-                    <aside class="connection-card" aria-label="Rerank 连接测试结果">
-                      <p class="label">RERANK TEST <span>LIVE</span></p>
-                      <div class="latency">
-                        <strong>88</strong>
-                        <span class="success-pill">ms/query</span>
-                      </div>
-                      <div class="meter" aria-hidden="true"><i></i></div>
-                      <p class="hint">
-                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
-                        重排链路可用，搜索结果会在回答前按相关性重新排序。
-                      </p>
-                    </aside>
                   </div>
                 </section>
 
@@ -1266,7 +1248,7 @@
                       <h2>Multi Embedding 配置</h2>
                       <p>当前使用 <span data-current-model="multi">multimodal-embedding-v1</span>，负责图片与文本统一向量化。</p>
                     </div>
-                    <span class="warning-pill">切换需重建</span>
+                    <span class="success-pill">连接成功 · 148ms</span>
                   </div>
 
                   <div class="split">
@@ -1300,26 +1282,50 @@
                       </details>
 
                       <div class="actions">
-                        <button class="ghost-button" type="button">测试连接</button>
                         <button class="button" type="button">保存</button>
-                        <button class="ghost-button" type="button">重建多模态索引</button>
+                        <button class="ghost-button" type="button">删除</button>
+                        <button class="ghost-button" type="button">测试连接</button>
                       </div>
                     </div>
 
-                    <aside class="connection-card" aria-label="Multi Embedding 连接测试结果">
-                      <p class="label">MULTI-MODAL TEST <span>READY</span></p>
-                      <div class="latency">
-                        <strong>148</strong>
-                        <span class="success-pill">ms/item</span>
-                      </div>
-                      <div class="meter" aria-hidden="true"><i></i></div>
-                      <p class="hint">
-                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
-                        多模态向量化可用，图片和文本可进入同一检索空间。
-                      </p>
-                    </aside>
                   </div>
                 </section>
+
+                <article class="health-card" aria-label="运行状态">
+                  <div class="section-head">
+                    <div>
+                      <h2>运行状态</h2>
+                      <p>查看当前模型、存储与访问令牌状态。</p>
+                    </div>
+                    <span class="success-pill">全部在线</span>
+                  </div>
+                  <div class="runtime-list">
+                    <div class="runtime-item">
+                      <div class="runtime-item-head">
+                        <span>模型配置状态</span>
+                        <strong>4/4 已启用</strong>
+                      </div>
+                      <div class="runtime-models">
+                        <div class="runtime-model"><span>Generation</span><strong>qwen-plus</strong></div>
+                        <div class="runtime-model"><span>Embedding</span><strong>text-embedding-v4</strong></div>
+                        <div class="runtime-model"><span>Rerank</span><strong>gte-rerank-v2</strong></div>
+                        <div class="runtime-model"><span>Multi Embedding</span><strong>multimodal-embedding-v1</strong></div>
+                      </div>
+                    </div>
+                    <div class="runtime-item">
+                      <div class="runtime-row">
+                        <span>存储配置状态</span>
+                        <strong>OSS 在线</strong>
+                      </div>
+                    </div>
+                    <div class="runtime-item">
+                      <div class="runtime-row">
+                        <span>Token 配置状态</span>
+                        <strong>已启用</strong>
+                      </div>
+                    </div>
+                  </div>
+                </article>
               </div>
 
               <section class="storage-grid">
@@ -1361,20 +1367,29 @@
                       </label>
                     </div>
                     <div class="actions">
-                      <button class="ghost-button" type="button">测试连接</button>
                       <button class="button" type="button">保存</button>
+                      <button class="ghost-button" type="button">删除</button>
+                      <button class="ghost-button" type="button">测试连接</button>
                     </div>
                   </div>
                 </article>
 
                 <article class="token-card">
-                  <label>
-                    访问令牌
-                    <input value="x-access-token_••••••••••" aria-label="访问令牌" />
-                  </label>
-                  <div class="actions">
-                    <button class="button" type="button">保存</button>
-                    <button class="ghost-button" type="button">清除</button>
+                  <div class="section-head">
+                    <div>
+                      <h2>访问令牌</h2>
+                      <p>用于外部接口访问认证。</p>
+                    </div>
+                  </div>
+                  <div class="form-grid">
+                    <label>
+                      配置 Token
+                      <input value="x-access-token_••••••••••" aria-label="配置 Token" />
+                    </label>
+                    <div class="actions">
+                      <button class="button" type="button">保存</button>
+                      <button class="ghost-button" type="button">清除</button>
+                    </div>
                   </div>
                 </article>
               </section>

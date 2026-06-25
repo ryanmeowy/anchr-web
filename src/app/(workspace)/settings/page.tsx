@@ -1,5 +1,5 @@
-import { SettingsPage } from "@/features/settings/settings-page";
+import { SettingsPremiumPage } from "@/features/settings/settings-premium-page";
 
 export default function Page() {
-  return <SettingsPage />;
+  return <SettingsPremiumPage />;
 }
