@@ -134,6 +134,12 @@ function embeddingSwitchAffects(capability: CapabilityName) {
   return capability === "EMBEDDING" || capability === "MULTI_EMBEDDING";
 }
 
+function affectedCapabilitiesFor(capability: CapabilityName) {
+  return embeddingSwitchAffects(capability)
+    ? (["EMBEDDING", "MULTI_EMBEDDING"] as CapabilityName[])
+    : [capability];
+}
+
 function PendingNotice({ message }: { message: string }) {
   return (
     <div className="inline-flex items-center gap-2 rounded-[8px] bg-amber-50 px-3 py-2 text-[11px] font-black leading-[1.55] text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
@@ -158,6 +164,50 @@ function ResultPill({ result }: { result: CapabilityConnectionTestResult | Stora
       {result.success ? "连接成功" : "连接失败"}
       {result.success && result.latencyMs > 0 ? ` · ${result.latencyMs}ms` : ""}
     </span>
+  );
+}
+
+function DeleteConfirmDialog({
+  title,
+  description,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-[360px] rounded-[8px] border border-[var(--premium-line)] bg-[rgba(255,253,245,0.92)] p-4 shadow-[var(--premium-menu-shadow)] backdrop-blur-xl dark:bg-[var(--premium-elevated)]">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="settings-dialog-icon grid size-9 shrink-0 place-items-center rounded-[8px] bg-[var(--premium-ink)] text-white shadow-[0_14px_32px_rgba(17,19,21,0.16)]">
+              <AlertTriangle size={18} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-[18px] font-black leading-none text-[var(--premium-ink)]">{title}</h2>
+              <p className="mt-2 text-xs font-black leading-[1.55] text-[var(--premium-muted)]">{description}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onCancel} disabled={pending} className="grid size-8 shrink-0 place-items-center rounded-[8px] text-[var(--premium-muted)] hover:bg-white/70 disabled:opacity-50 dark:hover:bg-[var(--premium-panel-muted)]" aria-label="关闭">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onCancel} disabled={pending} className={`${BUTTON_SECONDARY_CLASS} flex-1`}>
+            取消
+          </button>
+          <button type="button" onClick={onConfirm} disabled={pending} className={`${BUTTON_PRIMARY_CLASS} flex-1`}>
+            {pending ? <Loader2 size={16} className="animate-spin" /> : null}
+            删除
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -247,9 +297,7 @@ export function SettingsPremiumPage() {
   }, [configs, isAdding]);
 
   const refreshCapabilityConfigs = useCallback(async (capability: CapabilityName) => {
-    const affectedCapabilities = embeddingSwitchAffects(capability)
-      ? (["EMBEDDING", "MULTI_EMBEDDING"] as CapabilityName[])
-      : [capability];
+    const affectedCapabilities = affectedCapabilitiesFor(capability);
 
     await Promise.all(
       affectedCapabilities.map((affectedCapability) =>
@@ -264,9 +312,7 @@ export function SettingsPremiumPage() {
   }, [queryClient]);
 
   const markCapabilityConfigEnabled = useCallback((capability: CapabilityName, id: number) => {
-    const affectedCapabilities = embeddingSwitchAffects(capability)
-      ? (["EMBEDDING", "MULTI_EMBEDDING"] as CapabilityName[])
-      : [capability];
+    const affectedCapabilities = affectedCapabilitiesFor(capability);
 
     affectedCapabilities.forEach((affectedCapability) => {
       queryClient.setQueryData<CapabilityConfig[]>(capabilityQueryKey(affectedCapability), (currentConfigs) => {
@@ -403,6 +449,10 @@ export function SettingsPremiumPage() {
                         setSelectedId(savedConfig.id);
                         setIsAdding(false);
                       }}
+                      onDeleted={() => {
+                        setSelectedId(null);
+                        setIsAdding(false);
+                      }}
                     />
                     <RuntimeStatusPanel
                       enabledConfigs={enabledConfigsByCapability}
@@ -428,7 +478,7 @@ export function SettingsPremiumPage() {
           <div className="w-full max-w-[440px] rounded-[8px] border border-[var(--premium-line)] bg-[rgba(255,253,245,0.92)] p-4 shadow-[var(--premium-menu-shadow)] backdrop-blur-xl dark:bg-[var(--premium-elevated)]">
             <div className="flex items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-[8px] bg-[var(--premium-ink)] text-white shadow-[0_14px_32px_rgba(17,19,21,0.16)]">
+                <span className="settings-dialog-icon grid size-10 shrink-0 place-items-center rounded-[8px] bg-[var(--premium-ink)] text-white shadow-[0_14px_32px_rgba(17,19,21,0.16)]">
                   <AlertTriangle size={19} />
                 </span>
                 <div className="min-w-0">
@@ -606,11 +656,13 @@ function ConfigPanel({
   config,
   isNew,
   onSaved,
+  onDeleted,
 }: {
   capability: CapabilityName;
   config: CapabilityConfig | null;
   isNew: boolean;
   onSaved: (savedConfig: CapabilityConfig) => void;
+  onDeleted: () => void;
 }) {
   const queryClient = useQueryClient();
   const option = CAPABILITY_OPTIONS.find((item) => item.value === capability) ?? CAPABILITY_OPTIONS[0];
@@ -621,7 +673,8 @@ function ConfigPanel({
   const [paramsExpanded, setParamsExpanded] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testResult, setTestResult] = useState<CapabilityConnectionTestResult | null>(null);
-  const [deleteNotice, setDeleteNotice] = useState(false);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const paramsQuery = useQuery({
     queryKey: paramsQueryKey(capability),
@@ -636,7 +689,8 @@ function ConfigPanel({
       setModelName("");
       setExtra({});
       setTestResult(null);
-      setDeleteNotice(false);
+      setDeleteNotice(null);
+      setDeleteConfirmOpen(false);
       return;
     }
     setBaseUrl(config.baseUrl);
@@ -644,13 +698,14 @@ function ConfigPanel({
     setModelName(config.modelName ?? "");
     setExtra(fromExtraConfig(config.extraConfig ?? {}, paramItems));
     setTestResult(null);
-    setDeleteNotice(false);
+    setDeleteNotice(null);
+    setDeleteConfirmOpen(false);
   }, [capability, config, isNew, paramItems]);
 
   const clearFeedback = () => {
     setSaved(false);
     setTestResult(null);
-    setDeleteNotice(false);
+    setDeleteNotice(null);
   };
 
   const currentCapabilityConfig = useMemo<CapabilityConfigUpdateRequest>(() => ({
@@ -691,6 +746,39 @@ function ConfigPanel({
       onSaved(savedConfig);
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (target: { capability: CapabilityName; id: number }) =>
+      apiClient.deleteCapabilityConfig(target.capability, target.id),
+    onSuccess: async (_, target) => {
+      setDeleteConfirmOpen(false);
+      setApiKey("");
+      setSaved(false);
+      setTestResult(null);
+      setDeleteNotice("删除成功，配置已移除");
+      queryClient.setQueryData<CapabilityConfig[]>(capabilityQueryKey(target.capability), (currentConfigs) =>
+        currentConfigs?.filter((item) => item.id !== target.id) ?? currentConfigs,
+      );
+      onDeleted();
+
+      const affectedCapabilities = affectedCapabilitiesFor(target.capability);
+      await Promise.all(
+        affectedCapabilities.map((affectedCapability) =>
+          queryClient.invalidateQueries({ queryKey: capabilityQueryKey(affectedCapability) }),
+        ),
+      );
+      await Promise.all(
+        affectedCapabilities.map((affectedCapability) =>
+          queryClient.refetchQueries({ queryKey: capabilityQueryKey(affectedCapability), type: "active" }),
+        ),
+      );
+    },
+  });
+
+  const handleDelete = () => {
+    if (!config || isNew) return;
+    deleteMutation.mutate({ capability, id: config.id });
+  };
 
   const testMutation = useMutation({
     mutationFn: () => {
@@ -815,27 +903,43 @@ function ConfigPanel({
         </div>
       </div>
 
-      {deleteNotice ? <div className="mt-4"><PendingNotice message="删除能力待接入" /></div> : null}
+      {deleteNotice ? <div className="mt-4"><PendingNotice message={deleteNotice} /></div> : null}
       {saveMutation.error ? (
         <div className="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-[11px] font-black leading-[1.55] text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
           <AlertCircle size={16} />
           保存失败：{getErrorMessage(saveMutation.error, "请稍后重试")}
         </div>
       ) : null}
+      {deleteMutation.error ? (
+        <div className="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-[11px] font-black leading-[1.55] text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+          <AlertCircle size={16} />
+          删除失败：{getErrorMessage(deleteMutation.error, "请稍后重试")}
+        </div>
+      ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <button type="button" disabled={!canSave || saveMutation.isPending} onClick={() => saveMutation.mutate()} className={BUTTON_PRIMARY_CLASS}>
+        <button type="button" disabled={!canSave || saveMutation.isPending || deleteMutation.isPending} onClick={() => saveMutation.mutate()} className={BUTTON_PRIMARY_CLASS}>
           {saveMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
           <span className={ACTION_BUTTON_LABEL_CLASS}>{saveMutation.isPending ? "保存中..." : "保存"}</span>
         </button>
-        <button type="button" onClick={() => setDeleteNotice(true)} className={BUTTON_SECONDARY_CLASS}>
-          <span className={ACTION_BUTTON_LABEL_CLASS}>删除</span>
+        <button type="button" disabled={isNew || !config || deleteMutation.isPending || saveMutation.isPending} onClick={() => setDeleteConfirmOpen(true)} className={BUTTON_SECONDARY_CLASS}>
+          {deleteMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
+          <span className={ACTION_BUTTON_LABEL_CLASS}>{deleteMutation.isPending ? "删除中..." : "删除"}</span>
         </button>
-        <button type="button" disabled={!canTest || testMutation.isPending} onClick={() => testMutation.mutate()} className={BUTTON_SECONDARY_CLASS}>
+        <button type="button" disabled={!canTest || testMutation.isPending || deleteMutation.isPending} onClick={() => testMutation.mutate()} className={BUTTON_SECONDARY_CLASS}>
           {testMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
           <span className={ACTION_BUTTON_LABEL_CLASS}>{testMutation.isPending ? "测试中..." : "测试连接"}</span>
         </button>
       </div>
+      {deleteConfirmOpen ? (
+        <DeleteConfirmDialog
+          title="删除配置？"
+          description="删除后将从列表移除。"
+          pending={deleteMutation.isPending}
+          onCancel={() => setDeleteConfirmOpen(false)}
+          onConfirm={handleDelete}
+        />
+      ) : null}
     </article>
   );
 }
@@ -935,7 +1039,9 @@ function StoragePanel() {
   const [roleArn, setRoleArn] = useState("");
   const [saved, setSaved] = useState(false);
   const [testResult, setTestResult] = useState<StorageConnectionTestResult | null>(null);
-  const [deleteNotice, setDeleteNotice] = useState(false);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -952,7 +1058,9 @@ function StoragePanel() {
   const clearFeedback = () => {
     setSaved(false);
     setTestResult(null);
-    setDeleteNotice(false);
+    setDeleteNotice(null);
+    setDeleteError(null);
+    setDeleteConfirmOpen(false);
   };
 
   const saveMutation = useMutation({
@@ -1017,6 +1125,49 @@ function StoragePanel() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiClient.deleteStorageConfig(id),
+    onMutate: () => {
+      setDeleteNotice(null);
+      setDeleteError(null);
+    },
+    onSuccess: async () => {
+      setDeleteConfirmOpen(false);
+      setEndpoint("");
+      setAccessKey("");
+      setSecretKey("");
+      setBucket("");
+      setRegion("");
+      setPrefix("");
+      setRoleArn("");
+      setSaved(false);
+      setTestResult(null);
+      setDeleteNotice("删除成功，存储配置已归档");
+      setDeleteError(null);
+      initialized.current = false;
+      await queryClient.invalidateQueries({ queryKey: ["settings", "storage"] });
+      await queryClient.refetchQueries({ queryKey: ["settings", "storage"], type: "active" });
+    },
+    onError: (error) => {
+      setDeleteError(getErrorMessage(error, "请稍后重试"));
+    },
+  });
+
+  useEffect(() => {
+    if (!deleteNotice && !deleteError) return;
+    const timer = window.setTimeout(() => {
+      setDeleteNotice(null);
+      setDeleteError(null);
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [deleteError, deleteNotice]);
+
+  const handleDelete = () => {
+    const id = configQuery.data?.id;
+    if (!id) return;
+    deleteMutation.mutate(id);
+  };
+
   return (
     <article className={`${PANEL_CLASS} min-w-0`} aria-label="存储设置">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -1070,27 +1221,43 @@ function StoragePanel() {
         </label>
       </div>
 
-      {deleteNotice ? <div className="mt-4"><PendingNotice message="删除能力待接入" /></div> : null}
+      {deleteNotice ? <div className="mt-4"><PendingNotice message={deleteNotice} /></div> : null}
       {saveMutation.error ? (
         <div className="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-[11px] font-black leading-[1.55] text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
           <AlertCircle size={16} />
           保存失败：{getErrorMessage(saveMutation.error, "请稍后重试")}
         </div>
       ) : null}
+      {deleteError ? (
+        <div className="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-[11px] font-black leading-[1.55] text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+          <AlertCircle size={16} />
+          删除失败：{deleteError}
+        </div>
+      ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <button type="button" disabled={!canSave || saveMutation.isPending} onClick={() => saveMutation.mutate()} className={BUTTON_PRIMARY_CLASS}>
+        <button type="button" disabled={!canSave || saveMutation.isPending || deleteMutation.isPending} onClick={() => saveMutation.mutate()} className={BUTTON_PRIMARY_CLASS}>
           {saveMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
           <span className={ACTION_BUTTON_LABEL_CLASS}>{saveMutation.isPending ? "保存中..." : "保存"}</span>
         </button>
-        <button type="button" onClick={() => setDeleteNotice(true)} className={BUTTON_SECONDARY_CLASS}>
-          <span className={ACTION_BUTTON_LABEL_CLASS}>删除</span>
+        <button type="button" disabled={!configQuery.data?.id || deleteMutation.isPending || saveMutation.isPending} onClick={() => setDeleteConfirmOpen(true)} className={BUTTON_SECONDARY_CLASS}>
+          {deleteMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
+          <span className={ACTION_BUTTON_LABEL_CLASS}>{deleteMutation.isPending ? "删除中..." : "删除"}</span>
         </button>
-        <button type="button" disabled={!canTest || testMutation.isPending} onClick={() => testMutation.mutate()} className={BUTTON_SECONDARY_CLASS}>
+        <button type="button" disabled={!canTest || testMutation.isPending || deleteMutation.isPending} onClick={() => testMutation.mutate()} className={BUTTON_SECONDARY_CLASS}>
           {testMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
           <span className={ACTION_BUTTON_LABEL_CLASS}>{testMutation.isPending ? "测试中..." : "测试连接"}</span>
         </button>
       </div>
+      {deleteConfirmOpen ? (
+        <DeleteConfirmDialog
+          title="删除存储配置？"
+          description="删除后当前配置将失效。"
+          pending={deleteMutation.isPending}
+          onCancel={() => setDeleteConfirmOpen(false)}
+          onConfirm={handleDelete}
+        />
+      ) : null}
     </article>
   );
 }

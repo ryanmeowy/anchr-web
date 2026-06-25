@@ -259,8 +259,21 @@ a {
   line-height: 1;
 }
 
+.settings-premium-page .settings-dialog-icon {
+  border: 1px solid rgba(17, 19, 21, 0.12);
+  background: #fff;
+  color: #111315;
+}
+
 .settings-premium-page[data-premium-theme="dark"] .settings-advanced-summary {
   background: var(--premium-panel-strong);
+}
+
+.settings-premium-page[data-premium-theme="dark"] .settings-dialog-icon {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: #fff;
+  color: #111315;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.24);
 }
 
 .ask-premium-composer .ask-premium-textarea {

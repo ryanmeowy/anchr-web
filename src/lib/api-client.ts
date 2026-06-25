@@ -410,6 +410,8 @@ export const apiClient = {
     request<StorageConfig | null>("/api/v1/settings/storage"),
   updateStorageConfig: (body: StorageConfigUpdateRequest) =>
     request<StorageConfig>("/api/v1/settings/storage", { method: "PATCH", body }),
+  deleteStorageConfig: (id: number) =>
+    request<null>(`/api/v1/settings/storage/${id}`, { method: "DELETE" }),
   testStorage: (body: { endpoint: string; accessKey?: string; secretKey?: string; bucket: string; configId?: number }) =>
     request<StorageConnectionTestResult>("/api/v1/settings/storage/test", { method: "POST", body }),
 };
