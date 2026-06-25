@@ -445,6 +445,8 @@
       }
 
       .content {
+        --imports-top-row: clamp(200px, 27vh, 240px);
+        --imports-flow-row: clamp(210px, 29vh, 250px);
         display: grid;
         height: 100%;
         min-height: 0;
@@ -464,7 +466,7 @@
         display: grid;
         height: 100%;
         min-height: 0;
-        grid-template-rows: minmax(240px, 1fr) auto auto;
+        grid-template-rows: var(--imports-top-row) var(--imports-flow-row) minmax(0, 1fr);
         gap: 10px;
       }
 
@@ -574,9 +576,8 @@
       .queue-card {
         display: flex;
         grid-row: 2;
-        height: 258px;
-        min-height: 258px;
-        max-height: 258px;
+        height: 100%;
+        min-height: 0;
         flex-direction: column;
       }
 
@@ -594,10 +595,11 @@
       .recent-card {
         display: flex;
         grid-row: 3;
-        height: 302px;
+        height: 100%;
         min-height: 0;
-        align-self: end;
+        align-self: stretch;
         flex-direction: column;
+        overflow: hidden;
       }
 
       .recent-card .section-head {
@@ -676,28 +678,53 @@
         font-size: 13px;
       }
 
-      .file-item > span:not(.file-icon):not(.progress-ring) {
+      .file-item > span:not(.file-icon):not(.file-status) {
         min-width: 0;
       }
 
-      .file-item > span:not(.file-icon):not(.progress-ring) span {
+      .file-item > span:not(.file-icon):not(.file-status) span {
         display: block;
         margin-top: 4px;
         color: var(--muted);
         font-size: 12px;
       }
 
-      .progress-ring {
-        display: grid;
-        width: 36px;
-        height: 36px;
+      .file-status {
+        display: inline-grid;
+        min-width: 58px;
+        height: 28px;
         place-items: center;
         border-radius: var(--pill);
-        background:
-          conic-gradient(var(--blue) 0 74%, rgba(16, 18, 20, 0.1) 74% 100%);
-        color: var(--blue-deep);
-        font-size: 10px;
+        border: 1px solid rgba(16, 18, 20, 0.09);
+        padding: 0 9px;
+        font-size: 11px;
         font-weight: 900;
+        justify-self: end;
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      .file-status.processing {
+        border-color: rgba(36, 89, 255, 0.2);
+        background: rgba(36, 89, 255, 0.1);
+        color: var(--blue-deep);
+      }
+
+      .file-status.complete {
+        border-color: rgba(66, 107, 9, 0.16);
+        background: rgba(186, 255, 115, 0.32);
+        color: var(--mint-deep);
+      }
+
+      .file-status.queued {
+        background: rgba(16, 18, 20, 0.06);
+        color: var(--muted);
+      }
+
+      .file-status.warning {
+        border-color: rgba(255, 176, 32, 0.28);
+        background: rgba(255, 176, 32, 0.16);
+        color: #7a4d00;
       }
 
       .recent-list {
@@ -772,7 +799,7 @@
         display: grid;
         height: 100%;
         min-height: 0;
-        grid-template-rows: auto minmax(250px, 0.82fr) minmax(220px, 0.68fr);
+        grid-template-rows: var(--imports-top-row) var(--imports-flow-row) minmax(0, 1fr);
         align-content: stretch;
         gap: 10px;
       }
@@ -783,15 +810,16 @@
 
       .pipeline-panel,
       .side-column > .panel.dark {
+        height: 100%;
         min-height: 0;
       }
 
       .import-session-panel {
         position: relative;
         display: flex;
-        height: max(240px, calc(100vh - 770px));
-        min-height: max(240px, calc(100vh - 770px));
-        max-height: max(240px, calc(100vh - 770px));
+        height: 100%;
+        min-height: 0;
+        max-height: none;
         flex-direction: column;
         gap: 10px;
         overflow: hidden;
@@ -1100,8 +1128,10 @@
         display: grid;
         height: 100%;
         min-height: 0;
-        grid-template-rows: auto auto auto minmax(48px, 1fr) auto;
+        grid-template-rows: auto auto auto auto;
         gap: 7px;
+        overflow: auto;
+        overscroll-behavior: contain;
       }
 
       .task-total {
@@ -1201,47 +1231,6 @@
         background: var(--blue);
       }
 
-      .task-breakdown {
-        display: grid;
-        min-height: 0;
-        align-content: center;
-        gap: 3px;
-        border: 1px solid rgba(16, 18, 20, 0.09);
-        border-radius: var(--radius);
-        background: rgba(255, 255, 255, 0.48);
-        padding: 7px 9px;
-      }
-
-      .task-breakdown-row {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto;
-        gap: 8px;
-        align-items: center;
-        color: var(--muted);
-        font-size: 10px;
-        font-weight: 900;
-        line-height: 1;
-      }
-
-      .task-breakdown-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: var(--pill);
-        background: var(--blue);
-      }
-
-      .task-breakdown-dot.success {
-        background: var(--mint);
-      }
-
-      .task-breakdown-dot.failed {
-        background: var(--rose);
-      }
-
-      .task-breakdown-dot.running {
-        background: var(--blue);
-      }
-
       svg {
         display: block;
         flex: 0 0 auto;
@@ -1263,7 +1252,7 @@
       @keyframes revealUp {
         from {
           opacity: 0;
-          transform: translateY(22px);
+          transform: translateY(0);
         }
         to {
           opacity: 1;
@@ -1314,6 +1303,177 @@
         }
         to {
           transform: scale(1.04) rotate(2deg);
+        }
+      }
+
+      @media (min-width: 821px) and (max-height: 680px) {
+        .content {
+          --imports-top-row: clamp(140px, 25vh, 170px);
+          --imports-flow-row: clamp(136px, 24vh, 160px);
+          padding-top: 10px;
+          padding-bottom: 12px;
+        }
+
+        .upload-zone,
+        .queue-card,
+        .recent-card {
+          padding: 10px;
+        }
+
+        .upload-mark {
+          width: 38px;
+          height: 38px;
+          margin-bottom: 6px;
+        }
+
+        .upload-mark svg {
+          width: 20px;
+          height: 20px;
+        }
+
+        .upload-zone h2 {
+          font-size: clamp(18px, 2.2vw, 28px);
+        }
+
+        .upload-zone p {
+          margin-top: 6px;
+          font-size: 11px;
+          line-height: 1.35;
+        }
+
+        .drop-inner .hero-actions {
+          margin-top: 8px !important;
+        }
+
+        .button,
+        .ghost-button {
+          min-height: 32px;
+        }
+
+        .queue-card .section-head,
+        .recent-card .section-head {
+          margin-bottom: 6px;
+        }
+
+        .section-head h2 {
+          font-size: clamp(15px, 1.8vw, 20px);
+        }
+
+        .section-head p {
+          margin-top: 3px;
+          font-size: 10px;
+        }
+
+        .file-grid {
+          grid-auto-rows: minmax(46px, auto);
+          gap: 6px;
+        }
+
+        .file-item {
+          padding: 6px;
+        }
+
+        .file-icon {
+          width: 32px;
+          height: 32px;
+          font-size: 10px;
+        }
+
+        .file-status {
+          min-width: 52px;
+          height: 24px;
+          padding: 0 7px;
+          font-size: 10px;
+        }
+
+        .recent-list {
+          grid-auto-rows: minmax(44px, auto);
+          gap: 6px;
+        }
+
+        .recent-item {
+          padding: 6px;
+        }
+
+        .import-session-panel {
+          gap: 6px;
+          overflow: auto;
+          overscroll-behavior: contain;
+        }
+
+        .import-session-panel .control-stack {
+          gap: 6px;
+        }
+
+        .import-session-panel .control-block {
+          gap: 2px;
+          padding: 5px;
+        }
+
+        .import-session-panel .select-row,
+        .import-session-panel .format-badge {
+          min-height: 24px;
+          font-size: 10px;
+        }
+
+        .pipeline-panel,
+        .side-column > .panel.dark {
+          padding: 10px;
+        }
+
+        .pipeline-panel {
+          overflow: auto;
+          overscroll-behavior: contain;
+        }
+
+        .flow-summary {
+          gap: 6px;
+          margin-top: 7px;
+          padding: 7px;
+        }
+
+        .flow-summary span {
+          margin-top: 2px;
+          font-size: 10px;
+          line-height: 1.2;
+        }
+
+        .flow {
+          gap: 6px;
+          margin-top: 7px;
+        }
+
+        .flow-step {
+          gap: 6px;
+          padding: 7px;
+        }
+
+        .step-no {
+          width: 24px;
+          height: 24px;
+        }
+
+        .flow-step > div:not(.step-line) {
+          padding-right: 24px;
+        }
+
+        .flow-step > div:not(.step-line) span {
+          margin-top: 3px;
+        }
+
+        .flow-state {
+          top: 7px;
+          right: 7px;
+          padding: 3px 5px;
+        }
+
+        .task-total strong {
+          font-size: 34px;
+        }
+
+        .task-stat {
+          min-height: 54px;
+          padding: 7px;
         }
       }
 
@@ -1453,12 +1613,19 @@
           grid-template-columns: 1fr 1fr;
         }
 
-        .file-item,
+        .file-item {
+          grid-template-columns: auto minmax(0, 1fr) auto;
+        }
+
         .recent-item {
           grid-template-columns: auto minmax(0, 1fr);
         }
 
-        .progress-ring,
+        .file-status {
+          grid-column: 3;
+          justify-self: end;
+        }
+
         .pill-status {
           grid-column: 2;
           justify-self: start;
@@ -1544,52 +1711,52 @@
                   <article class="file-item">
                     <span class="file-icon">PDF</span>
                     <span><strong>Q2-feedback-summary.pdf</strong><span>12.4 MB · 产品反馈</span></span>
-                    <span class="progress-ring">74%</span>
+                    <span class="file-status processing">解析中</span>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">XLS</span>
                     <span><strong>customer-faq.xlsx</strong><span>8.8 MB · FAQ 表格</span></span>
-                    <span class="progress-ring">61%</span>
+                    <span class="file-status processing">切片中</span>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">PNG</span>
                     <span><strong>workflow-capture.png</strong><span>4.1 MB · OCR 图片</span></span>
-                    <span class="progress-ring">89%</span>
+                    <span class="file-status processing">OCR 中</span>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">MD</span>
                     <span><strong>mobile-roadmap.md</strong><span>240 KB · Markdown</span></span>
-                    <span class="progress-ring">100%</span>
+                    <span class="file-status complete">已完成</span>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">DOC</span>
                     <span><strong>sales-playbook.docx</strong><span>3.6 MB · 销售手册</span></span>
-                    <span class="progress-ring">52%</span>
+                    <span class="file-status processing">解析中</span>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">PDF</span>
                     <span><strong>compliance-policy.pdf</strong><span>6.2 MB · 合规政策</span></span>
-                    <span class="progress-ring">38%</span>
+                    <span class="file-status warning">校验中</span>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">CSV</span>
                     <span><strong>support-export.csv</strong><span>1.9 MB · 客服导出</span></span>
-                    <span class="progress-ring">27%</span>
+                    <span class="file-status queued">待处理</span>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">IMG</span>
                     <span><strong>campaign-board.jpg</strong><span>5.4 MB · 活动素材</span></span>
-                    <span class="progress-ring">66%</span>
+                    <span class="file-status processing">向量化</span>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">TXT</span>
                     <span><strong>meeting-notes.txt</strong><span>86 KB · 会议纪要</span></span>
-                    <span class="progress-ring">93%</span>
+                    <span class="file-status processing">入库中</span>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">PPT</span>
                     <span><strong>launch-plan.pptx</strong><span>14.8 MB · 发布计划</span></span>
-                    <span class="progress-ring">44%</span>
+                    <span class="file-status processing">上传中</span>
                   </article>
                 </div>
               </section>
@@ -1716,11 +1883,6 @@
                     <span class="task-stat success"><b>6</b>成功</span>
                     <span class="task-stat failed"><b>1</b>失败</span>
                     <span class="task-stat running"><b>3</b>运行中</span>
-                  </div>
-                  <div class="task-breakdown" aria-label="任务状态分布">
-                    <span class="task-breakdown-row"><i class="task-breakdown-dot success"></i><span>成功</span><b>60%</b></span>
-                    <span class="task-breakdown-row"><i class="task-breakdown-dot failed"></i><span>失败</span><b>10%</b></span>
-                    <span class="task-breakdown-row"><i class="task-breakdown-dot running"></i><span>运行中</span><b>30%</b></span>
                   </div>
                   <div class="task-bar" aria-hidden="true">
                     <i class="success"></i>

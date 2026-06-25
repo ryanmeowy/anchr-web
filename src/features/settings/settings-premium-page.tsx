@@ -13,7 +13,7 @@ import {
   Waypoints,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { apiClient, clearAccessToken, getAccessToken, saveAccessToken } from "@/lib/api-client";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
@@ -59,6 +59,7 @@ const ENABLE_BUTTON_LABEL_CLASS =
   "block max-w-full truncate text-center text-[11px] font-black leading-none";
 const INFO_NOTICE_CLASS =
   "mb-4 inline-flex items-center gap-2 rounded-[8px] border border-[rgba(49,88,255,0.16)] bg-[rgba(49,88,255,0.08)] px-3 py-2 text-[11px] font-black leading-[1.55] text-[var(--premium-ink-soft)]";
+const ACCESS_TOKEN_CHANGED_EVENT = "anchr:access-token-changed";
 
 const CAPABILITY_OPTIONS: CapabilityOption[] = [
   { value: "GENERATION", label: "Generation", description: "Chat & answer generation", modelLabel: "生成模型", code: "GEN", icon: Stars },
@@ -76,6 +77,36 @@ const DEFAULT_MODEL_BY_CAPABILITY: Record<CapabilityName, string> = {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function subscribeAccessToken(callback: () => void) {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  window.addEventListener("storage", callback);
+  window.addEventListener(ACCESS_TOKEN_CHANGED_EVENT, callback);
+
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(ACCESS_TOKEN_CHANGED_EVENT, callback);
+  };
+}
+
+function getClientAccessTokenSnapshot(): string | null {
+  return getAccessToken();
+}
+
+function getServerAccessTokenSnapshot(): string | null {
+  return null;
+}
+
+function useAccessTokenSnapshot() {
+  return useSyncExternalStore(subscribeAccessToken, getClientAccessTokenSnapshot, getServerAccessTokenSnapshot);
+}
+
+function emitAccessTokenChanged() {
+  window.dispatchEvent(new Event(ACCESS_TOKEN_CHANGED_EVENT));
 }
 
 function capabilityQueryKey(capability: CapabilityName) {
@@ -221,7 +252,6 @@ export function SettingsPremiumPage() {
   const [pendingEnable, setPendingEnable] = useState<{ capability: CapabilityName; id: number } | null>(null);
   const [enablingTarget, setEnablingTarget] = useState<{ capability: CapabilityName; id: number } | null>(null);
   const [enableError, setEnableError] = useState<{ capability: CapabilityName; message: string } | null>(null);
-  const [tokenRevision, setTokenRevision] = useState(0);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -458,13 +488,12 @@ export function SettingsPremiumPage() {
                       enabledConfigs={enabledConfigsByCapability}
                       configsByCapability={configsByCapability}
                       storageConfigured={Boolean(storageStatusQuery.data?.endpoint && storageStatusQuery.data?.bucket)}
-                      tokenRevision={tokenRevision}
                     />
                   </div>
 
                   <div className="grid min-w-0 gap-3 xl:grid-cols-2">
                     <StoragePanel />
-                    <SecurityPanel onTokenChanged={() => setTokenRevision((value) => value + 1)} />
+                    <SecurityPanel />
                   </div>
                 </section>
               </div>
@@ -534,13 +563,13 @@ function CapabilitySelector({
   onAdd: (type: CapabilityName) => void;
 }) {
   return (
-    <aside className={`${PANEL_CLASS} content-start`} aria-label="能力配置导航">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <aside className={`${PANEL_CLASS} grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3`} aria-label="能力配置导航">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-black text-[var(--premium-muted)]">MODEL CAPABILITIES</p>
         <span className={MUTED_PILL_CLASS}>4</span>
       </div>
 
-      <div className="grid gap-2">
+      <div className="grid min-h-0 grid-rows-4 gap-2.5">
         {CAPABILITY_OPTIONS.map((option) => {
           const configs = configsByCapability[option.value];
           const enabled = enabledConfig(configs);
@@ -557,7 +586,7 @@ function CapabilitySelector({
             <article
               key={option.value}
               className={[
-                "grid gap-2 rounded-[8px] border p-[9px] text-left transition hover:translate-x-[3px]",
+                "grid min-h-0 content-between gap-2 rounded-[8px] border p-[10px] text-left transition hover:translate-x-[3px]",
                 active
                   ? "border-[rgba(49,88,255,0.34)] bg-white/70"
                   : "border-[rgba(16,18,20,0.1)] bg-white/50 hover:border-[rgba(49,88,255,0.34)] hover:bg-white/70 dark:bg-[var(--premium-panel-muted)]",
@@ -954,15 +983,14 @@ function RuntimeStatusPanel({
   enabledConfigs,
   configsByCapability,
   storageConfigured,
-  tokenRevision,
 }: {
   enabledConfigs: Record<CapabilityName, CapabilityConfig | null>;
   configsByCapability: Record<CapabilityName, CapabilityConfig[]>;
   storageConfigured: boolean;
-  tokenRevision: number;
 }) {
-  const token = useMemo(() => getAccessToken(), [tokenRevision]);
+  const token = useAccessTokenSnapshot();
   const enabledCount = Object.values(enabledConfigs).filter(Boolean).length;
+  const tokenStatus = token == null ? "检查中" : token ? "已启用" : "未配置";
 
   return (
     <article className={`${PANEL_CLASS} grid content-start gap-3`} aria-label="运行状态">
@@ -1021,7 +1049,7 @@ function RuntimeStatusPanel({
         <div className="settings-status-card rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
           <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
             <span>Token 配置状态</span>
-            <strong className="text-[#426b09]">{token ? "已启用" : "未配置"}</strong>
+            <strong className="text-[#426b09]">{tokenStatus}</strong>
           </div>
         </div>
       </div>
@@ -1274,10 +1302,12 @@ function StoragePanel() {
   );
 }
 
-function SecurityPanel({ onTokenChanged }: { onTokenChanged: () => void }) {
-  const [token, setToken] = useState(() => getAccessToken());
+function SecurityPanel() {
+  const storedToken = useAccessTokenSnapshot();
+  const [tokenDraft, setTokenDraft] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const token = tokenDraft ?? storedToken ?? "";
 
   return (
     <article className={`${PANEL_CLASS} min-w-0`} aria-label="访问令牌">
@@ -1296,7 +1326,7 @@ function SecurityPanel({ onTokenChanged }: { onTokenChanged: () => void }) {
           value={token}
           placeholder="粘贴 X-Access-Token"
           onChange={(event) => {
-            setToken(event.target.value);
+            setTokenDraft(event.target.value);
             setSaved(false);
             setSaveError(null);
           }}
@@ -1316,7 +1346,8 @@ function SecurityPanel({ onTokenChanged }: { onTokenChanged: () => void }) {
           onClick={() => {
             try {
               saveAccessToken(token);
-              onTokenChanged();
+              setTokenDraft(token.trim());
+              emitAccessTokenChanged();
               setSaveError(null);
               setSaved(true);
               window.setTimeout(() => setSaved(false), 2000);
@@ -1334,8 +1365,8 @@ function SecurityPanel({ onTokenChanged }: { onTokenChanged: () => void }) {
           onClick={() => {
             try {
               clearAccessToken();
-              setToken("");
-              onTokenChanged();
+              setTokenDraft("");
+              emitAccessTokenChanged();
               setSaveError(null);
               setSaved(true);
               window.setTimeout(() => setSaved(false), 2000);
