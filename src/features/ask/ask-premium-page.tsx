@@ -3,12 +3,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  Copy,
   Database,
   Edit3,
   Folder,
   Loader2,
   MoreHorizontal,
-  PanelRight,
   Plus,
   Sparkles,
   Trash2,
@@ -432,11 +432,14 @@ export function AskPremiumPage() {
     traceEvents,
   ]);
 
-  const handleSubmit = async () => {
-    const text = query.trim();
+  const sendMessage = async (rawText: string, options: { clearComposer?: boolean } = {}) => {
+    const text = rawText.trim();
     if (!text || streamingSessionId || (!activeSessionId && selectedKbIds.length === 0)) return;
 
-    setQuery("");
+    if (options.clearComposer) {
+      setQuery("");
+    }
+
     setStreamError(null);
     setTraceEvents([]);
     addTraceEvent({
@@ -582,6 +585,10 @@ export function AskPremiumPage() {
         setStreamingSessionId(null);
       }
     }
+  };
+
+  const handleSubmit = async () => {
+    await sendMessage(query, { clearComposer: true });
   };
 
   const handleSelectGenerationConfig = async (config: CapabilityConfig) => {
@@ -759,24 +766,24 @@ export function AskPremiumPage() {
           </aside>
 
           <main className="ask-premium-main flex min-h-0 min-w-0 flex-col bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)]">
-            <header className="ask-premium-hero grid min-h-0 gap-4 border-b border-black/10 px-4 py-5 lg:min-h-[166px] lg:grid-cols-[minmax(0,1fr)_auto] lg:px-6">
+            <header className="ask-premium-hero grid min-h-[112px] items-center gap-3 border-b border-black/10 px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:px-5">
               <div className="min-w-0">
-                <p className="ask-premium-kicker mb-2 inline-flex items-center gap-2 text-xs font-black text-blue-700">
-                  <span className="size-2 rounded-full bg-[#bbff66] shadow-[0_0_0_5px_rgba(187,255,102,0.24)]" />
+                <p className="ask-premium-kicker mb-1.5 inline-flex items-center gap-2 text-[10px] font-black text-blue-700">
+                  <span className="size-1.5 rounded-full bg-[#bbff66] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
                   ASK / {selectedAnswerMode} ANSWER MODE
                 </p>
-                <h1 className="text-[clamp(42px,5vw,76px)] font-black leading-[0.92]">Anchor Your<br />Answer</h1>
+                <h1 className="max-w-[720px] text-[clamp(28px,3.2vw,42px)] font-black leading-none">Anchor Your Answer</h1>
               </div>
-              <div className="ask-premium-scope-chip inline-flex h-11 max-w-full items-center gap-3 rounded-full border border-black/10 bg-white/80 px-4 text-sm font-bold text-slate-700 shadow-[0_10px_24px_rgba(17,19,21,0.07)]">
-                <Database size={17} />
+              <div className="ask-premium-scope-chip inline-flex h-10 max-w-full items-center gap-2.5 rounded-full border border-black/10 bg-white/80 px-3.5 text-xs font-bold text-slate-700 shadow-[0_10px_24px_rgba(17,19,21,0.07)]">
+                <Database size={15} />
                 <span className="truncate">{selectedKbLabel} · {selectedAnswerModeLabel}</span>
               </div>
             </header>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 lg:px-6">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-5 lg:px-5">
               <div className="mx-auto flex min-h-0 w-full max-w-[980px] flex-1 flex-col gap-4">
                 <section ref={messageScrollRef} className="min-h-0 flex-1 overflow-auto pr-1">
-                  <div className="relative grid gap-5">
+                  <div className="relative grid gap-4">
                     <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute right-0 top-10 text-[clamp(86px,14vw,190px)] font-black leading-none text-black/[0.035]">ASK</div>
                     {messageError ? (
                       <ErrorBlock message={messageError} />
@@ -791,6 +798,8 @@ export function AskPremiumPage() {
                           message={message}
                           question={activeMessages[index - 1]?.role === "user" ? activeMessages[index - 1]?.content : undefined}
                           onPreviewCitation={handlePreviewCitation}
+                          onSubmitUserEdit={(value) => sendMessage(value)}
+                          canSubmitUserEdit={!streamingSessionId}
                           highlighted={highlightedTurnId != null && highlightedTurnId === message.turnId}
                         />
                       ))
@@ -981,8 +990,8 @@ function TracePanel({
       <TraceCard label="KNOWLEDGE BASES" title={selectedKbLabel} detail="发送问题时作为当前问答范围" />
       <TraceCard label="CITATIONS" title={`${citationCount} sources`} detail="来自 SSE citations 事件与历史消息" />
       <section className="ask-premium-trace-timeline min-h-0 flex-1 rounded-[8px] border border-white/10 bg-white/10 p-4">
-        <div className="mb-3 flex items-center justify-between text-xs font-black text-white/60">
-          TRACE TIMELINE <PanelRight size={15} />
+        <div className="mb-3 text-xs font-black text-white/60">
+          TRACE TIMELINE
         </div>
         <div className="grid max-h-full gap-2 overflow-auto pr-1">
           {traceEvents.length ? traceEvents.slice().reverse().map((event) => (
@@ -1255,6 +1264,8 @@ function PremiumChatBubble({
   message,
   question,
   onPreviewCitation,
+  onSubmitUserEdit,
+  canSubmitUserEdit = true,
   highlighted,
 }: {
   message: ChatMessage;
@@ -1265,48 +1276,173 @@ function PremiumChatBubble({
     citationIndex: number,
     question?: string,
   ) => void;
+  onSubmitUserEdit: (value: string) => void | Promise<void>;
+  canSubmitUserEdit?: boolean;
   highlighted?: boolean;
 }) {
   const isUser = message.role === "user";
+  const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.content);
+  const copyTimerRef = useRef<number | null>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(message.content);
+    }
+  }, [editing, message.content]);
+
+  useEffect(() => () => {
+    if (copyTimerRef.current) {
+      window.clearTimeout(copyTimerRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!editing) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      editTextareaRef.current?.focus();
+      editTextareaRef.current?.setSelectionRange(draft.length, draft.length);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [draft.length, editing]);
+
+  const copyMessage = async () => {
+    await copyTextToClipboard(message.content);
+    setCopied(true);
+
+    if (copyTimerRef.current) {
+      window.clearTimeout(copyTimerRef.current);
+    }
+
+    copyTimerRef.current = window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  const cancelEdit = () => {
+    setDraft(message.content);
+    setEditing(false);
+  };
+
+  const submitEdit = () => {
+    const value = draft.trim();
+    if (!value || !canSubmitUserEdit) return;
+
+    setEditing(false);
+    void onSubmitUserEdit(value);
+  };
 
   if (isUser) {
     return (
-      <article data-turn-id={message.turnId} className="flex justify-end">
-        <div className="ask-premium-user-bubble max-w-[760px] rounded-[8px] border border-black/10 bg-white/80 px-5 py-4 text-[15px] font-semibold leading-7 text-[#111315] shadow-[0_14px_38px_rgba(17,19,21,0.1)] backdrop-blur-xl">
-          {message.content}
+      <article data-turn-id={message.turnId} className={["ask-premium-user-message flex justify-end", editing ? "is-editing" : ""].join(" ")}>
+        <div className="relative max-w-[680px]">
+          {editing ? (
+            <form
+              className="ask-premium-user-editor grid gap-3 rounded-[8px] px-3 py-2.5 text-[14px] font-semibold leading-6 text-[#111315]"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitEdit();
+              }}
+            >
+              <textarea
+                ref={editTextareaRef}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    cancelEdit();
+                  }
+
+                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                    event.preventDefault();
+                    submitEdit();
+                  }
+                }}
+                className="ask-premium-user-edit-textarea min-h-[76px] w-full resize-y border-0 bg-transparent p-0 text-[14px] font-semibold leading-6 text-[#111315] outline-none"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="ask-premium-user-edit-button ask-premium-user-edit-cancel h-8 rounded-[8px] px-3 text-xs font-black"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  disabled={!draft.trim() || !canSubmitUserEdit}
+                  className="ask-premium-user-edit-button ask-premium-user-edit-send h-8 rounded-[8px] px-3 text-xs font-black disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  发送
+                </button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <div className="ask-premium-user-text max-w-[680px] whitespace-pre-wrap break-words pb-8 pl-8 text-right text-[14px] font-semibold leading-6 text-[#111315]">
+                {message.content}
+              </div>
+              <div className="ask-premium-user-actions" aria-label="消息操作">
+                <button
+                  type="button"
+                  onClick={() => void copyMessage()}
+                  className={["ask-premium-user-action-button", copied ? "is-copied" : ""].join(" ")}
+                  aria-label={copied ? "已复制" : "复制消息"}
+                  title={copied ? "已复制" : "复制"}
+                >
+                  {copied ? <Check size={15} strokeWidth={2.5} /> : <Copy size={15} strokeWidth={2.2} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(message.content);
+                    setEditing(true);
+                  }}
+                  className="ask-premium-user-action-button"
+                  aria-label="编辑消息"
+                  title="编辑"
+                >
+                  <Edit3 size={15} strokeWidth={2.2} />
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </article>
     );
   }
 
   return (
-    <article data-turn-id={message.turnId} className={["flex gap-3", highlighted ? "rounded-[10px] ring-2 ring-blue-500/70" : ""].join(" ")}>
-      <div className="ask-premium-assistant-avatar grid size-10 shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-[0_14px_32px_rgba(17,19,21,0.2)]">
-        <Sparkles size={18} />
+    <article data-turn-id={message.turnId} className={["flex gap-2.5", highlighted ? "rounded-[10px] ring-2 ring-blue-500/70" : ""].join(" ")}>
+      <div className="ask-premium-assistant-avatar grid size-8 shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-none">
+        <Sparkles size={15} />
       </div>
-      <div className="ask-premium-assistant-card min-w-0 flex-1 rounded-[8px] border border-black/10 bg-white/80 p-5 shadow-[0_14px_38px_rgba(17,19,21,0.1)] backdrop-blur-xl">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <strong className="text-sm">Anchr Answer</strong>
+      <div className="ask-premium-assistant-content min-w-0 flex-1 py-1">
+        <div className="mb-2 flex items-center justify-between gap-4">
+          <strong className="text-[13px]">Anchr Answer</strong>
           {message.pending ? (
-            <span className="inline-flex items-center gap-2 rounded-full bg-[#bbff66]/25 px-3 py-1.5 text-xs font-black text-[#4e7b13]">
-              <span className="size-2 animate-pulse rounded-full bg-[#4e7b13]" />
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#bbff66]/25 px-2.5 py-1 text-[11px] font-black text-[#4e7b13]">
+              <span className="size-1.5 animate-pulse rounded-full bg-[#4e7b13]" />
               流式回答中
             </span>
           ) : null}
         </div>
-        <div className="ask-premium-answer-text whitespace-pre-wrap break-words text-[15px] leading-8 text-slate-700">
+        <div className="ask-premium-answer-text whitespace-pre-wrap break-words text-[14px] leading-7 text-slate-700">
           {message.pending && !stripTraceText(message.content) ? "正在生成回答..." : stripTraceText(message.content)}
         </div>
         {message.error ? <div className="mt-3 text-sm text-rose-600">{message.error}</div> : null}
         {message.citations?.length ? (
-          <div className="mt-5 flex flex-wrap gap-2" aria-label="引用来源">
+          <div className="mt-4 flex flex-wrap gap-2" aria-label="引用来源">
             {message.citations.map((citation, index) => (
               <button
                 type="button"
                 key={`${citation.segmentId ?? citation.fileName ?? index}-${index}`}
                 onClick={() => onPreviewCitation(message, citation, index, question)}
                 disabled={!citation.segmentId}
-                className="ask-premium-citation inline-flex min-h-[34px] items-center gap-2 rounded-full border border-black/10 bg-[#f7f7f2]/85 px-3 text-xs font-black text-[#111315] transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
+                className="ask-premium-citation inline-flex min-h-[30px] items-center gap-2 rounded-full border border-black/10 bg-[#f7f7f2]/85 px-2.5 text-[11px] font-black text-[#111315] transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
               >
                 [{index + 1}] {citation.fileName ?? "引用来源"} {citation.pageNo ? `第 ${citation.pageNo} 页` : ""}
               </button>
@@ -1360,6 +1496,23 @@ function mergeConversations(primary: ConversationSession[], secondary: Conversat
 
 function makeMessageId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+async function copyTextToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
 }
 
 function traceText(stage?: string) {

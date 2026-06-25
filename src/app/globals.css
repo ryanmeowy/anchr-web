@@ -338,12 +338,13 @@ a {
 }
 
 .ask-premium-citation {
-  min-height: 34px;
+  min-height: 30px;
   border-color: var(--premium-line);
   background: var(--premium-panel-muted);
   color: var(--premium-ink);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
+  letter-spacing: 0;
 }
 
 .ask-premium-citation:hover {
@@ -352,20 +353,113 @@ a {
   transform: translateY(-2px);
 }
 
-.ask-premium-user-bubble {
-  border-color: color-mix(in srgb, var(--premium-blue), transparent 82%);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(247, 247, 242, 0.76)),
-    radial-gradient(circle at 0% 0%, rgba(49, 88, 255, 0.08), transparent 16rem);
+.ask-premium-user-text {
   color: var(--premium-ink);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.74),
-    var(--premium-tight-shadow);
+}
+
+.ask-premium-user-actions {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(2px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.ask-premium-user-message:hover .ask-premium-user-actions,
+.ask-premium-user-message:focus-within .ask-premium-user-actions {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ask-premium-user-action-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--premium-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  color: color-mix(in srgb, var(--premium-ink), transparent 26%);
+  box-shadow: 0 8px 20px rgba(17, 19, 21, 0.075);
+  backdrop-filter: blur(14px);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.ask-premium-user-action-button:hover {
+  border-color: color-mix(in srgb, var(--premium-blue), transparent 68%);
+  background: #fff;
+  color: var(--premium-blue);
+  transform: translateY(-1px);
+}
+
+.ask-premium-user-action-button.is-copied {
+  border-color: color-mix(in srgb, var(--premium-accent), transparent 48%);
+  color: #4e7b13;
+}
+
+.ask-premium-user-editor {
+  width: min(680px, calc(100vw - 40px));
+  border: 1px solid color-mix(in srgb, var(--premium-blue), transparent 82%);
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(14px);
+}
+
+.ask-premium-user-edit-textarea {
+  color: var(--premium-ink);
+  caret-color: var(--premium-blue);
+}
+
+.ask-premium-user-edit-button {
+  border: 1px solid var(--premium-line);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.ask-premium-user-edit-cancel {
+  background: var(--premium-panel-muted);
+  color: color-mix(in srgb, var(--premium-ink), transparent 28%);
+}
+
+.ask-premium-user-edit-cancel:hover {
+  background: var(--premium-panel-strong);
+  color: var(--premium-ink);
+}
+
+.ask-premium-user-edit-send {
+  background: var(--premium-ink);
+  color: #fff;
+}
+
+.ask-premium-user-edit-send:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.ask-premium-assistant-content {
+  color: var(--premium-ink);
+}
+
+.ask-premium-answer-text {
+  color: color-mix(in srgb, var(--premium-ink), transparent 23%);
 }
 
 .ask-premium-assistant-avatar {
   background: var(--premium-rail);
-  box-shadow: 0 14px 32px rgba(17, 19, 21, 0.2);
+  box-shadow: 0 10px 24px rgba(17, 19, 21, 0.16);
 }
 
 .ask-premium-spinner {
@@ -543,30 +637,66 @@ a {
   color: rgba(244, 247, 236, 0.72);
 }
 
-.ask-premium-page[data-premium-theme="dark"] .ask-premium-assistant-card {
-  border-color: var(--premium-line);
-  background: var(--premium-panel);
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-assistant-content {
   color: var(--premium-ink);
-  box-shadow: var(--premium-tight-shadow);
 }
 
 .ask-premium-page[data-premium-theme="dark"] .ask-premium-answer-text {
   color: var(--premium-ink-soft);
 }
 
-.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-bubble {
-  border-color: color-mix(in srgb, var(--premium-blue), transparent 72%);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.055)),
-    radial-gradient(circle at 0% 0%, rgba(49, 88, 255, 0.16), transparent 18rem);
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-text {
   color: var(--premium-ink);
-  box-shadow: var(--premium-tight-shadow);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-action-button {
+  border-color: var(--premium-line);
+  background: rgba(255, 255, 255, 0.075);
+  color: var(--premium-ink-soft);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-action-button:hover {
+  border-color: rgba(187, 255, 102, 0.34);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--premium-accent);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-action-button.is-copied {
+  border-color: rgba(187, 255, 102, 0.38);
+  color: var(--premium-accent);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-editor {
+  border-color: var(--premium-line);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-edit-textarea {
+  color: var(--premium-ink);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-edit-cancel {
+  border-color: var(--premium-line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--premium-ink-soft);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-edit-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--premium-ink);
+}
+
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-user-edit-send {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: #f4f7ec;
+  color: #111315;
 }
 
 .ask-premium-page[data-premium-theme="dark"] .ask-premium-assistant-avatar {
   background: rgba(255, 255, 255, 0.1);
   color: var(--premium-accent);
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
 }
 
 .ask-premium-page[data-premium-theme="dark"] .ask-premium-citation {
@@ -782,6 +912,15 @@ a {
 }
 
 @media (max-width: 640px) {
+  .ask-premium-user-actions {
+    right: 0;
+    bottom: 0;
+  }
+
+  .ask-premium-user-editor {
+    width: min(100%, calc(100vw - 32px));
+  }
+
   .ask-premium-composer .ask-premium-control-button span {
     max-width: 112px;
   }
