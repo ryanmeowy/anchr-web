@@ -823,7 +823,7 @@ function DedupeStrategyPicker({
             type="button"
             onClick={() => onSelect(item)}
             className={[
-              "inline-flex min-h-7 items-center justify-center rounded-[8px] border px-2 text-center text-[11px] font-black leading-none transition",
+              "inline-flex min-h-9 items-center justify-center rounded-[8px] border px-2 text-center text-[11px] font-black leading-none transition",
               selected
                 ? "border-[rgba(49,88,255,0.28)] bg-[rgba(49,88,255,0.12)] text-blue-700 dark:text-blue-200"
                 : "border-black/10 bg-white/60 text-[var(--premium-ink-soft)] hover:bg-white/80 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)] dark:hover:bg-[var(--premium-panel)]",
@@ -868,7 +868,7 @@ function ControlBlock({ title, children }: { title: string; children: ReactNode 
 
 function FormatBadge({ format }: { format: SupportedFormat }) {
   return (
-    <div className="grid min-h-7 place-items-center rounded-[8px] border border-black/10 bg-white/60 px-2 text-center text-[11px] font-black leading-none text-[var(--premium-ink-soft)] dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)]">
+    <div className="grid min-h-9 place-items-center rounded-[8px] border border-black/10 bg-white/60 px-2 text-center text-[11px] font-black leading-none text-[var(--premium-ink-soft)] dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)]">
       <span className="max-w-full truncate">{supportedFormatDisplayName(format.fileType)}</span>
     </div>
   );
@@ -1254,4 +1254,4 @@ const FIELD_CLASS =
   "h-9 w-full rounded-[8px] border border-[var(--premium-line)] bg-white/70 px-3 text-[12px] text-[var(--premium-ink)] outline-none transition placeholder:text-[var(--premium-muted)] focus:border-[var(--premium-focus-line)] focus:bg-[var(--premium-elevated)] focus:shadow-[0_0_0_3px_var(--premium-focus-ring)] dark:bg-[var(--premium-panel-strong)]";
 
 const SELECT_BUTTON_CLASS =
-  "inline-flex min-h-7 w-full items-center gap-2 rounded-[8px] border border-black/10 bg-[rgba(255,253,245,0.72)] px-2.5 text-[12px] font-extrabold leading-none text-[var(--premium-ink)] transition hover:bg-white/85 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)] dark:hover:bg-[var(--premium-panel)]";
+  "inline-flex min-h-9 w-full items-center gap-2 rounded-[8px] border border-black/10 bg-[rgba(255,253,245,0.72)] px-2.5 text-[12px] font-extrabold leading-none text-[var(--premium-ink)] transition hover:bg-white/85 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)] dark:hover:bg-[var(--premium-panel)]";
