@@ -560,27 +560,27 @@ a {
 
 .imports-premium-page[data-premium-theme="dark"] .imports-upload-glow-layer {
   background:
-    linear-gradient(120deg, rgba(49, 88, 255, 0.05), transparent 38%),
-    radial-gradient(circle at 82% 8%, rgba(187, 255, 102, 0.12), transparent 15rem);
+    linear-gradient(120deg, rgba(49, 88, 255, 0.025), transparent 38%),
+    radial-gradient(circle at 82% 8%, rgba(187, 255, 102, 0.06), transparent 15rem);
 }
 
 .imports-premium-page[data-premium-theme="dark"] .imports-session-glow {
   background:
-    radial-gradient(circle at 88% 0%, rgba(36, 89, 255, 0.09), transparent 9rem),
-    radial-gradient(circle at 16% 100%, rgba(186, 255, 115, 0.13), transparent 10rem),
+    radial-gradient(circle at 88% 0%, rgba(36, 89, 255, 0.04), transparent 9rem),
+    radial-gradient(circle at 16% 100%, rgba(186, 255, 115, 0.07), transparent 10rem),
     var(--premium-panel);
 }
 
 .imports-premium-page[data-premium-theme="dark"] .imports-task-glow {
   background:
-    radial-gradient(circle at 92% 0%, rgba(186, 255, 115, 0.14), transparent 10rem),
+    radial-gradient(circle at 92% 0%, rgba(186, 255, 115, 0.07), transparent 10rem),
     var(--premium-panel);
 }
 
 .imports-premium-page[data-premium-theme="dark"] .imports-pipeline-glow {
   background:
-    radial-gradient(circle at 96% 4%, rgba(186, 255, 115, 0.13), transparent 9rem),
-    linear-gradient(135deg, rgba(36, 89, 255, 0.06), transparent 46%),
+    radial-gradient(circle at 96% 4%, rgba(186, 255, 115, 0.07), transparent 9rem),
+    linear-gradient(135deg, rgba(36, 89, 255, 0.03), transparent 46%),
     var(--premium-panel);
 }
 
