@@ -467,7 +467,7 @@
         display: grid;
         height: 100%;
         min-height: 0;
-        grid-template-rows: minmax(var(--imports-top-row), 1fr) minmax(var(--imports-flow-row), 1fr) var(--imports-bottom-row);
+        grid-template-rows: minmax(var(--imports-top-row), 1fr) minmax(var(--imports-flow-row), 1fr) minmax(var(--imports-bottom-row), 1.05fr);
         gap: 10px;
       }
 
@@ -586,6 +586,14 @@
         flex: 0 0 auto;
         align-items: center;
         margin-bottom: 8px;
+      }
+
+      .queue-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
       }
 
       .queue-card .file-grid {
@@ -728,6 +736,66 @@
         color: #7a4d00;
       }
 
+      .file-status.failed {
+        border-color: rgba(255, 102, 89, 0.28);
+        background: rgba(255, 102, 89, 0.16);
+        color: #a93527;
+      }
+
+      .file-status.skipped {
+        background: rgba(16, 18, 20, 0.06);
+        color: var(--muted);
+      }
+
+      .retry-button {
+        display: inline-flex;
+        min-height: 28px;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        border: 1px solid rgba(255, 102, 89, 0.3);
+        border-radius: var(--pill);
+        background: rgba(255, 102, 89, 0.12);
+        padding: 0 11px;
+        color: #a93527;
+        font-size: 11px;
+        font-weight: 900;
+        justify-self: end;
+        line-height: 1;
+        white-space: nowrap;
+        transition:
+          background 260ms var(--ease),
+          transform 260ms var(--ease);
+      }
+
+      .retry-button:hover {
+        background: rgba(255, 102, 89, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .retry-all-button {
+        display: inline-flex;
+        min-height: 32px;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid rgba(255, 102, 89, 0.3);
+        border-radius: var(--pill);
+        background: rgba(255, 102, 89, 0.12);
+        padding: 0 13px;
+        color: #a93527;
+        font-size: 11px;
+        font-weight: 900;
+        white-space: nowrap;
+        transition:
+          background 260ms var(--ease),
+          transform 260ms var(--ease);
+      }
+
+      .retry-all-button:hover {
+        background: rgba(255, 102, 89, 0.2);
+        transform: translateY(-1px);
+      }
+
       .recent-list {
         display: grid;
         grid-auto-rows: minmax(52px, auto);
@@ -800,7 +868,7 @@
         display: grid;
         height: 100%;
         min-height: 0;
-        grid-template-rows: minmax(var(--imports-top-row), 1fr) minmax(var(--imports-flow-row), 1fr) var(--imports-bottom-row);
+        grid-template-rows: minmax(var(--imports-top-row), 1fr) minmax(var(--imports-flow-row), 1fr) minmax(var(--imports-bottom-row), 1.05fr);
         align-content: stretch;
         gap: 10px;
       }
@@ -1135,6 +1203,48 @@
         overscroll-behavior: contain;
       }
 
+      .task-panel {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .task-panel::before {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 96% 4%, rgba(186, 255, 115, 0.24), transparent 7rem),
+          linear-gradient(135deg, rgba(36, 89, 255, 0.08), transparent 42%);
+        content: "";
+        pointer-events: none;
+      }
+
+      .task-panel > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .task-summary {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+        border: 1px solid rgba(36, 89, 255, 0.14);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.5);
+        padding: 10px;
+      }
+
+      .task-summary .task-bar {
+        margin-top: 0;
+      }
+
+      .task-panel .task-stat-grid {
+        flex: 1 1 auto;
+        margin-top: 10px;
+        align-content: center;
+      }
+
       .task-total {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
@@ -1428,6 +1538,11 @@
           overscroll-behavior: contain;
         }
 
+        .task-panel {
+          overflow: auto;
+          overscroll-behavior: contain;
+        }
+
         .flow-summary {
           gap: 6px;
           margin-top: 7px;
@@ -1707,7 +1822,13 @@
                     <h2>已选择 10 个文件</h2>
                     <p>总计 79.4 MB，准备上传到“产品与路线图”。</p>
                   </div>
-                  <button class="button" type="button">上传并入库</button>
+                  <div class="queue-actions">
+                    <button class="retry-all-button" type="button">
+                      <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>
+                      重试全部
+                    </button>
+                    <button class="button" type="button">上传并入库</button>
+                  </div>
                 </div>
                 <div class="file-grid">
                   <article class="file-item">
@@ -1738,12 +1859,15 @@
                   <article class="file-item">
                     <span class="file-icon">PDF</span>
                     <span><strong>compliance-policy.pdf</strong><span>6.2 MB · 合规政策</span></span>
-                    <span class="file-status warning">校验中</span>
+                    <button class="retry-button" type="button">
+                      <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>
+                      重试
+                    </button>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">CSV</span>
                     <span><strong>support-export.csv</strong><span>1.9 MB · 客服导出</span></span>
-                    <span class="file-status queued">待处理</span>
+                    <span class="file-status skipped">已跳过</span>
                   </article>
                   <article class="file-item">
                     <span class="file-icon">IMG</span>
@@ -1758,7 +1882,10 @@
                   <article class="file-item">
                     <span class="file-icon">PPT</span>
                     <span><strong>launch-plan.pptx</strong><span>14.8 MB · 发布计划</span></span>
-                    <span class="file-status processing">上传中</span>
+                    <button class="retry-button" type="button">
+                      <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>
+                      重试
+                    </button>
                   </article>
                 </div>
               </section>
@@ -1841,6 +1968,25 @@
                 </div>
               </section>
 
+              <section class="panel dark task-panel">
+                <p class="label">CURRENT TASK <span>3 处理中</span></p>
+                <div class="task-summary">
+                  <div class="task-total">
+                    <span><strong>10</strong>当前导入文件总数</span>
+                  </div>
+                  <div class="task-bar" aria-hidden="true">
+                    <i class="success"></i>
+                    <i class="failed"></i>
+                    <i class="running"></i>
+                  </div>
+                </div>
+                <div class="task-stat-grid">
+                  <span class="task-stat success"><b>6</b>成功</span>
+                  <span class="task-stat failed"><b>1</b>失败</span>
+                  <span class="task-stat running"><b>3</b>运行中</span>
+                </div>
+              </section>
+
               <section class="panel pipeline-panel">
                 <p class="label">PIPELINE FLOW <span>78%</span></p>
                 <div class="flow-summary">
@@ -1870,26 +2016,6 @@
                     <div class="step-line"><span class="step-no">4</span></div>
                     <div><strong>可问答</strong><span>写入索引后可检索</span></div>
                     <span class="flow-state">等待</span>
-                  </div>
-                </div>
-              </section>
-
-              <section class="panel dark">
-                <div class="health">
-                  <p class="label">CURRENT TASK </p>
-                  <div class="task-total">
-                    <span><strong>10</strong>当前导入文件总数</span>
-                    <span class="task-live-pill">3 处理中</span>
-                  </div>
-                  <div class="task-stat-grid">
-                    <span class="task-stat success"><b>6</b>成功</span>
-                    <span class="task-stat failed"><b>1</b>失败</span>
-                    <span class="task-stat running"><b>3</b>运行中</span>
-                  </div>
-                  <div class="task-bar" aria-hidden="true">
-                    <i class="success"></i>
-                    <i class="failed"></i>
-                    <i class="running"></i>
                   </div>
                 </div>
               </section>

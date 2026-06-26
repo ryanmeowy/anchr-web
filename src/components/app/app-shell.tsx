@@ -45,6 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAskPage = pathname === "/ask";
   const isLibraryPage = pathname === "/library";
+  const isImportsPage = pathname === "/imports";
   const isSettingsPage = pathname === "/settings";
   const isSimpleHeaderPage =
     isAskPage || isLibraryPage || pathname === "/search" || pathname === "/imports" || pathname === "/settings" || pathname.startsWith("/preview");
@@ -84,7 +85,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
   }, [collapsed, sidebarHydrated]);
 
-  if (isAskPage || isLibraryPage || isSettingsPage) {
+  if (isAskPage || isLibraryPage || isImportsPage || isSettingsPage) {
     return <>{children}</>;
   }
 

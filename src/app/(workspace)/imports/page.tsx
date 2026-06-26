@@ -1,5 +1,5 @@
-import { ImportsPage } from "@/features/imports/imports-page";
+import { ImportsPremiumPage } from "@/features/imports/imports-premium-page";
 
 export default function Page() {
-  return <ImportsPage />;
+  return <ImportsPremiumPage />;
 }

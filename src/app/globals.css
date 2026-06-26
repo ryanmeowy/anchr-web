@@ -46,7 +46,7 @@ button,
 input,
 select,
 textarea {
-  font: inherit;
+  font-family: inherit;
 }
 
 button {
@@ -519,6 +519,60 @@ a {
     linear-gradient(90deg, rgba(13, 15, 14, 0.92), rgba(13, 15, 14, 0.64)),
     radial-gradient(circle at 84% 4%, var(--premium-glow-primary), transparent 27rem),
     radial-gradient(circle at 10% 86%, var(--premium-glow-secondary), transparent 30rem);
+}
+
+.imports-premium-page .imports-panel {
+  box-shadow: none;
+}
+
+.imports-premium-page[data-premium-theme="dark"] {
+  --premium-bg: #070908;
+  --premium-bg-grid: rgba(244, 247, 236, 0.055);
+  --premium-line: rgba(255, 255, 255, 0.1);
+  --premium-line-strong: rgba(255, 255, 255, 0.14);
+  --premium-panel: rgba(12, 14, 13, 0.86);
+  --premium-panel-strong: rgba(15, 17, 16, 0.94);
+  --premium-panel-muted: rgba(18, 20, 19, 0.74);
+  --premium-elevated: rgba(14, 16, 15, 0.98);
+  --premium-glow-primary: rgba(187, 255, 102, 0.18);
+  --premium-glow-secondary: rgba(49, 88, 255, 0.2);
+}
+
+.imports-premium-page[data-premium-theme="dark"] .ask-premium-shell {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(10, 12, 11, 0.76);
+}
+
+.imports-premium-page[data-premium-theme="dark"] .ask-premium-main {
+  background:
+    linear-gradient(90deg, rgba(13, 15, 14, 0.92), rgba(13, 15, 14, 0.64)),
+    radial-gradient(circle at 84% 4%, var(--premium-glow-primary), transparent 27rem),
+    radial-gradient(circle at 10% 86%, var(--premium-glow-secondary), transparent 30rem);
+}
+
+.imports-premium-page[data-premium-theme="dark"] .ask-premium-hero {
+  background: transparent;
+}
+
+.imports-premium-page[data-premium-theme="dark"] .imports-primary-action {
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  background: rgba(244, 247, 236, 0.94);
+  color: #111315;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+}
+
+.imports-premium-page[data-premium-theme="dark"] .imports-primary-action:hover {
+  border-color: #fff;
+  background: #fff;
+  color: #111315;
+}
+
+.imports-premium-page[data-premium-theme="dark"] .imports-primary-action:disabled {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(244, 247, 236, 0.2);
+  color: rgba(244, 247, 236, 0.72);
+  opacity: 1;
+  box-shadow: none;
 }
 
 .ask-premium-page[data-premium-theme="dark"] .ask-premium-hero {
