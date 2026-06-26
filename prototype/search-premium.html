@@ -101,13 +101,13 @@
 
       .shell {
         min-height: 100vh;
-        padding: 24px;
+        padding: 16px;
       }
 
       .app {
         display: grid;
-        min-height: calc(100vh - 48px);
-        grid-template-columns: 88px minmax(0, 1fr);
+        min-height: calc(100vh - 32px);
+        grid-template-columns: 72px minmax(0, 1fr);
         overflow: hidden;
         border: 1px solid var(--line-strong);
         border-radius: var(--radius);
@@ -120,10 +120,10 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 16px;
+        gap: 12px;
         border-right: 1px solid rgba(255, 255, 255, 0.12);
         background: rgba(16, 18, 20, 0.96);
-        padding: 16px 12px;
+        padding: 14px 10px;
         color: #fff;
       }
 
@@ -140,15 +140,15 @@
 
       .rail-nav {
         display: grid;
-        gap: 10px;
-        margin-top: 12px;
+        gap: 8px;
+        margin-top: 10px;
       }
 
       .icon-button {
         position: relative;
         display: grid;
-        width: 44px;
-        height: 44px;
+        width: 42px;
+        height: 42px;
         place-items: center;
         border: 0;
         border-radius: var(--radius);
@@ -179,8 +179,8 @@
 
       .user-chip {
         display: grid;
-        width: 44px;
-        height: 44px;
+        width: 42px;
+        height: 42px;
         place-items: center;
         margin-top: auto;
         border: 1px solid rgba(255, 255, 255, 0.14);
@@ -199,19 +199,19 @@
       .hero {
         position: relative;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(280px, 390px);
-        gap: 24px;
-        min-height: 332px;
+        height: 112px;
+        gap: 8px;
         border-bottom: 1px solid var(--line);
-        padding: 24px;
+        padding: 12px 20px;
+        overflow: hidden;
       }
 
       .hero-word {
         position: absolute;
         right: 18px;
-        bottom: -32px;
+        bottom: -18px;
         color: rgba(16, 18, 20, 0.052);
-        font-size: clamp(86px, 15vw, 240px);
+        font-size: clamp(48px, 9vw, 132px);
         font-weight: 950;
         line-height: 0.8;
         pointer-events: none;
@@ -220,12 +220,15 @@
       .hero-copy {
         position: relative;
         z-index: 1;
+        animation: revealMask 900ms var(--ease) both;
+      }
+
+      .hero-copy {
         display: flex;
         min-width: 0;
         flex-direction: column;
         justify-content: space-between;
-        gap: 24px;
-        animation: revealMask 900ms var(--ease) both;
+        gap: 8px;
       }
 
       .eyebrow,
@@ -243,32 +246,38 @@
       .eyebrow {
         justify-content: flex-start;
         color: var(--blue-deep);
+        font-size: 10px;
+      }
+
+      .hero-copy .eyebrow {
+        margin: 0 0 6px;
+        font-size: 10px;
       }
 
       .pulse {
-        width: 9px;
-        height: 9px;
+        width: 6px;
+        height: 6px;
         flex: 0 0 auto;
         border-radius: var(--pill);
         background: var(--lime-deep);
-        box-shadow: 0 0 0 7px rgba(201, 255, 80, 0.28);
+        box-shadow: 0 0 0 5px rgba(201, 255, 80, 0.28);
         animation: pulse 2.4s var(--ease) infinite;
       }
 
       .hero h1 {
-        max-width: 920px;
-        margin: 12px 0 0;
+        max-width: 760px;
+        margin: 0;
         overflow-wrap: anywhere;
-        font-size: clamp(42px, 7.2vw, 112px);
-        line-height: 0.9;
+        font-size: clamp(16px, 2.4vw, 34px);
+        line-height: 1;
       }
 
       .hero-copy p {
         max-width: 700px;
-        margin: 18px 0 0;
+        margin: 5px 0 0;
         color: var(--ink-soft);
-        font-size: 16px;
-        line-height: 1.8;
+        font-size: 13px;
+        line-height: 1.6;
       }
 
       .search-command {
@@ -276,12 +285,11 @@
         grid-template-columns: minmax(0, 1fr) auto auto;
         align-items: center;
         gap: 10px;
-        max-width: 980px;
         min-height: 72px;
         border: 1px solid var(--line-strong);
         border-radius: var(--radius);
         background: rgba(255, 253, 245, 0.82);
-        padding: 9px 9px 9px 18px;
+        padding: 10px 10px 10px 22px;
         box-shadow: 0 18px 48px rgba(16, 18, 20, 0.12);
         backdrop-filter: blur(18px);
       }
@@ -293,13 +301,20 @@
         gap: 12px;
       }
 
+      .search-command .tab-switch button,
+      .search-command .button {
+        min-height: 42px;
+        padding: 0 18px;
+        font-size: 13px;
+      }
+
       .search-command input {
         min-width: 0;
         width: 100%;
         border: 0;
         background: transparent;
         color: var(--ink);
-        font-size: 18px;
+        font-size: 15px;
         outline: none;
       }
 
@@ -322,12 +337,12 @@
       .ghost-button,
       .source-chip {
         display: inline-flex;
-        min-height: 42px;
+        min-height: 34px;
         align-items: center;
         justify-content: center;
         gap: 8px;
         border-radius: var(--pill);
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 900;
         transition:
           color 260ms var(--ease),
@@ -352,7 +367,7 @@
       .button {
         border: 0;
         background: var(--ink);
-        padding: 0 18px;
+        padding: 0 14px;
         color: #fff;
         box-shadow: 0 16px 38px rgba(16, 18, 20, 0.2);
       }
@@ -362,101 +377,13 @@
         transform: translateY(-3px);
       }
 
-      .hero-panel {
-        position: relative;
-        z-index: 1;
-        display: grid;
-        min-height: 284px;
-        grid-template-rows: auto 1fr auto;
-        gap: 18px;
-        overflow: hidden;
-        border: 1px solid rgba(16, 18, 20, 0.2);
-        border-radius: var(--radius);
-        background: var(--ink);
-        padding: 18px;
-        color: #fff;
-        box-shadow: var(--tight-shadow);
-        animation: revealMask 900ms var(--ease) 90ms both;
-      }
-
-      .hero-panel .label {
-        color: rgba(255, 255, 255, 0.66);
-      }
-
-      .radar {
-        position: relative;
-        min-height: 150px;
-        overflow: hidden;
-        border-radius: var(--radius);
-        background:
-          radial-gradient(circle at center, transparent 0 16%, rgba(255, 255, 255, 0.1) 17% 17.8%, transparent 18% 34%, rgba(255, 255, 255, 0.1) 35% 35.8%, transparent 36%),
-          linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-        background-size: auto, 28px 28px, 28px 28px;
-      }
-
-      .radar::before {
-        position: absolute;
-        inset: -40% 50% 50% -40%;
-        background: conic-gradient(from 0deg, rgba(201, 255, 80, 0), rgba(201, 255, 80, 0.48), rgba(201, 255, 80, 0));
-        transform-origin: 100% 100%;
-        animation: sweep 5s linear infinite;
-        content: "";
-      }
-
-      .radar i {
-        position: absolute;
-        width: 10px;
-        height: 10px;
-        border-radius: var(--pill);
-        background: var(--lime);
-        box-shadow: 0 0 0 7px rgba(201, 255, 80, 0.16);
-      }
-
-      .radar i:nth-child(1) {
-        top: 28px;
-        left: 20%;
-      }
-
-      .radar i:nth-child(2) {
-        top: 82px;
-        left: 56%;
-      }
-
-      .radar i:nth-child(3) {
-        top: 44px;
-        right: 18%;
-      }
-
-      .scan-metrics {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-      }
-
-      .scan-metrics span {
-        min-height: 64px;
-        border-radius: var(--radius);
-        background: rgba(255, 255, 255, 0.08);
-        padding: 10px;
-        color: rgba(255, 255, 255, 0.72);
-        font-size: 11px;
-      }
-
-      .scan-metrics b {
-        display: block;
-        margin-bottom: 6px;
-        color: #fff;
-        font-size: 20px;
-      }
-
       .content {
         display: grid;
         min-height: 0;
         grid-template-columns: minmax(0, 1fr) minmax(310px, 390px);
-        gap: 20px;
+        gap: 12px;
         overflow: auto;
-        padding: 20px 24px 24px;
+        padding: 12px 20px 16px;
       }
 
       .main-column,
@@ -478,7 +405,7 @@
       .answer-card {
         position: relative;
         overflow: hidden;
-        padding: 18px;
+        padding: 12px;
         animation: revealUp 760ms var(--ease) both;
       }
 
@@ -497,7 +424,7 @@
         position: relative;
         z-index: 1;
         display: grid;
-        gap: 18px;
+        gap: 12px;
       }
 
       .section-head {
@@ -509,26 +436,26 @@
 
       .section-head h2 {
         margin: 0;
-        font-size: clamp(24px, 3.3vw, 42px);
+        font-size: clamp(18px, 2vw, 24px);
         line-height: 1;
       }
 
       .section-head p {
-        margin: 8px 0 0;
+        margin: 5px 0 0;
         color: var(--muted);
-        font-size: 13px;
+        font-size: 11px;
       }
 
       .confidence {
         display: inline-flex;
-        min-height: 38px;
+        min-height: 28px;
         align-items: center;
         gap: 8px;
         border-radius: var(--pill);
         background: rgba(201, 255, 80, 0.28);
-        padding: 0 12px;
+        padding: 0 9px;
         color: var(--lime-deep);
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 900;
         white-space: nowrap;
       }
@@ -544,11 +471,11 @@
 
       .answer-text {
         display: grid;
-        gap: 14px;
+        gap: 10px;
         max-width: 900px;
         color: var(--ink-soft);
-        font-size: 15px;
-        line-height: 1.9;
+        font-size: 14px;
+        line-height: 1.75;
       }
 
       .answer-text p {
@@ -562,29 +489,29 @@
       .evidence-row {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
+        gap: 8px;
       }
 
       .evidence {
-        min-height: 104px;
+        min-height: 90px;
         border: 1px solid rgba(16, 18, 20, 0.1);
         border-radius: var(--radius);
         background: rgba(255, 255, 255, 0.56);
-        padding: 12px;
+        padding: 10px;
       }
 
       .evidence span {
         display: block;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
         color: var(--blue-deep);
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 900;
       }
 
       .evidence small {
         display: block;
         color: var(--muted);
-        font-size: 12px;
+        font-size: 11px;
         line-height: 1.6;
       }
 
@@ -601,7 +528,7 @@
       .ghost-button {
         border: 1px solid var(--line);
         background: rgba(255, 253, 245, 0.72);
-        padding: 0 12px;
+        padding: 0 10px;
         color: var(--ink-soft);
       }
 
@@ -618,13 +545,13 @@
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        margin: 14px 0;
-        padding: 12px;
+        margin: 10px 0;
+        padding: 10px;
       }
 
       .query-strip span {
         color: var(--muted);
-        font-size: 13px;
+        font-size: 12px;
       }
 
       .result-group {
@@ -638,12 +565,12 @@
         justify-content: space-between;
         gap: 12px;
         border-bottom: 1px solid var(--line);
-        padding: 14px;
+        padding: 10px;
       }
 
       .result-header strong {
         overflow-wrap: anywhere;
-        font-size: 15px;
+        font-size: 14px;
       }
 
       .result-header span {
@@ -659,9 +586,9 @@
       .result {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
-        gap: 16px;
+        gap: 12px;
         border-bottom: 1px solid var(--line);
-        padding: 16px;
+        padding: 12px;
         transition:
           background 260ms var(--ease),
           transform 260ms var(--ease);
@@ -687,11 +614,11 @@
       .type-badge,
       .score {
         display: inline-flex;
-        min-height: 26px;
+        min-height: 24px;
         align-items: center;
         border-radius: var(--pill);
         padding: 0 9px;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 900;
       }
 
@@ -714,23 +641,23 @@
         min-width: 0;
         margin: 0;
         overflow-wrap: anywhere;
-        font-size: 16px;
+        font-size: 14px;
       }
 
       .result p {
-        margin: 10px 0 0;
+        margin: 8px 0 0;
         color: var(--ink-soft);
-        font-size: 14px;
-        line-height: 1.75;
+        font-size: 13px;
+        line-height: 1.65;
       }
 
       .result-meta {
         display: flex;
         flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 12px;
+        gap: 8px;
+        margin-top: 10px;
         color: var(--muted);
-        font-size: 12px;
+        font-size: 11px;
       }
 
       .score {
@@ -741,17 +668,17 @@
 
       .load-more {
         width: 100%;
-        margin-top: 14px;
+        margin-top: 10px;
       }
 
       .side-column {
         display: grid;
         align-content: start;
-        gap: 14px;
+        gap: 10px;
       }
 
       .panel {
-        padding: 16px;
+        padding: 12px;
       }
 
       .panel.dark {
@@ -765,8 +692,8 @@
 
       .filter-stack {
         display: grid;
-        gap: 18px;
-        margin-top: 16px;
+        gap: 14px;
+        margin-top: 12px;
       }
 
       .filter-block {
@@ -776,14 +703,14 @@
 
       .filter-block h3 {
         margin: 0;
-        font-size: 13px;
+        font-size: 12px;
       }
 
       .select-row,
       .date-row,
       .number-row {
         display: flex;
-        min-height: 44px;
+        min-height: 40px;
         align-items: center;
         justify-content: space-between;
         gap: 10px;
@@ -792,27 +719,27 @@
         background: rgba(255, 253, 245, 0.68);
         padding: 0 12px;
         color: var(--ink-soft);
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 800;
       }
 
       .filter-tags .chip {
-        min-height: 34px;
+        min-height: 30px;
       }
 
       .recent-list {
         display: grid;
-        gap: 10px;
-        margin-top: 14px;
+        gap: 8px;
+        margin-top: 10px;
       }
 
       .recent-item {
         display: grid;
-        gap: 7px;
+        gap: 6px;
         border: 1px solid rgba(255, 255, 255, 0.12);
         border-radius: var(--radius);
         background: rgba(255, 255, 255, 0.08);
-        padding: 12px;
+        padding: 10px;
         transition:
           background 260ms var(--ease),
           transform 260ms var(--ease);
@@ -825,18 +752,18 @@
 
       .recent-item strong {
         overflow-wrap: anywhere;
-        font-size: 14px;
+        font-size: 13px;
       }
 
       .recent-item span {
         color: rgba(255, 255, 255, 0.68);
-        font-size: 12px;
+        font-size: 11px;
         line-height: 1.6;
       }
 
       .health {
         display: grid;
-        gap: 14px;
+        gap: 10px;
       }
 
       .health-main {
@@ -847,15 +774,15 @@
       }
 
       .health-main strong {
-        font-size: clamp(40px, 6vw, 72px);
+        font-size: clamp(36px, 5vw, 58px);
         line-height: 0.88;
       }
 
       .health-main span {
         max-width: 128px;
         color: var(--muted);
-        font-size: 12px;
-        line-height: 1.6;
+        font-size: 11px;
+        line-height: 1.5;
       }
 
       .meter {
@@ -877,24 +804,24 @@
       .source-breakdown {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
+        gap: 6px;
       }
 
       .source-breakdown span {
-        min-height: 64px;
+        min-height: 56px;
         border: 1px solid rgba(16, 18, 20, 0.1);
         border-radius: var(--radius);
         background: rgba(255, 255, 255, 0.56);
-        padding: 10px;
+        padding: 8px;
         color: var(--muted);
-        font-size: 11px;
+        font-size: 10px;
       }
 
       .source-breakdown b {
         display: block;
         margin-bottom: 5px;
         color: var(--ink);
-        font-size: 18px;
+        font-size: 16px;
       }
 
       svg {
@@ -949,12 +876,6 @@
         }
       }
 
-      @keyframes sweep {
-        to {
-          transform: rotate(1turn);
-        }
-      }
-
       @keyframes grow {
         from {
           width: 18%;
@@ -982,8 +903,230 @@
         }
       }
 
+      .explore-section {
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 253, 245, 0.76);
+        box-shadow: var(--tight-shadow);
+        backdrop-filter: blur(18px);
+        padding: 12px;
+        animation: revealUp 760ms var(--ease) 180ms both;
+      }
+
+      .explore-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .explore-hint {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .explore-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .explore-card {
+        display: grid;
+        gap: 6px;
+        border: 1px solid rgba(16, 18, 20, 0.1);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.56);
+        padding: 12px;
+        transition:
+          background 260ms var(--ease),
+          transform 260ms var(--ease),
+          box-shadow 260ms var(--ease);
+      }
+
+      .explore-card:hover {
+        background: rgba(255, 255, 255, 0.86);
+        transform: translateY(-3px);
+        box-shadow: 0 12px 32px rgba(16, 18, 20, 0.12);
+      }
+
+      .explore-card-icon {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border-radius: var(--radius);
+        background: rgba(36, 89, 255, 0.1);
+        color: var(--blue);
+      }
+
+      .explore-card strong {
+        overflow-wrap: anywhere;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .explore-card span {
+        color: var(--ink-soft);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+
+      .explore-card small {
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .insight-section {
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 253, 245, 0.76);
+        box-shadow: var(--tight-shadow);
+        backdrop-filter: blur(18px);
+        padding: 16px;
+        animation: revealUp 760ms var(--ease) 180ms both;
+      }
+
+      .insight-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .insight-latency {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .insight-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .insight-funnel {
+        display: grid;
+        gap: 6px;
+      }
+
+      .funnel-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 28px;
+      }
+
+      .funnel-label {
+        width: 68px;
+        flex-shrink: 0;
+        color: var(--ink);
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      .funnel-count {
+        width: 26px;
+        flex-shrink: 0;
+        text-align: right;
+        color: var(--blue-deep);
+        font-size: 15px;
+        font-weight: 900;
+      }
+
+      .funnel-row.final .funnel-count {
+        color: var(--lime-deep);
+      }
+
+      .funnel-track {
+        flex: 1;
+        min-width: 0;
+        height: 5px;
+        overflow: hidden;
+        border-radius: var(--pill);
+        background: rgba(16, 18, 20, 0.08);
+      }
+
+      .funnel-track i {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--blue), rgba(36, 89, 255, 0.5));
+      }
+
+      .funnel-row.final .funnel-track i {
+        background: var(--lime);
+      }
+
+      .insight-side {
+        display: grid;
+        gap: 16px;
+      }
+
+      .insight-sources {
+        display: grid;
+        gap: 8px;
+      }
+
+      .insight-side-label {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 800;
+      }
+
+      .insight-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+
+      .insight-tags span {
+        min-height: 24px;
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: var(--pill);
+        background: rgba(255, 253, 245, 0.68);
+        padding: 0 8px;
+        color: var(--ink-soft);
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .insight-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .insight-stat {
+        display: grid;
+        gap: 3px;
+        justify-items: center;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.48);
+        padding: 14px 4px;
+      }
+
+      .insight-stat b {
+        color: var(--ink);
+        font-size: 20px;
+        font-weight: 900;
+      }
+
+      .insight-stat span {
+        color: var(--muted);
+        font-size: 10px;
+        text-align: center;
+        line-height: 1.3;
+      }
+
       @media (max-width: 1180px) {
-        .hero,
         .content {
           grid-template-columns: 1fr;
         }
@@ -993,6 +1136,11 @@
         }
 
         .panel.health-panel {
+          grid-column: 1 / -1;
+        }
+
+        .explore-section,
+        .insight-section {
           grid-column: 1 / -1;
         }
       }
@@ -1034,20 +1182,21 @@
         }
 
         .hero {
-          min-height: auto;
+          height: auto;
+          min-height: 88px;
         }
 
         .hero h1 {
-          font-size: clamp(42px, 12vw, 72px);
+          font-size: clamp(18px, 6vw, 28px);
         }
 
         .search-command {
           grid-template-columns: 1fr;
-          padding: 12px;
+          padding: 10px;
         }
 
         .search-command label {
-          min-height: 48px;
+          min-height: 44px;
         }
 
         .tab-switch,
@@ -1070,8 +1219,7 @@
           flex-direction: column;
         }
 
-        .source-breakdown,
-        .scan-metrics {
+        .source-breakdown {
           grid-template-columns: 1fr 1fr;
         }
       }
@@ -1086,7 +1234,6 @@
           height: 42px;
         }
 
-        .hero-panel,
         .answer-card,
         .panel {
           padding: 14px;
@@ -1100,9 +1247,20 @@
           justify-self: start;
         }
 
-        .source-breakdown,
-        .scan-metrics {
+        .source-breakdown {
           grid-template-columns: 1fr;
+        }
+
+        .explore-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .insight-body {
+          grid-template-columns: 1fr;
+        }
+
+        .insight-stats {
+          grid-template-columns: repeat(3, 1fr);
         }
       }
 
@@ -1168,8 +1326,12 @@
               <div>
                 <p class="eyebrow"><span class="pulse" aria-hidden="true"></span>SEARCH / EVIDENCE RADAR</p>
                 <h1>从一条问题，抵达可验证的证据链。</h1>
-                <p>Search 不只是结果列表：它同时组织答案、片段、来源类型、知识库范围和预览路径，让每次检索都能回到可信依据。</p>
               </div>
+            </section>
+          </header>
+
+          <main class="content">
+            <section class="main-column" aria-label="搜索结果">
               <form class="search-command" role="search">
                 <label>
                   <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -1178,9 +1340,9 @@
                   </svg>
                   <input aria-label="搜索关键词" value="移动端 Ask 页面如何优化引用回看？" />
                 </label>
-                <div class="tab-switch" aria-label="结果模式">
-                  <button class="active" type="button">回答</button>
-                  <button type="button">结果</button>
+                <div class="tab-switch" aria-label="结果模式" id="mode-switch">
+                  <button class="active" type="button" data-mode="answer">回答</button>
+                  <button type="button" data-mode="results">来源</button>
                 </div>
                 <button class="button" type="submit" aria-label="搜索">
                   搜索
@@ -1190,132 +1352,209 @@
                   </svg>
                 </button>
               </form>
-            </section>
 
-            <section class="hero-panel" aria-label="检索雷达">
-              <p class="label">RRF + RERANK <span>0.42s</span></p>
-              <div class="radar" aria-hidden="true">
-                <i></i>
-                <i></i>
-                <i></i>
-              </div>
-              <div class="scan-metrics">
-                <span><b>50</b>Top K</span>
-                <span><b>18</b>引用片段</span>
-                <span><b>6</b>知识库</span>
-              </div>
-            </section>
-          </header>
-
-          <main class="content">
-            <section class="main-column" aria-label="搜索结果">
-              <article class="answer-card" aria-label="AI 回答">
+              <article class="answer-card" aria-label="搜索结果卡片" style="margin-top:12px">
                 <div class="answer-inner">
                   <div class="section-head">
                     <div>
-                      <h2>基于 8 条证据生成</h2>
-                      <p>严格回答模式，保留可点击引用来源。</p>
+                      <h2 id="mode-title">基于 8 条证据生成</h2>
+                      <p id="mode-desc">严格回答模式，保留可点击引用来源。</p>
                     </div>
-                    <span class="confidence">87% confidence</span>
+                    <span class="confidence" id="mode-badge">87% confidence</span>
                   </div>
 
-                  <div class="answer-text">
-                    <p><b>优先优化引用回看和检索范围确认。</b>当前移动端体验的问题不是“找不到结果”，而是用户在得到回答后无法快速确认答案来自哪些知识库、哪些页面、哪些 OCR 片段。</p>
-                    <p>建议将知识库范围、来源类型和时间范围转为发送前可见的轻量筛选条，并让答案下方的引用片段支持横向扫读。这样用户无需离开搜索上下文，也能进入预览核验证据。</p>
+                  <div id="answer-panel">
+                    <div class="answer-text">
+                      <p><b>优先优化引用回看和检索范围确认。</b>当前移动端体验的问题不是"找不到结果"，而是用户在得到回答后无法快速确认答案来自哪些知识库、哪些页面、哪些 OCR 片段。</p>
+                      <p>建议将知识库范围、来源类型和时间范围转为发送前可见的轻量筛选条，并让答案下方的引用片段支持横向扫读。这样用户无需离开搜索上下文，也能进入预览核验证据。</p>
+                    </div>
+
+                    <div class="evidence-row">
+                      <div class="evidence">
+                        <span>01 / Knowledge Scope</span>
+                        <small>全部知识库、产品空间、设计档案作为可见范围，减少误检索。</small>
+                      </div>
+                      <div class="evidence">
+                        <span>02 / Hit Type</span>
+                        <small>文本片段与 OCR 片段并列，解释结果来自哪里。</small>
+                      </div>
+                      <div class="evidence">
+                        <span>03 / Preview Return</span>
+                        <small>预览打开后可以回到原搜索状态和滚动位置。</small>
+                      </div>
+                    </div>
+
+                    <div class="citation-row" aria-label="引用来源">
+                      <a class="source-chip" href="#">[1] Q2-feedback.pdf P12</a>
+                      <a class="source-chip" href="#">[2] Mobile-roadmap.md</a>
+                      <a class="source-chip" href="#">[3] OCR-notes.png #4</a>
+                      <button class="ghost-button" type="button">复制回答</button>
+                      <button class="ghost-button" type="button">重新生成</button>
+                    </div>
                   </div>
 
-                  <div class="evidence-row">
-                    <div class="evidence">
-                      <span>01 / Knowledge Scope</span>
-                      <small>全部知识库、产品空间、设计档案作为可见范围，减少误检索。</small>
-                    </div>
-                    <div class="evidence">
-                      <span>02 / Hit Type</span>
-                      <small>文本片段与 OCR 片段并列，解释结果来自哪里。</small>
-                    </div>
-                    <div class="evidence">
-                      <span>03 / Preview Return</span>
-                      <small>预览打开后可以回到原搜索状态和滚动位置。</small>
-                    </div>
-                  </div>
+                  <div id="results-panel" style="display:none">
+                    <div class="result-list">
+                      <article class="result" style="border-bottom:1px solid var(--line);padding:12px 0">
+                        <div>
+                          <div class="result-title">
+                            <span class="type-badge pdf">PDF</span>
+                            <h3>Q2 用户反馈汇总.pdf</h3>
+                          </div>
+                          <p>用户希望答案下方直接看到<mark>引用来源</mark>和原文片段，并能从预览返回当前搜索上下文。</p>
+                          <div class="result-meta">
+                            <span>P12 · #4</span>
+                            <span>keyword / vector / rerank</span>
+                            <span>命中 7</span>
+                          </div>
+                        </div>
+                        <span class="score">0.92</span>
+                      </article>
 
-                  <div class="citation-row" aria-label="引用来源">
-                    <a class="source-chip" href="#">[1] Q2-feedback.pdf P12</a>
-                    <a class="source-chip" href="#">[2] Mobile-roadmap.md</a>
-                    <a class="source-chip" href="#">[3] OCR-notes.png #4</a>
-                    <button class="ghost-button" type="button">复制回答</button>
-                    <button class="ghost-button" type="button">重新生成</button>
+                      <article class="result" style="border-bottom:1px solid var(--line);padding:12px 0">
+                        <div>
+                          <div class="result-title">
+                            <span class="type-badge md">MD</span>
+                            <h3>Mobile-roadmap.md</h3>
+                          </div>
+                          <p>移动端 Search 需要把筛选范围压缩为可扫读标签，避免高级筛选在小屏占据主任务。</p>
+                          <div class="result-meta">
+                            <span>#12</span>
+                            <span>vector / tag</span>
+                            <span>命中 4</span>
+                          </div>
+                        </div>
+                        <span class="score">0.88</span>
+                      </article>
+
+                      <article class="result" style="border-bottom:1px solid var(--line);padding:12px 0">
+                        <div>
+                          <div class="result-title">
+                            <span class="type-badge ocr">OCR</span>
+                            <h3>workflow-capture.png</h3>
+                          </div>
+                          <p>截图 OCR 显示预览页需要保存 from、contextKey 和 citationIndex，以便恢复搜索现场。</p>
+                          <div class="result-meta">
+                            <span>P1 · OCR block</span>
+                            <span>ocr / rerank</span>
+                            <span>命中 2</span>
+                          </div>
+                        </div>
+                        <span class="score">0.81</span>
+                      </article>
+                    </div>
+                    <button class="button load-more" type="button" style="margin-top:12px">加载更多结果</button>
                   </div>
                 </div>
               </article>
 
-              <div class="query-strip" aria-label="当前筛选">
-                <span>18 条结果 · 0.42s · RRF_RERANK</span>
-                <div class="filter-tags">
-                  <button class="chip" type="button">全部知识库</button>
-                  <button class="chip" type="button">PDF</button>
-                  <button class="chip" type="button">Markdown</button>
-                  <button class="chip" type="button">文本 + OCR</button>
+              <section class="explore-section" aria-label="继续探索">
+                <div class="explore-header">
+                  <p class="label">CONTINUE EXPLORING <span>GENERATED</span></p>
+                  <span class="explore-hint">基于当前上下文扩展搜索方向</span>
                 </div>
-              </div>
-
-              <section class="result-group" aria-label="相关结果">
-                <div class="result-header">
-                  <strong>产品与路线图</strong>
-                  <span>3 个结果</span>
-                </div>
-                <div class="result-list">
-                  <article class="result">
-                    <div>
-                      <div class="result-title">
-                        <span class="type-badge pdf">PDF</span>
-                        <h3>Q2 用户反馈汇总.pdf</h3>
-                      </div>
-                      <p>用户希望答案下方直接看到<mark>引用来源</mark>和原文片段，并能从预览返回当前搜索上下文。</p>
-                      <div class="result-meta">
-                        <span>P12 · #4</span>
-                        <span>keyword / vector / rerank</span>
-                        <span>命中 7</span>
-                      </div>
+                <div class="explore-grid">
+                  <a class="explore-card" href="#">
+                    <div class="explore-card-icon">
+                      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+                      </svg>
                     </div>
-                    <span class="score">0.92</span>
-                  </article>
-
-                  <article class="result">
-                    <div>
-                      <div class="result-title">
-                        <span class="type-badge md">MD</span>
-                        <h3>Mobile-roadmap.md</h3>
-                      </div>
-                      <p>移动端 Search 需要把筛选范围压缩为可扫读标签，避免高级筛选在小屏占据主任务。</p>
-                      <div class="result-meta">
-                        <span>#12</span>
-                        <span>vector / tag</span>
-                        <span>命中 4</span>
-                      </div>
+                    <strong>桌面端 Ask 页面的引用回看交互有何不同？</strong>
+                    <span>对比移动端与桌面端的引用预览差异，评估 hover vs tap 的适用场景。</span>
+                    <small>产品与路线图 / 设计系统 · 预计命中 14</small>
+                  </a>
+                  <a class="explore-card" href="#">
+                    <div class="explore-card-icon">
+                      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+                      </svg>
                     </div>
-                    <span class="score">0.88</span>
-                  </article>
-
-                  <article class="result">
-                    <div>
-                      <div class="result-title">
-                        <span class="type-badge ocr">OCR</span>
-                        <h3>workflow-capture.png</h3>
-                      </div>
-                      <p>截图 OCR 显示预览页需要保存 from、contextKey 和 citationIndex，以便恢复搜索现场。</p>
-                      <div class="result-meta">
-                        <span>P1 · OCR block</span>
-                        <span>ocr / rerank</span>
-                        <span>命中 2</span>
-                      </div>
+                    <strong>OCR 片段置信度低时如何影响答案质量？</strong>
+                    <span>分析低置信度 OCR 命中对 rerank 排序和最终生成答案的影响。</span>
+                    <small>导入日志 / 解析报告 · 预计命中 22</small>
+                  </a>
+                  <a class="explore-card" href="#">
+                    <div class="explore-card-icon">
+                      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+                      </svg>
                     </div>
-                    <span class="score">0.81</span>
-                  </article>
+                    <strong>知识库范围收窄后召回率会下降多少？</strong>
+                    <span>对比全库搜索与限定知识库搜索的召回率和精确率变化。</span>
+                    <small>客户成功资料 / FAQ · 预计命中 9</small>
+                  </a>
+                  <a class="explore-card" href="#">
+                    <div class="explore-card-icon">
+                      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+                      </svg>
+                    </div>
+                    <strong>用户反馈中还有哪些高频搜索痛点？</strong>
+                    <span>汇总 Q1-Q2 反馈中与搜索体验相关的高频问题和期望。</span>
+                    <small>Q2-feedback.pdf · 预计命中 18</small>
+                  </a>
                 </div>
               </section>
 
-              <button class="button load-more" type="button">加载更多结果</button>
+              <section class="insight-section" aria-label="检索洞察">
+                <div class="insight-header">
+                  <p class="label">RETRIEVAL INSIGHT</p>
+                  <span class="insight-latency">340ms</span>
+                </div>
+
+                <div class="insight-body">
+                  <div class="insight-funnel">
+                    <div class="funnel-row">
+                      <span class="funnel-label">关键词召回</span>
+                      <span class="funnel-count">84</span>
+                      <div class="funnel-track"><i style="width:100%"></i></div>
+                    </div>
+                    <div class="funnel-row">
+                      <span class="funnel-label">向量召回</span>
+                      <span class="funnel-count">62</span>
+                      <div class="funnel-track"><i style="width:74%"></i></div>
+                    </div>
+                    <div class="funnel-row">
+                      <span class="funnel-label">重排序</span>
+                      <span class="funnel-count">24</span>
+                      <div class="funnel-track"><i style="width:29%"></i></div>
+                    </div>
+                    <div class="funnel-row final">
+                      <span class="funnel-label">采纳证据</span>
+                      <span class="funnel-count">8</span>
+                      <div class="funnel-track"><i style="width:10%"></i></div>
+                    </div>
+                  </div>
+
+                  <div class="insight-side">
+                    <div class="insight-sources">
+                      <span class="insight-side-label">覆盖知识库</span>
+                      <div class="insight-tags">
+                        <span>产品空间</span>
+                        <span>设计档案</span>
+                        <span>FAQ</span>
+                        <span>导入日志</span>
+                      </div>
+                    </div>
+                    <div class="insight-stats">
+                      <div class="insight-stat">
+                        <b>0.92</b>
+                        <span>Top-1 相关性</span>
+                      </div>
+                      <div class="insight-stat">
+                        <b>2.3s</b>
+                        <span>LLM 生成耗时</span>
+                      </div>
+                      <div class="insight-stat">
+                        <b>4/8</b>
+                        <span>OCR 命中占比</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
             </section>
 
             <aside class="side-column" aria-label="筛选与最近搜索">
@@ -1394,5 +1633,48 @@
         </div>
       </div>
     </div>
+
+    <script>
+      (function () {
+        var sw = document.getElementById('mode-switch');
+        var btns = sw.querySelectorAll('button');
+        var answerPanel = document.getElementById('answer-panel');
+        var resultsPanel = document.getElementById('results-panel');
+        var title = document.getElementById('mode-title');
+        var desc = document.getElementById('mode-desc');
+        var badge = document.getElementById('mode-badge');
+
+        var states = {
+          answer: {
+            title: '基于 8 条证据生成',
+            desc: '严格回答模式，保留可点击引用来源。',
+            badge: '87% confidence',
+            show: answerPanel,
+            hide: resultsPanel,
+          },
+          results: {
+            title: '产品与路线图',
+            desc: '3 个结果 · 按相关性排序',
+            badge: 'RRF_RERANK',
+            show: resultsPanel,
+            hide: answerPanel,
+          },
+        };
+
+        btns.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            btns.forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            var mode = btn.getAttribute('data-mode');
+            var s = states[mode];
+            s.hide.style.display = 'none';
+            s.show.style.display = '';
+            title.textContent = s.title;
+            desc.textContent = s.desc;
+            badge.textContent = s.badge;
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

@@ -6,6 +6,7 @@ import {
   Check,
   ChevronDown,
   Database,
+  Download,
   Folder,
   Info,
   Link2,
@@ -13,7 +14,6 @@ import {
   RefreshCw,
   RotateCcw,
   ShieldCheck,
-  Upload,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -143,11 +143,7 @@ export function ImportsPremiumPage() {
     },
   });
 
-  const fallbackTaskId = useMemo(() => {
-    const tasks = ingestionTasksQuery.data?.items ?? [];
-    return tasks.find((task) => !isFinishedTaskStatus(task.status))?.taskId ?? tasks[0]?.taskId ?? "";
-  }, [ingestionTasksQuery.data?.items]);
-  const activeTaskId = currentTaskId || fallbackTaskId;
+  const activeTaskId = currentTaskId;
 
   const currentTaskQuery = useQuery({
     queryKey: ["ingestion-task", selectedKbId, activeTaskId],
@@ -316,7 +312,7 @@ export function ImportsPremiumPage() {
         </header>
 
         <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[1fr_minmax(308px,363px)] lg:items-stretch lg:overflow-hidden lg:px-5">
-          <section className="grid min-h-0 min-w-0 gap-3 overflow-hidden lg:h-full lg:grid-rows-[minmax(200px,0.95fr)_minmax(170px,0.82fr)_minmax(200px,0.9fr)]" aria-label="导入资料">
+          <section className="grid min-h-0 min-w-0 gap-3 overflow-hidden lg:h-full lg:grid-rows-[minmax(200px,0.95fr)_minmax(145px,0.62fr)_minmax(200px,0.9fr)]" aria-label="导入资料">
             <section
               className="imports-panel premium-surface relative grid min-h-[220px] place-items-center overflow-hidden rounded-[8px] p-4 text-center backdrop-blur-xl lg:min-h-0"
               aria-label="上传区域"
@@ -324,7 +320,7 @@ export function ImportsPremiumPage() {
               onDrop={handleDrop}
             >
               <div className="pointer-events-none absolute inset-[9px] rounded-[8px] border border-dashed border-[rgba(49,88,255,0.45)]" />
-              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(49,88,255,0.1),transparent_38%),radial-gradient(circle_at_82%_8%,rgba(187,255,102,0.28),transparent_15rem)]" />
+              <div className="imports-upload-glow-layer pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(49,88,255,0.1),transparent_38%),radial-gradient(circle_at_82%_8%,rgba(187,255,102,0.28),transparent_15rem)]" />
               <input
                 ref={fileInputRef}
                 type="file"
@@ -335,7 +331,7 @@ export function ImportsPremiumPage() {
               />
               <div className="relative z-10 w-full max-w-[560px]">
                 <div className="mx-auto mb-3 grid size-12 place-items-center rounded-[8px] bg-[#111315] text-white shadow-[0_22px_48px_rgba(17,19,21,0.22)] dark:bg-white dark:text-[#111315]">
-                  <Upload size={24} strokeWidth={1.9} />
+                  <Download size={24} strokeWidth={1.9} />
                 </div>
                 <h2 className="text-[clamp(20px,2.6vw,34px)] font-black leading-none text-[var(--premium-ink)]">
                   拖入文件，或连接一个远程资料源。
@@ -362,7 +358,7 @@ export function ImportsPremiumPage() {
             </section>
 
             <section className="imports-panel premium-surface flex h-[230px] min-h-0 min-w-0 flex-col overflow-hidden rounded-[8px] p-3 backdrop-blur-xl lg:h-full lg:max-h-full" aria-label="文件队列">
-              <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <h2 className="truncate text-[clamp(16px,2vw,22px)] font-black leading-none text-[var(--premium-ink)]">
                     {files.length > 0 ? `已选择 ${formatNumber(files.length)} 个文件` : queueIsTaskItems ? "当前任务文件" : "文件队列"}
@@ -372,7 +368,7 @@ export function ImportsPremiumPage() {
                       ? `总计 ${formatFileSize(selectedFilesSize)}，准备上传到“${selectedKbLabel}”。`
                       : displayedCurrentTask
                         ? `任务 ${displayedCurrentTask.taskId} · ${statusText(displayedCurrentTask.status)}`
-                        : "选择文件或粘贴 URL 后会显示在这里。"}
+                        : "选择文件后会显示在这里。"}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -514,8 +510,8 @@ export function ImportsPremiumPage() {
             </section>
           </section>
 
-          <aside className="grid min-h-0 min-w-0 gap-3 lg:h-full lg:grid-rows-[minmax(200px,0.95fr)_minmax(170px,0.82fr)_minmax(200px,0.9fr)]" aria-label="本次导入设置">
-            <section className="premium-surface relative flex min-h-[220px] flex-col overflow-visible rounded-[8px] p-3 backdrop-blur-xl lg:min-h-0">
+          <aside className="grid min-h-0 min-w-0 gap-3 lg:h-full lg:grid-rows-[minmax(200px,0.95fr)_minmax(145px,0.62fr)_minmax(200px,0.9fr)]" aria-label="本次导入设置">
+            <section className="imports-session-glow premium-surface relative flex min-h-[220px] flex-col overflow-visible rounded-[8px] p-3 backdrop-blur-xl lg:min-h-0">
               <PanelLabel label="IMPORT SESSION" />
               <div className="relative mt-3 grid min-h-0 flex-1 grid-rows-3 gap-2.5">
                 <ControlBlock title="目标知识库">
@@ -881,22 +877,22 @@ function TaskSummaryPanel({ currentTask, pendingFileCount }: { currentTask?: Ing
   const running = currentTask?.runningCount ?? (pendingFileCount > 0 ? pendingFileCount : 0);
 
   return (
-    <section className="premium-surface relative flex min-h-0 flex-col overflow-hidden rounded-[8px] p-3 backdrop-blur-xl lg:min-h-0">
+    <section className="imports-task-glow premium-surface relative flex min-h-0 flex-col overflow-hidden rounded-[8px] p-3 backdrop-blur-xl lg:min-h-0">
       <PanelLabel label="CURRENT TASK" value={running > 0 ? `${formatNumber(running)} 处理中` : statusText(currentTask?.status)} />
-      <div className="mt-5 grid gap-4 rounded-[8px] border border-[rgba(49,88,255,0.14)] bg-white/50 px-2.5 py-5 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)]">
+      <div className="mt-3 grid gap-3 rounded-[8px] border border-[rgba(49,88,255,0.14)] bg-white/50 px-2.5 py-3 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)]">
         <div className="flex items-baseline gap-2">
           <strong className="text-[22px] font-black leading-none text-[var(--premium-ink)]">{formatNumber(total)}</strong>
           <span className="text-[11px] text-[var(--premium-muted)]">当前导入文件总数</span>
         </div>
         <TaskBar success={success} failed={failed} running={running} total={total} />
       </div>
-      <div className="mt-7 grid grid-cols-3 gap-3">
+      <div className="mt-7 grid grid-cols-3 gap-2">
         <TaskStat label="成功" value={success} tone="success" />
         <TaskStat label="失败" value={failed} tone="failed" />
         <TaskStat label="处理中" value={running} tone="running" />
       </div>
       {currentTask?.updatedAt ? (
-        <p className="mt-7 text-[11px] text-[var(--premium-muted)]">更新于 {formatDateTime(currentTask.updatedAt)}</p>
+        <p className="mt-3 text-[11px] text-[var(--premium-muted)]">更新于 {formatDateTime(currentTask.updatedAt)}</p>
       ) : null}
     </section>
   );
@@ -914,7 +910,7 @@ function PipelinePanel({ progress, pendingFileCount }: { progress: ReturnType<ty
       : "创建任务后会自动进入上传、解析、向量化和索引流程。";
 
   return (
-    <section className="premium-surface relative flex min-h-[240px] flex-col overflow-hidden rounded-[8px] p-3 backdrop-blur-xl lg:min-h-0">
+    <section className="imports-pipeline-glow premium-surface relative flex min-h-[240px] flex-col overflow-hidden rounded-[8px] p-3 backdrop-blur-xl lg:min-h-0">
       <PanelLabel label="PIPELINE FLOW" value={`${percent}%`} />
       <div className="mt-3 grid gap-2 rounded-[8px] border border-[rgba(49,88,255,0.14)] bg-white/50 p-3 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)]">
         <div>
@@ -1011,7 +1007,7 @@ function TaskStat({ label, value, tone }: { label: string; value: number; tone: 
       : "text-blue-800 dark:text-[#d1dcff]";
 
   return (
-    <span className={`flex items-center gap-2 rounded-[8px] border px-2.5 py-7 ${ring}`}>
+    <span className={`flex items-center gap-2 rounded-[8px] border px-2.5 py-4 ${ring}`}>
       <b className={`text-[17px] font-black leading-none ${color}`}>{formatNumber(value)}</b>
       <span className="text-[11px] font-black text-[var(--premium-muted)]">{label}</span>
     </span>
@@ -1209,7 +1205,7 @@ function dedupeDisplayName(strategy: string, defaultStrategy: string) {
   };
   const label = map[strategy] ?? strategy;
 
-  return strategy === defaultStrategy ? `${label}(默认)` : label;
+  return label;
 }
 
 function stageText(stage: string) {

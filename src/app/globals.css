@@ -525,6 +525,26 @@ a {
   box-shadow: none;
 }
 
+.imports-premium-page .imports-session-glow {
+  background:
+    radial-gradient(circle at 88% 0%, rgba(36, 89, 255, 0.22), transparent 9rem),
+    radial-gradient(circle at 16% 100%, rgba(186, 255, 115, 0.34), transparent 10rem),
+    var(--premium-panel);
+}
+
+.imports-premium-page .imports-task-glow {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(186, 255, 115, 0.36), transparent 10rem),
+    var(--premium-panel);
+}
+
+.imports-premium-page .imports-pipeline-glow {
+  background:
+    radial-gradient(circle at 96% 4%, rgba(186, 255, 115, 0.34), transparent 9rem),
+    linear-gradient(135deg, rgba(36, 89, 255, 0.14), transparent 46%),
+    var(--premium-panel);
+}
+
 .imports-premium-page[data-premium-theme="dark"] {
   --premium-bg: #070908;
   --premium-bg-grid: rgba(244, 247, 236, 0.055);
@@ -536,6 +556,32 @@ a {
   --premium-elevated: rgba(14, 16, 15, 0.98);
   --premium-glow-primary: rgba(187, 255, 102, 0.18);
   --premium-glow-secondary: rgba(49, 88, 255, 0.2);
+}
+
+.imports-premium-page[data-premium-theme="dark"] .imports-upload-glow-layer {
+  background:
+    linear-gradient(120deg, rgba(49, 88, 255, 0.05), transparent 38%),
+    radial-gradient(circle at 82% 8%, rgba(187, 255, 102, 0.12), transparent 15rem);
+}
+
+.imports-premium-page[data-premium-theme="dark"] .imports-session-glow {
+  background:
+    radial-gradient(circle at 88% 0%, rgba(36, 89, 255, 0.09), transparent 9rem),
+    radial-gradient(circle at 16% 100%, rgba(186, 255, 115, 0.13), transparent 10rem),
+    var(--premium-panel);
+}
+
+.imports-premium-page[data-premium-theme="dark"] .imports-task-glow {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(186, 255, 115, 0.14), transparent 10rem),
+    var(--premium-panel);
+}
+
+.imports-premium-page[data-premium-theme="dark"] .imports-pipeline-glow {
+  background:
+    radial-gradient(circle at 96% 4%, rgba(186, 255, 115, 0.13), transparent 9rem),
+    linear-gradient(135deg, rgba(36, 89, 255, 0.06), transparent 46%),
+    var(--premium-panel);
 }
 
 .imports-premium-page[data-premium-theme="dark"] .ask-premium-shell {
