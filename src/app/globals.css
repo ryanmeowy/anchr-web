@@ -1815,6 +1815,7 @@ a {
 
 .search-premium-explore {
   display: flex;
+  grid-row: 3;
   flex-shrink: 0;
   align-items: center;
   gap: 8px;
