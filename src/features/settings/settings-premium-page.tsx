@@ -5,6 +5,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowDownUp,
+  Check,
   CheckCircle2,
   ChevronDown,
   Info,
@@ -40,19 +41,18 @@ type CapabilityOption = {
 const EMPTY_PARAMS: CapabilityParams["params"] = [];
 const ADD_CONFIG_VALUE = "__add_config__";
 const FIELD_CLASS = "settings-field premium-focusable";
-const SELECT_CLASS = "settings-field settings-select premium-focusable";
 const FORM_GRID_CLASS = "settings-form-grid";
 const FORM_FIELD_CLASS = "settings-form-field";
 const PANEL_CLASS =
-  "rounded-[8px] border border-[var(--premium-line)] bg-[rgba(255,253,245,0.76)] p-3 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl dark:bg-[var(--premium-panel)]";
+  "rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] p-3 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl";
 const BUTTON_PRIMARY_CLASS =
   "settings-primary-action inline-flex min-h-[34px] items-center justify-center gap-2 rounded-full border-0 bg-[var(--premium-ink)] px-3.5 text-[12px] font-black leading-none text-white shadow-[0_16px_38px_rgba(16,18,20,0.2)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] disabled:translate-y-0 disabled:opacity-50";
 const BUTTON_SECONDARY_CLASS =
-  "settings-secondary-action inline-flex min-h-[34px] items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[rgba(255,253,245,0.7)] px-2.5 text-[12px] font-black leading-none text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:opacity-50 dark:bg-[var(--premium-panel-strong)]";
+  "settings-secondary-action inline-flex min-h-[34px] items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2.5 text-[12px] font-black leading-none text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:opacity-50";
 const SUCCESS_PILL_CLASS =
   "settings-success-pill inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[rgba(187,255,102,0.28)] px-2.5 text-[11px] font-black text-[#426b09]";
 const MUTED_PILL_CLASS =
-  "settings-muted-pill inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--premium-line)] bg-[rgba(255,253,245,0.7)] px-2.5 text-[11px] font-black text-[var(--premium-muted)] dark:bg-[var(--premium-panel-strong)]";
+  "settings-muted-pill inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2.5 text-[11px] font-black text-[var(--premium-muted)]";
 const ACTION_BUTTON_LABEL_CLASS =
   "block max-w-full truncate text-center text-[12px] font-black leading-none";
 const ENABLE_BUTTON_LABEL_CLASS =
@@ -613,37 +613,25 @@ function CapabilitySelector({
                 </span>
               </button>
 
-              <label className="grid gap-1 text-[11px] font-black text-[var(--premium-ink-soft)]">
-                {option.modelLabel}
-                <span className="relative block">
-                  <select
-                    className={SELECT_CLASS}
-                    value={selectedConfigId}
-                    onChange={(event) => {
-                      if (event.target.value === ADD_CONFIG_VALUE) {
-                        onAdd(option.value);
-                        return;
-                      }
-                      const id = Number(event.target.value);
+              <div className="grid gap-1 text-[11px] font-black text-[var(--premium-ink-soft)]">
+                <span>{option.modelLabel}</span>
+                <CapabilityConfigPicker
+                  configs={configs}
+                  value={selectedConfigId}
+                  ariaLabel={`选择 ${option.label} 模型`}
+                  onSelect={(value) => {
+                    if (value === ADD_CONFIG_VALUE) {
+                      onAdd(option.value);
+                      return;
+                    }
+                    const id = Number(value);
+                    if (Number.isFinite(id)) {
                       onTypeChange(option.value);
-                      if (event.target.value && Number.isFinite(id)) onSelect(id);
-                    }}
-                    aria-label={`选择 ${option.label} 模型`}
-                  >
-                    {configs.length === 0 ? (
-                      <option value="" disabled>暂无配置</option>
-                    ) : (
-                      configs.map((config) => (
-                        <option key={config.id} value={config.id}>
-                          {config.modelName || config.baseUrl}{config.enabled ? " · 已启用" : ""}
-                        </option>
-                      ))
-                    )}
-                    <option value={ADD_CONFIG_VALUE}>+ 添加配置</option>
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--premium-muted)]" size={15} />
-                </span>
-              </label>
+                      onSelect(id);
+                    }
+                  }}
+                />
+              </div>
 
               <div className="settings-current-enabled text-[11px] font-black text-[var(--premium-muted)]">
                 当前启用 <strong className="text-[var(--premium-ink)]">{enabled?.modelName || enabled?.baseUrl || (configs.length > 0 ? "未启用" : "未配置")}</strong>
@@ -677,6 +665,95 @@ function CapabilitySelector({
 
       </div>
     </aside>
+  );
+}
+
+function CapabilityConfigPicker({
+  configs,
+  value,
+  ariaLabel,
+  onSelect,
+}: {
+  configs: CapabilityConfig[];
+  value: number | string;
+  ariaLabel: string;
+  onSelect: (value: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedValue = String(value);
+  const selectedConfig = configs.find((config) => String(config.id) === selectedValue);
+  const selectedLabel = selectedValue === ADD_CONFIG_VALUE
+    ? "添加配置"
+    : selectedConfig
+      ? `${selectedConfig.modelName || selectedConfig.baseUrl}${selectedConfig.enabled ? " · 已启用" : ""}`
+      : "暂无配置";
+
+  const handleSelect = (nextValue: string) => {
+    onSelect(nextValue);
+    setIsOpen(false);
+  };
+
+  return (
+    <div
+      className="settings-config-picker"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        className="settings-config-select"
+        aria-label={ariaLabel}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+      >
+        <span className="min-w-0 flex-1 truncate text-left">{selectedLabel}</span>
+        <ChevronDown size={15} className="settings-config-chevron" />
+      </button>
+
+      {isOpen ? (
+        <div className="settings-config-menu" role="listbox">
+          {configs.length === 0 ? (
+            <div className="settings-config-empty">暂无配置</div>
+          ) : (
+            configs.map((config) => {
+              const optionValue = String(config.id);
+              const selected = optionValue === selectedValue;
+              return (
+                <button
+                  key={config.id}
+                  type="button"
+                  onClick={() => handleSelect(optionValue)}
+                  className={["settings-config-option", selected ? "is-selected" : ""].join(" ")}
+                  role="option"
+                  aria-selected={selected}
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {config.modelName || config.baseUrl}
+                    {config.enabled ? " · 已启用" : ""}
+                  </span>
+                  {selected ? <Check size={12} /> : null}
+                </button>
+              );
+            })
+          )}
+          <button
+            type="button"
+            onClick={() => handleSelect(ADD_CONFIG_VALUE)}
+            className={[
+              "settings-config-option settings-config-add",
+              selectedValue === ADD_CONFIG_VALUE ? "is-selected" : "",
+            ].join(" ")}
+            role="option"
+            aria-selected={selectedValue === ADD_CONFIG_VALUE}
+          >
+            <span className="min-w-0 flex-1 truncate">+ 添加配置</span>
+            {selectedValue === ADD_CONFIG_VALUE ? <Check size={12} /> : null}
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

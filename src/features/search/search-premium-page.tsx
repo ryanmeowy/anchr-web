@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import {
+  AlertCircle,
   ArrowRight,
   Check,
   ChevronDown,
@@ -494,13 +495,9 @@ export function SearchPremiumPage() {
                     />
 
                     {searchMutation.error ? (
-                      <InlineState
-                        title="搜索暂时失败"
-                        description={searchMutation.error.message || "请稍后重新搜索。"}
-                        tone="error"
-                      />
+                      <SearchErrorState message={searchMutation.error.message || "请稍后重新搜索。"} />
                     ) : isSearching ? (
-                      <InlineState title="正在检索证据" description="正在搜索知识库并生成可引用回答。" loading />
+                      <SearchLoadingState />
                     ) : !hasSearched ? null : activeTab === "answer" ? (
                       <AnswerPanel
                         ref={answerScrollRef}
@@ -661,7 +658,7 @@ function AnswerHeader({
           {activeTab === "answer" ? "严格回答模式，保留可点击引用来源。" : "按知识库与相关性组织检索结果。"}
         </p>
       </div>
-      {activeTab === "answer" ? (
+      {activeTab === "answer" && answer?.trim() ? (
         <div className="search-premium-answer-actions">
           <button
             type="button"
@@ -757,27 +754,26 @@ const ResultsPanel = function ResultsPanel({
   onPreview: (item: SearchResult) => void;
   ref: React.Ref<HTMLDivElement>;
 }) {
+  const results = groups.flatMap((group) =>
+    group.items.map((item) => ({ item, knowledgeBaseName: group.title })),
+  );
+
   return (
     <div ref={ref} className="search-premium-results-scroll">
-      {groups.length ? (
+      {results.length ? (
         <div className="search-premium-result-groups">
-          {groups.map((group) => (
-            <section key={group.kbId} className="search-premium-result-group">
-              <div className="search-premium-result-header">
-                <strong>{group.title}</strong>
-                <span>{formatNumber(group.items.length)} 条</span>
-              </div>
-              <div className="search-premium-result-list">
-                {group.items.map((item, index) => (
-                  <ResultRow
-                    key={`${item.segmentId ?? item.assetId}-${index}`}
-                    item={item}
-                    onPreview={() => onPreview(item)}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
+          <div className="search-premium-result-group">
+            <div className="search-premium-result-list">
+              {results.map(({ item, knowledgeBaseName }, index) => (
+                <ResultRow
+                  key={`${item.segmentId ?? item.assetId}-${index}`}
+                  item={item}
+                  knowledgeBaseName={knowledgeBaseName}
+                  onPreview={() => onPreview(item)}
+                />
+              ))}
+            </div>
+          </div>
           {hasMore ? (
             <button
               type="button"
@@ -797,7 +793,15 @@ const ResultsPanel = function ResultsPanel({
   );
 };
 
-function ResultRow({ item, onPreview }: { item: SearchResult; onPreview: () => void }) {
+function ResultRow({
+  item,
+  knowledgeBaseName,
+  onPreview,
+}: {
+  item: SearchResult;
+  knowledgeBaseName: string;
+  onPreview: () => void;
+}) {
   const type = item.resultType === "IMAGE_OCR_BLOCK"
     ? "OCR"
     : SOURCE_TYPE_LABEL[item.assetType] ?? item.assetType;
@@ -821,9 +825,9 @@ function ResultRow({ item, onPreview }: { item: SearchResult; onPreview: () => v
           {renderHighlightedText(item.snippet || item.content || item.ocrSummary || "无摘要")}
         </span>
         <span className="search-premium-result-meta">
+          <span>{knowledgeBaseName}</span>
           {position ? <span>{position}</span> : null}
           {item.explain?.hitSources?.length ? <span>{item.explain.hitSources.join(" / ")}</span> : null}
-          {item.totalHits ? <span>命中 {formatNumber(item.totalHits)}</span> : null}
         </span>
       </span>
       <span className="search-premium-result-score">
@@ -1576,6 +1580,26 @@ function FilterBlock({ title, children }: { title: string; children: ReactNode }
     <div className="search-premium-filter-block min-w-0">
       <h3>{title}</h3>
       {children}
+    </div>
+  );
+}
+
+function SearchLoadingState() {
+  return (
+    <div className="grid min-h-0 place-items-center" role="status" aria-label="正在检索证据">
+      <Loader2 size={22} className="animate-spin text-[var(--premium-blue)]" />
+    </div>
+  );
+}
+
+function SearchErrorState({ message }: { message: string }) {
+  return (
+    <div
+      className="flex min-h-0 items-center justify-center gap-2 px-4 text-center text-xs font-bold text-rose-700 dark:text-rose-200"
+      role="alert"
+    >
+      <AlertCircle size={16} className="shrink-0" />
+      <span>搜索暂时失败：{message}</span>
     </div>
   );
 }

@@ -1238,7 +1238,7 @@ const BUTTON_SECONDARY_CLASS =
   "inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[rgba(255,253,245,0.7)] px-3 text-[12px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:border-[var(--premium-blue)] hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:opacity-50 dark:bg-[var(--premium-panel-strong)] dark:hover:bg-[var(--premium-blue)]";
 
 const BUTTON_GHOST_CLASS =
-  "inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[rgba(255,253,245,0.7)] px-3 text-[12px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:border-[var(--premium-blue)] hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:opacity-50 dark:bg-[var(--premium-panel-strong)] dark:hover:bg-[var(--premium-blue)]";
+  "inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-[12px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:border-[var(--premium-blue)] hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:opacity-50";
 
 const BUTTON_RETRY_CLASS =
   "inline-flex min-h-7 items-center justify-center justify-self-end gap-[5px] whitespace-nowrap rounded-full border border-[rgba(255,102,89,0.3)] bg-[rgba(255,102,89,0.12)] px-[11px] text-[11px] font-black leading-none text-[#a93527] transition hover:-translate-y-px hover:bg-[rgba(255,102,89,0.2)] disabled:translate-y-0 disabled:opacity-50 dark:border-[#7d3834] dark:bg-[#3a1716] dark:text-[#ffb4ad] dark:hover:bg-[#4a201d] dark:disabled:border-[#3d2422] dark:disabled:bg-[#281615] dark:disabled:text-[#a97873] dark:disabled:opacity-100";
@@ -1250,4 +1250,4 @@ const FIELD_CLASS =
   "h-9 w-full rounded-[8px] border border-[var(--premium-line)] bg-white/70 px-3 text-[12px] text-[var(--premium-ink)] outline-none transition placeholder:text-[var(--premium-muted)] focus:border-[var(--premium-focus-line)] focus:bg-[var(--premium-elevated)] focus:shadow-[0_0_0_3px_var(--premium-focus-ring)] dark:bg-[var(--premium-panel-strong)]";
 
 const SELECT_BUTTON_CLASS =
-  "inline-flex min-h-9 w-full items-center gap-2 rounded-[8px] border border-black/10 bg-[rgba(255,253,245,0.72)] px-2.5 text-[12px] font-extrabold leading-none text-[var(--premium-ink)] transition hover:bg-white/85 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)] dark:hover:bg-[var(--premium-panel)]";
+  "inline-flex min-h-9 w-full items-center gap-2 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2.5 text-[12px] font-extrabold leading-none text-[var(--premium-ink)] transition hover:bg-[var(--premium-elevated)]";
