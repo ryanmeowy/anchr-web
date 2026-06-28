@@ -1,5 +1,5 @@
-import { SearchPage } from "@/features/search/search-page";
+import { SearchPremiumPage } from "@/features/search/search-premium-page";
 
 export default function Page() {
-  return <SearchPage />;
+  return <SearchPremiumPage />;
 }
