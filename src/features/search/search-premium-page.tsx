@@ -3,21 +3,20 @@
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
-  Calendar,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Copy,
   Database,
-  ExternalLink,
-  FileImage,
-  FileText,
-  FileType,
   Folder,
-  Hash,
   Loader2,
   RefreshCcw,
   Search,
   Sparkles,
+  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -30,7 +29,6 @@ import {
   type UIEvent,
 } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
-import { FileTypeIcon } from "@/components/shared/file-type-icon";
 import { apiClient } from "@/lib/api-client";
 import { formatNumber } from "@/lib/format";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
@@ -69,6 +67,8 @@ const HIT_TYPE_OPTIONS: Array<{ value: SearchHitType; label: string }> = [
   { value: "TEXT_CHUNK", label: "文本片段" },
   { value: "IMAGE_OCR_BLOCK", label: "OCR片段" },
 ];
+
+const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 type SearchTab = "answer" | "results";
 type ThemeMode = PremiumThemeMode;
@@ -427,7 +427,10 @@ export function SearchPremiumPage() {
 
           <div className="search-premium-workspace grid min-h-0 min-w-0">
             <header className="search-premium-hero relative overflow-hidden border-b border-[var(--premium-line)] px-4 py-3 sm:px-5">
-              <div className="search-premium-watermark pointer-events-none absolute inset-y-0 right-4 flex items-center text-[72px] font-black leading-none text-black/[0.025]" aria-hidden="true">
+              <div
+                className="search-premium-watermark pointer-events-none absolute -bottom-[18px] right-[18px] text-[clamp(48px,9vw,132px)] font-[950] leading-[0.8] text-black/[0.052]"
+                aria-hidden="true"
+              >
                 SEARCH
               </div>
               <div className="relative flex h-full items-center">
@@ -446,19 +449,19 @@ export function SearchPremiumPage() {
             <main className="search-premium-content grid min-h-0 min-w-0 gap-3 px-4 py-3 sm:px-5">
               <section className="search-premium-main-column grid min-h-0 min-w-0 gap-2.5" aria-label="搜索结果">
                 <form
-                  className="search-premium-command premium-focusable grid min-w-0 items-center gap-2 rounded-[8px] border border-[var(--premium-line-strong)] bg-[var(--premium-panel-strong)] p-1.5 pl-4 shadow-[var(--premium-tight-shadow)]"
+                  className="search-premium-command premium-focusable"
                   role="search"
                   onSubmit={(event) => {
                     event.preventDefault();
                     handleSubmit();
                   }}
                 >
-                  <label className="flex min-w-0 items-center gap-3">
-                    <Search size={21} className="shrink-0 text-[var(--premium-muted)]" aria-hidden="true" />
+                  <label>
+                    <Search size={22} aria-hidden="true" />
                     <input
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
-                      className="min-w-0 flex-1 border-0 bg-transparent text-sm font-semibold text-[var(--premium-ink)] outline-none placeholder:text-[var(--premium-muted)]"
+                      className="search-premium-command-input"
                       placeholder="搜索关键词、问题或文件内容"
                       aria-label="搜索关键词"
                     />
@@ -467,15 +470,15 @@ export function SearchPremiumPage() {
                   <button
                     type="submit"
                     disabled={!query.trim() || searchMutation.isPending}
-                    className="search-premium-submit inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[var(--premium-ink)] px-4 text-xs font-black text-[var(--premium-bg)] transition disabled:cursor-not-allowed disabled:opacity-45"
+                    className="search-premium-submit"
                   >
-                    {isSearching ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
                     搜索
+                    {isSearching ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} strokeWidth={2.2} />}
                   </button>
                 </form>
 
-                <article className="search-premium-answer-card premium-surface relative min-h-0 overflow-hidden rounded-[8px] p-3">
-                  <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2">
+                <article className="search-premium-answer-card premium-surface">
+                  <div className="search-premium-answer-inner">
                     <AnswerHeader
                       activeTab={activeTab}
                       evidenceCount={normalizedCitations.length}
@@ -516,8 +519,6 @@ export function SearchPremiumPage() {
                       <ResultsPanel
                         ref={resultsScrollRef}
                         groups={resultGroups}
-                        total={searchData?.total ?? 0}
-                        elapsedMs={elapsedMs}
                         hasMore={Boolean(searchData?.nextCursor)}
                         isAppending={isAppending}
                         onLoadMore={handleLoadMore}
@@ -602,7 +603,7 @@ export function SearchPremiumPage() {
 
 function SearchTabs({ activeTab, onChange }: { activeTab: SearchTab; onChange: (tab: SearchTab) => void }) {
   return (
-    <div className="grid h-10 grid-cols-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-1" aria-label="结果模式">
+    <div className="search-premium-tabs" aria-label="结果模式">
       {[
         { value: "answer" as const, label: "回答" },
         { value: "results" as const, label: "来源" },
@@ -612,10 +613,8 @@ function SearchTabs({ activeTab, onChange }: { activeTab: SearchTab; onChange: (
           type="button"
           onClick={() => onChange(item.value)}
           className={[
-            "min-w-[58px] rounded-full px-3 text-xs font-black transition",
-            activeTab === item.value
-              ? "bg-[var(--premium-ink)] text-[var(--premium-bg)] shadow-sm"
-              : "text-[var(--premium-muted)] hover:text-[var(--premium-ink)]",
+            "search-premium-tab",
+            activeTab === item.value ? "is-active" : "",
           ].join(" ")}
           aria-pressed={activeTab === item.value}
         >
@@ -651,26 +650,26 @@ function AnswerHeader({
   };
 
   return (
-    <div className="flex min-w-0 items-start justify-between gap-3">
+    <div className="search-premium-section-head">
       <div className="min-w-0">
-        <h2 className="truncate text-[15px] font-black text-[var(--premium-ink)]">
+        <h2 className="search-premium-answer-title truncate">
           {activeTab === "answer"
             ? evidenceCount > 0
               ? `基于 ${formatNumber(evidenceCount)} 条证据生成`
               : "回答结果"
             : `证据来源 · ${formatNumber(resultCount)} 条`}
         </h2>
-        <p className="mt-0.5 truncate text-[10px] text-[var(--premium-muted)]">
+        <p className="search-premium-answer-description truncate">
           {activeTab === "answer" ? "严格回答模式，保留可点击引用来源。" : "按知识库与相关性组织检索结果。"}
         </p>
       </div>
       {activeTab === "answer" ? (
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="search-premium-answer-actions">
           <button
             type="button"
             onClick={handleCopy}
             disabled={!answer}
-            className="search-premium-answer-action"
+            className="search-premium-answer-action is-copy"
             title="复制回答"
           >
             {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -680,7 +679,7 @@ function AnswerHeader({
             type="button"
             onClick={onRegenerate}
             disabled={!canRegenerate}
-            className="search-premium-answer-action"
+            className="search-premium-answer-action is-regenerate"
             title="重新生成"
           >
             <RefreshCcw size={14} />
@@ -710,7 +709,7 @@ const AnswerPanel = function AnswerPanel({
   const visibleCitations = citations.slice(0, 3);
 
   return (
-    <div ref={ref} className="search-premium-answer-scroll min-h-0 overflow-auto pr-1">
+    <div ref={ref} className="search-premium-answer-scroll">
       <div className="search-premium-answer-text">
         {answer
           .trim()
@@ -723,22 +722,19 @@ const AnswerPanel = function AnswerPanel({
       </div>
 
       {visibleCitations.length ? (
-        <div className="search-premium-citations mt-3 grid grid-cols-3 gap-2" aria-label="引用来源">
+        <div className="search-premium-citations" aria-label="引用来源">
           {visibleCitations.map((citation, index) => (
             <button
               type="button"
-              key={`${citation.segmentId}-${citation.citationIndex ?? index}`}
+              key={`${citation.segmentId}-${citation.citationIndex ?? "citation"}-${index}`}
               onClick={() => onPreview(citation, index)}
               disabled={!citation.segmentId}
-              className="search-premium-citation min-w-0 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-2.5 py-2 text-left transition"
+              className="search-premium-citation"
               title={`[${citation.citationIndex ?? index + 1}] ${citation.fileName ?? "引用来源"}`}
             >
-              <span className="block truncate text-[11px] font-black text-[var(--premium-ink)]">
-                <b className="mr-1 text-[var(--premium-blue)]">[{citation.citationIndex ?? index + 1}]</b>
-                {citation.fileName ?? "引用来源"}
-              </span>
-              <span className="mt-1 block truncate text-[10px] text-[var(--premium-muted)]">
-                {citation.pageNo ? `P${citation.pageNo}` : "文档片段"}
+              <span>
+                [{citation.citationIndex ?? index + 1}] {citation.fileName ?? "引用来源"}
+                {citation.pageNo ? ` P${citation.pageNo}` : ""}
               </span>
             </button>
           ))}
@@ -750,8 +746,6 @@ const AnswerPanel = function AnswerPanel({
 
 const ResultsPanel = function ResultsPanel({
   groups,
-  total,
-  elapsedMs,
   hasMore,
   isAppending,
   onLoadMore,
@@ -759,8 +753,6 @@ const ResultsPanel = function ResultsPanel({
   ref,
 }: {
   groups: ResultGroup[];
-  total: number;
-  elapsedMs: number | null;
   hasMore: boolean;
   isAppending: boolean;
   onLoadMore: () => void;
@@ -768,21 +760,16 @@ const ResultsPanel = function ResultsPanel({
   ref: React.Ref<HTMLDivElement>;
 }) {
   return (
-    <div ref={ref} className="search-premium-results-scroll min-h-0 overflow-auto pr-1">
-      <div className="mb-2 flex items-center justify-between text-[10px] font-bold text-[var(--premium-muted)]">
-        <span>{formatNumber(total)} 条结果</span>
-        <span>{elapsedMs ? `${elapsedMs} ms` : "-- ms"}</span>
-      </div>
+    <div ref={ref} className="search-premium-results-scroll">
       {groups.length ? (
-        <div className="grid gap-2">
+        <div className="search-premium-result-groups">
           {groups.map((group) => (
-            <section key={group.kbId} className="overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-muted)]">
-              <div className="flex items-center gap-2 border-b border-[var(--premium-line)] px-3 py-2">
-                <Database size={13} className="text-[var(--premium-muted)]" />
-                <h3 className="min-w-0 flex-1 truncate text-[11px] font-black text-[var(--premium-ink)]">{group.title}</h3>
-                <span className="text-[9px] text-[var(--premium-muted)]">{group.items.length}</span>
+            <section key={group.kbId} className="search-premium-result-group">
+              <div className="search-premium-result-header">
+                <strong>{group.title}</strong>
+                <span>{formatNumber(group.items.length)} 条</span>
               </div>
-              <div className="divide-y divide-[var(--premium-line)]">
+              <div className="search-premium-result-list">
                 {group.items.map((item, index) => (
                   <ResultRow
                     key={`${item.segmentId ?? item.assetId}-${index}`}
@@ -798,7 +785,7 @@ const ResultsPanel = function ResultsPanel({
               type="button"
               onClick={onLoadMore}
               disabled={isAppending}
-              className="flex h-9 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] text-[10px] font-black text-[var(--premium-ink-soft)] transition hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)] disabled:opacity-50"
+              className="search-premium-load-more"
             >
               {isAppending ? <Loader2 size={13} className="animate-spin" /> : <ChevronDown size={13} />}
               加载更多
@@ -813,7 +800,9 @@ const ResultsPanel = function ResultsPanel({
 };
 
 function ResultRow({ item, onPreview }: { item: SearchResult; onPreview: () => void }) {
-  const type = SOURCE_TYPE_LABEL[item.assetType] ?? item.assetType;
+  const type = item.resultType === "IMAGE_OCR_BLOCK"
+    ? "OCR"
+    : SOURCE_TYPE_LABEL[item.assetType] ?? item.assetType;
   const position = formatResultPosition(item);
 
   return (
@@ -821,29 +810,26 @@ function ResultRow({ item, onPreview }: { item: SearchResult; onPreview: () => v
       type="button"
       onClick={onPreview}
       disabled={!item.segmentId}
-      className="search-premium-result grid w-full grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2.5 text-left transition"
+      className="search-premium-result"
     >
       <span className="min-w-0">
-        <span className="flex min-w-0 items-center gap-2">
-          <SourceBadge assetType={item.assetType} label={type} />
-          <strong className="truncate text-[11px] text-[var(--premium-ink)]">
+        <span className="search-premium-result-title">
+          <SourceBadge label={type} />
+          <strong>
             {displaySourceName(item.sourceRef, item.assetId)}
           </strong>
         </span>
-        <span className="mt-1.5 line-clamp-2 text-[10px] leading-[1.5] text-[var(--premium-ink-soft)]">
+        <span className="search-premium-result-snippet">
           {renderHighlightedText(item.snippet || item.content || item.ocrSummary || "无摘要")}
         </span>
-        <span className="mt-1.5 flex flex-wrap gap-2 text-[9px] text-[var(--premium-muted)]">
+        <span className="search-premium-result-meta">
           {position ? <span>{position}</span> : null}
           {item.explain?.hitSources?.length ? <span>{item.explain.hitSources.join(" / ")}</span> : null}
           {item.totalHits ? <span>命中 {formatNumber(item.totalHits)}</span> : null}
         </span>
       </span>
-      <span className="flex h-full flex-col items-end justify-between gap-2">
-        <b className="rounded-full bg-[rgba(187,255,102,0.28)] px-2 py-1 text-[9px] text-[#456b08] dark:text-[var(--premium-accent)]">
-          {item.score === undefined ? "--" : item.score.toFixed(2)}
-        </b>
-        <ExternalLink size={12} className="text-[var(--premium-blue)]" />
+      <span className="search-premium-result-score">
+        {item.score === undefined ? "--" : item.score.toFixed(2)}
       </span>
     </button>
   );
@@ -851,19 +837,23 @@ function ResultRow({ item, onPreview }: { item: SearchResult; onPreview: () => v
 
 function ContinueExploring() {
   return (
-    <div className="search-premium-explore grid shrink-0 grid-cols-[auto_repeat(3,minmax(0,1fr))] items-center gap-2">
-      <span className="text-[9px] font-black text-[var(--premium-muted)]">CONTINUE EXPLORING</span>
-      {[1, 2, 3].map((item) => (
-        <button
-          key={item}
-          type="button"
-          disabled
-          className="flex h-8 min-w-0 items-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-3 text-left text-[9px] font-bold text-[var(--premium-muted)]"
-        >
-          <Sparkles size={11} className="shrink-0" />
-          <span className="truncate">建议追问待接入</span>
-        </button>
-      ))}
+    <div className="search-premium-explore">
+      <span className="search-premium-explore-label">继续探索</span>
+      <div className="search-premium-explore-grid">
+        {[1, 2, 3].map((item) => (
+          <button
+            key={item}
+            type="button"
+            disabled
+            className="search-premium-explore-chip"
+          >
+            <span className="search-premium-explore-icon">
+              <Search size={13} />
+            </span>
+            <span className="search-premium-explore-text">建议追问待接入</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -893,39 +883,37 @@ function RetrievalInsight({
     : "--";
 
   return (
-    <section className="search-premium-insight premium-surface min-h-0 overflow-hidden rounded-[8px] p-3" aria-label="检索洞察">
-      <div className="flex items-center justify-between border-b border-[var(--premium-line)] pb-2">
+    <section className="search-premium-insight premium-surface min-h-0 overflow-hidden rounded-[8px] p-2.5" aria-label="检索洞察">
+      <div className="search-premium-insight-header">
         <PanelLabel label="RETRIEVAL INSIGHT" />
-        <span className="border-l border-[var(--premium-line)] pl-3 text-[10px] font-black text-[var(--premium-muted)]">
-          <b className="mr-1 text-base text-[var(--premium-ink)]">{hasSearched && elapsedMs ? elapsedMs : "--"}</b>MS
+        <span className="search-premium-insight-latency">
+          <b>{hasSearched && elapsedMs ? elapsedMs : "--"}</b> MS
         </span>
       </div>
 
-      <div className="search-premium-insight-body min-h-0 overflow-auto">
-        <div className="search-premium-insight-query grid border-b border-[var(--premium-line)]">
-          <div className="min-w-0 px-3 py-2">
-            <span className="search-premium-query-tag">原始问题</span>
-            <strong className="mt-1.5 block truncate text-[12px] text-[var(--premium-ink)]">
+      <div className="search-premium-insight-body">
+        <div className="search-premium-insight-query">
+          <div className="search-premium-query-row is-original">
+            <span className="search-premium-query-tag is-original">原始问题</span>
+            <span className="search-premium-query-text">
               {hasSearched ? query : "等待搜索"}
-            </strong>
+            </span>
           </div>
-          <div className="flex items-center justify-center gap-2 border-x border-[var(--premium-line)] text-[var(--premium-blue)]">
-            <ArrowRight size={17} />
-            <small className="text-[9px] font-black text-[var(--premium-muted)]">语义改写</small>
+          <div className="search-premium-query-arrow" aria-hidden="true">
+            <span>→</span>
+            <small>语义改写</small>
           </div>
-          <div className="min-w-0 bg-[var(--premium-panel-muted)] px-3 py-2">
-            <span className="search-premium-query-tag is-blue">检索词组</span>
-            <div className="mt-1.5 flex min-w-0 gap-1.5">
-              {[1, 2, 3].map((item) => (
-                <span key={item} className="truncate rounded-full border border-[var(--premium-line)] px-2 py-1 text-[9px] font-bold text-[var(--premium-muted)]">
-                  待接入
-                </span>
-              ))}
+          <div className="search-premium-query-row is-rewritten">
+            <span className="search-premium-query-tag is-rewritten">检索词组</span>
+            <div className="search-premium-query-terms">
+              <span className="search-premium-query-term">
+                {hasSearched && query.trim() ? query.trim() : "等待搜索"}
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="search-premium-pipeline grid border-b border-[var(--premium-line)]">
+        <div className="search-premium-pipeline" aria-label="检索链路">
           {[
             { index: 1, name: "关键词召回", detail: "BM25 精确命中", value: "--", unit: "条候选", tone: "blue" },
             { index: 2, name: "语义召回", detail: "向量相似度匹配", value: "--", unit: "条候选", tone: "violet" },
@@ -939,28 +927,28 @@ function RetrievalInsight({
               tone: "lime",
             },
           ].map((item) => (
-            <div key={item.index} className={`search-premium-pipe-item is-${item.tone} grid min-w-0 grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2`}>
-              <span className="grid size-7 place-items-center rounded-full text-[10px] font-black">{item.index}</span>
-              <span className="min-w-0">
-                <strong className="block truncate text-[11px] text-[var(--premium-ink)]">{item.name}</strong>
-                <small className="block truncate text-[9px] font-bold text-[var(--premium-muted)]">{item.detail}</small>
+            <div key={item.index} className={`search-premium-pipe-item is-${item.tone}`}>
+              <span className="search-premium-pipe-number">{item.index}</span>
+              <span className="search-premium-pipe-body">
+                <strong className="search-premium-pipe-name">{item.name}</strong>
+                <small className="search-premium-pipe-detail">{item.detail}</small>
               </span>
-              <span className="whitespace-nowrap text-right">
-                <b className="text-xl leading-none text-[var(--premium-ink)]">{item.value}</b>
-                <small className="ml-1 text-[8px] font-bold text-[var(--premium-muted)]">{item.unit}</small>
+              <span className="search-premium-pipe-value">
+                <b>{item.value}</b>
+                <small>{item.unit}</small>
               </span>
             </div>
           ))}
         </div>
 
-        <div className="search-premium-quality grid border-b border-[var(--premium-line)]">
-          <QualityItem label="查询意图" value="待接入" note="--" />
+        <div className="search-premium-quality" aria-label="查询理解与答案质量">
+          <QualityItem label="查询意图" value="待接入" note="--" intent />
           <QualityItem label="证据覆盖" value={hasSearched ? coverage : "--"} note={hasSearched ? `采用 ${evidenceCount} 个片段` : "--"} />
           <QualityItem label="引用覆盖" value="待接入" note="--" accent />
           <QualityItem label="证据风险" value="待接入" note="--" />
         </div>
 
-        <div className="search-premium-distributions grid gap-2 pt-2">
+        <div className="search-premium-distributions">
           <DistributionRow
             label="证据构成"
             items={
@@ -982,23 +970,37 @@ function RetrievalInsight({
   );
 }
 
-function QualityItem({ label, value, note, accent = false }: { label: string; value: string; note: string; accent?: boolean }) {
+function QualityItem({
+  label,
+  value,
+  note,
+  accent = false,
+  intent = false,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  accent?: boolean;
+  intent?: boolean;
+}) {
   return (
-    <div className={["min-w-0 px-3 py-2", accent ? "bg-[rgba(187,255,102,0.12)]" : ""].join(" ")}>
-      <span className="block text-[8px] font-black text-[var(--premium-muted)]">{label}</span>
-      <strong className="mt-0.5 block truncate text-[12px] text-[var(--premium-ink)]">{value}</strong>
-      <small className="block truncate text-[8px] font-bold text-[var(--premium-muted)]">{note}</small>
+    <div className={["search-premium-quality-item", accent ? "is-citations" : "", intent ? "is-intent" : ""].filter(Boolean).join(" ")}>
+      <span className="search-premium-quality-label">{label}</span>
+      <strong className="search-premium-quality-value">{value}</strong>
+      <small className="search-premium-quality-note">{note}</small>
     </div>
   );
 }
 
 function DistributionRow({ label, items, tone }: { label: string; items: string[]; tone: "blue" | "coral" | "lime" }) {
+  const tagTones = tone === "coral" ? ["pdf", "md", "ocr"] : tone === "blue" ? ["kb"] : ["hi", "mid", "lo"];
+
   return (
-    <div className={`search-premium-dist-row is-${tone} flex min-w-0 items-center gap-2 border-l-2 bg-[var(--premium-panel-muted)] px-2.5 py-2`}>
-      <span className="w-[64px] shrink-0 text-[8px] font-black text-[var(--premium-muted)]">{label}</span>
-      <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1">
+    <div className={`search-premium-dist-row is-${tone}`}>
+      <span className="search-premium-dist-label">{label}</span>
+      <div className="search-premium-dist-tags">
         {items.map((item, index) => (
-          <span key={`${item}-${index}`} className="text-[9px] font-black text-[var(--premium-ink-soft)]">{item}</span>
+          <span key={`${item}-${index}`} className={`search-premium-dist-tag is-${tagTones[index % tagTones.length]}`}>{item}</span>
         ))}
       </div>
     </div>
@@ -1056,9 +1058,9 @@ function FilterPanel({
   const selectedLabel = formatSelectedKbLabel(selectedKbIds, kbById);
 
   return (
-    <section className="search-premium-filter premium-surface min-h-0 rounded-[8px] p-3" aria-label="筛选范围">
+    <section className="search-premium-filter premium-surface min-h-0 rounded-[8px] p-2.5" aria-label="筛选范围">
       <PanelLabel label="FILTER SCOPE" />
-      <div className="mt-2.5 grid gap-2.5">
+      <div className="search-premium-filter-stack">
         <FilterBlock title="知识库">
           <KnowledgeBasePicker
             items={kbs}
@@ -1078,31 +1080,25 @@ function FilterPanel({
           ) : sourceTypesError ? (
             <span className="text-[10px] text-[var(--premium-muted)]">来源类型暂不可用</span>
           ) : (
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="search-premium-filter-tags">
               {sourceTypes.map((assetType) => (
                 <button
                   key={assetType}
                   type="button"
                   onClick={() => onSelectedAssetTypesChange(toggleSelection(selectedAssetTypes, assetType))}
-                  className={[
-                    "search-premium-filter-chip flex h-8 min-w-0 items-center justify-center gap-1 rounded-full border px-2 text-[9px] font-black transition",
-                    selectedAssetTypes.includes(assetType)
-                      ? "border-[var(--premium-ink)] bg-[var(--premium-ink)] text-[var(--premium-bg)]"
-                      : "border-[var(--premium-line)] bg-[var(--premium-panel-muted)] text-[var(--premium-ink-soft)]",
-                  ].join(" ")}
+                  className="search-premium-filter-chip"
                   aria-pressed={selectedAssetTypes.includes(assetType)}
                 >
-                  <FileTypeIcon fileName={assetType} sourceType={assetType} compact />
-                  <span className="truncate">{SOURCE_TYPE_LABEL[assetType] ?? assetType}</span>
+                  {SOURCE_TYPE_LABEL[assetType] ?? assetType}
                 </button>
               ))}
-              {!sourceTypes.length ? <span className="col-span-4 text-[10px] text-[var(--premium-muted)]">暂无可用来源类型</span> : null}
+              {!sourceTypes.length ? <span className="text-[10px] text-[var(--premium-muted)]">暂无可用来源类型</span> : null}
             </div>
           )}
         </FilterBlock>
 
         <FilterBlock title="筛选类型">
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="search-premium-filter-tags">
             {HIT_TYPE_OPTIONS.map((option) => {
               const disabled =
                 (option.value === "TEXT_CHUNK" && textDisabled) ||
@@ -1114,13 +1110,7 @@ function FilterPanel({
                   type="button"
                   disabled={disabled}
                   onClick={() => onSelectedHitTypesChange(toggleSelection(selectedHitTypes, option.value))}
-                  className={[
-                    "h-8 rounded-full border text-[9px] font-black transition",
-                    selected
-                      ? "border-[var(--premium-blue)] bg-[var(--premium-blue-soft)] text-[var(--premium-blue)]"
-                      : "border-[var(--premium-line)] bg-[var(--premium-panel-muted)] text-[var(--premium-ink-soft)]",
-                    disabled ? "cursor-not-allowed opacity-35" : "",
-                  ].join(" ")}
+                  className="search-premium-filter-chip"
                   aria-pressed={selected}
                 >
                   {option.label}
@@ -1130,29 +1120,29 @@ function FilterPanel({
           </div>
         </FilterBlock>
 
-        <div className="grid grid-cols-2 gap-2">
-          <FilterBlock title="召回数量">
-            <div className="flex h-9 items-center rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-2.5">
-              <input
-                type="number"
-                min={MIN_SEARCH_LIMIT}
-                max={MAX_SEARCH_LIMIT}
-                value={recallLimit}
-                onChange={(event) => onRecallLimitChange(clampSearchLimit(event.target.valueAsNumber))}
-                className="min-w-0 flex-1 bg-transparent text-xs font-black text-[var(--premium-ink)] outline-none"
-                aria-label="召回数量"
-              />
-              <span className="text-[8px] text-[var(--premium-muted)]">1-200</span>
-            </div>
-          </FilterBlock>
-          <FilterBlock title="时间范围">
-            <div className="grid h-9 grid-cols-[1fr_auto_1fr] items-center gap-1 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-2">
-              <DateInput value={dateFrom} onChange={onDateFromChange} label="开始日期" />
-              <span className="text-[8px] text-[var(--premium-muted)]">至</span>
-              <DateInput value={dateTo} onChange={onDateToChange} label="结束日期" />
-            </div>
-          </FilterBlock>
-        </div>
+        <FilterBlock title="召回数量">
+          <div className="search-premium-filter-row search-premium-number-row">
+            <input
+              type="number"
+              min={MIN_SEARCH_LIMIT}
+              max={MAX_SEARCH_LIMIT}
+              value={recallLimit}
+              onChange={(event) => onRecallLimitChange(clampSearchLimit(event.target.valueAsNumber))}
+              className="min-w-0 flex-1 bg-transparent outline-none"
+              aria-label="召回数量"
+            />
+            <span>有效值 1-200</span>
+          </div>
+        </FilterBlock>
+
+        <FilterBlock title="时间范围">
+          <DateRangePicker
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={onDateFromChange}
+            onDateToChange={onDateToChange}
+          />
+        </FilterBlock>
       </div>
     </section>
   );
@@ -1179,7 +1169,7 @@ function KnowledgeBasePicker({
 }) {
   return (
     <div
-      className="relative"
+      className="search-premium-kb-picker relative"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) onClose();
       }}
@@ -1187,16 +1177,19 @@ function KnowledgeBasePicker({
       <button
         type="button"
         onClick={onToggle}
-        className="flex h-9 w-full items-center gap-2 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-3 text-[10px] font-black text-[var(--premium-ink-soft)]"
+        className="search-premium-filter-row search-premium-select-row w-full"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
-        <Database size={13} />
         <span className="min-w-0 flex-1 truncate text-left">{selectedLabel}</span>
-        <ChevronDown size={13} />
+        <ChevronDown size={15} className="search-premium-kb-chevron" />
       </button>
       {isOpen ? (
-        <div className="premium-elevated absolute inset-x-0 top-[calc(100%+6px)] z-40 max-h-56 overflow-auto rounded-[8px] p-1.5" role="listbox" aria-multiselectable="true">
+        <div
+          className="search-premium-kb-menu premium-elevated absolute inset-x-0 top-[calc(100%+6px)] z-[100] max-h-56 overflow-auto rounded-[8px] p-1.5"
+          role="listbox"
+          aria-multiselectable="true"
+        >
           {isLoading ? (
             <MiniLoading label="加载知识库" />
           ) : (
@@ -1240,10 +1233,8 @@ function PickerOption({
       type="button"
       onClick={onClick}
       className={[
-        "flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[10px] font-bold",
-        selected
-          ? "bg-[var(--premium-blue-soft)] text-[var(--premium-blue)]"
-          : "text-[var(--premium-ink-soft)] hover:bg-[var(--premium-panel-muted)]",
+        "search-premium-kb-option",
+        selected ? "is-selected" : "",
       ].join(" ")}
       role="option"
       aria-selected={selected}
@@ -1255,18 +1246,216 @@ function PickerOption({
   );
 }
 
-function DateInput({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
+function DateRangePicker({
+  dateFrom,
+  dateTo,
+  onDateFromChange,
+  onDateToChange,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  onDateFromChange: (value: string) => void;
+  onDateToChange: (value: string) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState(() => startOfCalendarMonth(parseDateKey(dateFrom) ?? new Date()));
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isOpen]);
+
+  const openPicker = () => {
+    if (!isOpen) {
+      setVisibleMonth(startOfCalendarMonth(parseDateKey(dateFrom) ?? new Date()));
+    }
+    setIsOpen((open) => !open);
+  };
+
+  const handleDateSelect = (date: Date) => {
+    const selectedKey = formatDateKey(date);
+    if (!dateFrom || dateTo) {
+      onDateFromChange(selectedKey);
+      onDateToChange("");
+      return;
+    }
+
+    if (selectedKey < dateFrom) {
+      onDateFromChange(selectedKey);
+      onDateToChange(dateFrom);
+    } else {
+      onDateToChange(selectedKey);
+    }
+    setIsOpen(false);
+  };
+
+  const rightMonth = addCalendarMonths(visibleMonth, 1);
+  const hasSelectedRange = Boolean(dateFrom || dateTo);
+  const triggerLabel = dateFrom && dateTo
+    ? `${dateFrom} 至 ${dateTo}`
+    : dateFrom
+      ? `${dateFrom} 至 结束日期`
+      : "选择时间范围";
+
   return (
-    <label className="relative min-w-0">
-      <span className="sr-only">{label}</span>
-      <input
-        type="date"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="search-premium-date-input w-full min-w-0 bg-transparent text-[8px] font-bold text-[var(--premium-ink-soft)] outline-none"
-      />
-      {!value ? <Calendar size={11} className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-[var(--premium-muted)]" /> : null}
-    </label>
+    <div ref={rootRef} className="search-premium-date-range">
+      <div className="search-premium-filter-row search-premium-date-range-control">
+        <button
+          type="button"
+          className="search-premium-date-range-trigger"
+          aria-expanded={isOpen}
+          aria-haspopup="dialog"
+          onClick={openPicker}
+        >
+          <span className={dateFrom ? "" : "is-placeholder"}>{triggerLabel}</span>
+        </button>
+        {hasSelectedRange ? (
+          <button
+            type="button"
+            className="search-premium-date-clear"
+            aria-label="清除时间范围"
+            title="清除时间范围"
+            onClick={() => {
+              onDateFromChange("");
+              onDateToChange("");
+              setIsOpen(false);
+            }}
+          >
+            <X size={13} aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+      {isOpen ? (
+        <div
+          ref={popoverRef}
+          className="search-premium-date-popover"
+          role="dialog"
+          aria-label="选择日期范围"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setIsOpen(false);
+              rootRef.current?.querySelector("button")?.focus();
+            }
+          }}
+        >
+          <div className="search-premium-date-nav">
+            <div className="search-premium-date-nav-actions">
+              <CalendarNavButton label="上一年" onClick={() => setVisibleMonth((month) => addCalendarMonths(month, -12))}>
+                <ChevronsLeft size={18} />
+              </CalendarNavButton>
+              <CalendarNavButton label="上个月" onClick={() => setVisibleMonth((month) => addCalendarMonths(month, -1))}>
+                <ChevronLeft size={18} />
+              </CalendarNavButton>
+            </div>
+            <strong>{formatCalendarMonth(visibleMonth)}</strong>
+            <strong className="search-premium-date-second-title">{formatCalendarMonth(rightMonth)}</strong>
+            <div className="search-premium-date-nav-actions">
+              <CalendarNavButton label="下个月" onClick={() => setVisibleMonth((month) => addCalendarMonths(month, 1))}>
+                <ChevronRight size={18} />
+              </CalendarNavButton>
+              <CalendarNavButton label="下一年" onClick={() => setVisibleMonth((month) => addCalendarMonths(month, 12))}>
+                <ChevronsRight size={18} />
+              </CalendarNavButton>
+            </div>
+          </div>
+
+          <div className="search-premium-date-calendars">
+            <CalendarMonth
+              month={visibleMonth}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onSelect={handleDateSelect}
+            />
+            <CalendarMonth
+              month={rightMonth}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onSelect={handleDateSelect}
+              secondary
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CalendarNavButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button type="button" aria-label={label} title={label} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
+function CalendarMonth({
+  month,
+  dateFrom,
+  dateTo,
+  onSelect,
+  secondary = false,
+}: {
+  month: Date;
+  dateFrom: string;
+  dateTo: string;
+  onSelect: (date: Date) => void;
+  secondary?: boolean;
+}) {
+  const days = getCalendarDays(month);
+  const todayKey = formatDateKey(new Date());
+
+  return (
+    <section className={secondary ? "search-premium-calendar-month is-secondary" : "search-premium-calendar-month"}>
+      <div className="search-premium-calendar-weekdays" aria-hidden="true">
+        {WEEKDAY_LABELS.map((label) => <span key={label}>{label}</span>)}
+      </div>
+      <div className="search-premium-calendar-grid">
+        {days.map(({ date, key, currentMonth }) => {
+          const isStart = key === dateFrom;
+          const isEnd = key === dateTo;
+          const isInRange = Boolean(dateFrom && dateTo && key >= dateFrom && key <= dateTo);
+          const isToday = key === todayKey;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onSelect(date)}
+              className={[
+                "search-premium-calendar-day",
+                currentMonth ? "" : "is-outside",
+                isInRange ? "is-in-range" : "",
+                isStart ? "is-range-start" : "",
+                isEnd ? "is-range-end" : "",
+                isToday ? "is-today" : "",
+              ].filter(Boolean).join(" ")}
+              aria-label={formatCalendarDateLabel(date)}
+              aria-pressed={isStart || isEnd}
+            >
+              <span>{date.getDate()}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -1287,6 +1476,17 @@ function RecentSearchPanel({
   onLoadMore: () => void;
   onSelect: (item: RecentSearch) => void;
 }) {
+  const keyedItems = useMemo(() => {
+    const occurrences = new Map<string, number>();
+
+    return items.map((item) => {
+      const fingerprint = getRecentSearchFingerprint(item);
+      const occurrence = occurrences.get(fingerprint) ?? 0;
+      occurrences.set(fingerprint, occurrence + 1);
+      return { item, key: `${fingerprint}#${occurrence}` };
+    });
+  }, [items]);
+
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     if (!hasNextPage || isFetchingNextPage) return;
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
@@ -1294,37 +1494,33 @@ function RecentSearchPanel({
   };
 
   return (
-    <section className="search-premium-recent premium-surface flex min-h-0 flex-col rounded-[8px] p-3" aria-label="最近搜索">
+    <section className="search-premium-recent premium-surface flex min-h-0 flex-col rounded-[8px] p-2.5" aria-label="最近搜索">
       <PanelLabel label="RECENT SEARCHES" value={items.length ? String(items.length) : undefined} />
-      <div className="mt-2 min-h-0 flex-1 overflow-auto pr-1" onScroll={handleScroll}>
+      <div className="search-premium-recent-list min-h-0 flex-1" onScroll={handleScroll}>
         {isLoading ? <MiniLoading label="加载最近搜索" /> : null}
         {isError ? <span className="text-[10px] text-[var(--premium-muted)]">最近搜索暂不可用</span> : null}
         {!isLoading && !isError && !items.length ? (
           <span className="text-[10px] text-[var(--premium-muted)]">暂无最近搜索</span>
         ) : null}
-        <div className="grid gap-1">
-          {items.map((item, index) => (
-            <button
-              key={`${item.query}-${item.searchedAt ?? index}`}
-              type="button"
-              onClick={() => onSelect(item)}
-              className="search-premium-recent-item grid min-w-0 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] px-2 py-2 text-left transition"
-            >
-              <span className="grid size-6 place-items-center rounded-full bg-[var(--premium-panel-muted)] text-[9px] font-black text-[var(--premium-muted)]">
-                {index + 1}
+        {keyedItems.map(({ item, key }, index) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onSelect(item)}
+            className="search-premium-recent-item"
+          >
+            <span className="search-premium-recent-num">{index + 1}</span>
+            <span className="search-premium-recent-body">
+              <strong>{item.query || "未命名搜索"}</strong>
+              <span>
+                {item.knowledgeBaseNames?.length ? item.knowledgeBaseNames.slice(0, 2).join(" / ") : "全部知识库"}
+                {" · "}
+                {formatRelativeTime(item.searchedAt)}
               </span>
-              <span className="min-w-0">
-                <strong className="block truncate text-[10px] text-[var(--premium-ink)]">{item.query || "未命名搜索"}</strong>
-                <small className="mt-0.5 block truncate text-[8px] text-[var(--premium-muted)]">
-                  {item.knowledgeBaseNames?.length ? item.knowledgeBaseNames.slice(0, 2).join(" / ") : "全部知识库"}
-                  {" · "}
-                  {formatRelativeTime(item.searchedAt)}
-                </small>
-              </span>
-              <b className="text-[10px] text-[var(--premium-blue)]">{formatNumber(item.total)}</b>
-            </button>
-          ))}
-        </div>
+            </span>
+            <span className="search-premium-recent-hit">{formatNumber(item.total)}</span>
+          </button>
+        ))}
         {isFetchingNextPage ? <MiniLoading label="加载更多" /> : null}
       </div>
     </section>
@@ -1333,17 +1529,17 @@ function RecentSearchPanel({
 
 function SearchHealthPanel() {
   return (
-    <section className="search-premium-health premium-surface rounded-[8px] p-3" aria-label="检索健康度">
-      <PanelLabel label="SEARCH HEALTH" value="待接入" />
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <div>
-          <strong className="block text-xl font-black leading-none text-[var(--premium-muted)]">--</strong>
-          <span className="mt-1 block text-[8px] text-[var(--premium-muted)]">ES 集群状态接口待接入</span>
+    <section className="search-premium-health premium-surface rounded-[8px] p-2.5" aria-label="检索健康度">
+      <div className="search-premium-health-content">
+        <PanelLabel label="SEARCH HEALTH" value="待接入" />
+        <div className="search-premium-health-main">
+          <strong>--</strong>
+          <span>ES 集群状态接口待接入</span>
         </div>
-        <div className="grid grid-cols-3 gap-1.5 text-center">
+        <div className="search-premium-health-stats">
           <HealthMetric value="--" label="检索节点" />
           <HealthMetric value="--" label="活跃分片" />
-          <HealthMetric value="--" label="未分配" />
+          <HealthMetric value="--" label="未分配分片" />
         </div>
       </div>
     </section>
@@ -1352,29 +1548,26 @@ function SearchHealthPanel() {
 
 function HealthMetric({ value, label }: { value: string; label: string }) {
   return (
-    <span className="rounded-[8px] bg-[var(--premium-panel-muted)] px-2 py-1.5">
-      <b className="block text-[10px] text-[var(--premium-ink)]">{value}</b>
-      <small className="block whitespace-nowrap text-[7px] text-[var(--premium-muted)]">{label}</small>
+    <span className="search-premium-health-stat">
+      <b>{value}</b>
+      {label}
     </span>
   );
 }
 
 function PanelLabel({ label, value }: { label: string; value?: string }) {
   return (
-    <p className="flex items-center justify-between text-[9px] font-black text-[var(--premium-muted)]">
-      <span className="flex items-center gap-2">
-        <span className="h-4 w-0.5 rounded-full bg-[var(--premium-blue)]" />
-        {label}
-      </span>
-      {value ? <span>{value}</span> : null}
+    <p className="flex items-center justify-between gap-3 text-xs font-[900] leading-[normal] text-[var(--search-premium-label)]">
+      <span>{label}</span>
+      {value ? <span className="inline-flex items-center gap-[5px] text-[10px]">{value}</span> : null}
     </p>
   );
 }
 
 function FilterBlock({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="min-w-0">
-      <h3 className="mb-1.5 text-[9px] font-black text-[var(--premium-muted)]">{title}</h3>
+    <div className="search-premium-filter-block min-w-0">
+      <h3>{title}</h3>
       {children}
     </div>
   );
@@ -1420,13 +1613,9 @@ function MiniLoading({ label }: { label: string }) {
   );
 }
 
-function SourceBadge({ assetType, label }: { assetType: SearchAssetType; label: string }) {
+function SourceBadge({ label }: { label: string }) {
   return (
-    <span className={`search-premium-source-badge is-${assetType.toLowerCase()} inline-flex h-5 shrink-0 items-center gap-1 rounded-[6px] px-1.5 text-[8px] font-black`}>
-      {assetType === "PDF" ? <FileText size={10} /> : null}
-      {assetType === "IMAGE" ? <FileImage size={10} /> : null}
-      {assetType === "MD" || assetType === "MARKDOWN" ? <Hash size={10} /> : null}
-      {assetType !== "PDF" && assetType !== "IMAGE" && assetType !== "MD" && assetType !== "MARKDOWN" ? <FileType size={10} /> : null}
+    <span className={`search-premium-source-badge is-${label.toLowerCase()}`}>
       {label}
     </span>
   );
@@ -1545,10 +1734,52 @@ function clampSearchLimit(value: number) {
 function dateKeyFromTimestamp(value?: number | null) {
   if (!value) return "";
   const date = new Date(value);
+  return formatDateKey(date);
+}
+
+function parseDateKey(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function startOfCalendarMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addCalendarMonths(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function formatCalendarMonth(date: Date) {
+  return `${date.getFullYear()}年 ${date.getMonth() + 1}月`;
+}
+
+function formatCalendarDateLabel(date: Date) {
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+function getCalendarDays(month: Date) {
+  const monthStart = startOfCalendarMonth(month);
+  const mondayOffset = (monthStart.getDay() + 6) % 7;
+  const gridStart = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1 - mondayOffset);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
+    return {
+      date,
+      key: formatDateKey(date),
+      currentMonth: date.getMonth() === month.getMonth() && date.getFullYear() === month.getFullYear(),
+    };
+  });
 }
 
 function displaySourceName(sourceRef?: string, assetId?: string) {
@@ -1598,4 +1829,19 @@ function formatRelativeTime(value?: string) {
   if (diff < hour) return `${Math.max(1, Math.round(diff / minute))} 分钟前`;
   if (diff < day) return `${Math.round(diff / hour)} 小时前`;
   return `${Math.round(diff / day)} 天前`;
+}
+
+function getRecentSearchFingerprint(item: RecentSearch) {
+  return JSON.stringify({
+    query: item.query,
+    searchedAt: item.searchedAt ?? null,
+    kbIds: [...(item.kbIds ?? [])].sort(),
+    knowledgeBaseNames: [...(item.knowledgeBaseNames ?? [])].sort(),
+    total: item.total,
+    assetTypes: [...(item.assetTypes ?? [])].sort(),
+    dateFrom: item.dateRange?.from ?? null,
+    dateTo: item.dateRange?.to ?? null,
+    withAnswer: item.withAnswer ?? null,
+    answerMode: item.answerMode ?? null,
+  });
 }
