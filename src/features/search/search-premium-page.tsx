@@ -501,9 +501,7 @@ export function SearchPremiumPage() {
                       />
                     ) : isSearching ? (
                       <InlineState title="正在检索证据" description="正在搜索知识库并生成可引用回答。" loading />
-                    ) : !hasSearched ? (
-                      <InlineState title="输入问题开始搜索" description="回答、证据来源与检索洞察将在这里展示。" />
-                    ) : activeTab === "answer" ? (
+                    ) : !hasSearched ? null : activeTab === "answer" ? (
                       <AnswerPanel
                         ref={answerScrollRef}
                         answer={searchData?.answer?.answer}

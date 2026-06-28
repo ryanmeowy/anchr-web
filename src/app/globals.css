@@ -1440,6 +1440,17 @@ a {
   padding: 10px;
 }
 
+.search-premium-answer-card::before {
+  position: absolute;
+  inset: 0;
+  opacity: 0.85;
+  background:
+    linear-gradient(120deg, rgba(36, 89, 255, 0.1), transparent 36%),
+    radial-gradient(circle at 88% 0%, rgba(201, 255, 80, 0.3), transparent 14rem);
+  content: "";
+  pointer-events: none;
+}
+
 .search-premium-answer-inner {
   position: relative;
   z-index: 1;
