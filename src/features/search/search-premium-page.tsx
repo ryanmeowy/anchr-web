@@ -882,12 +882,19 @@ function RetrievalInsight({
     ? `${insight.kbCount} 库 · ${insight.fileCount} 文件`
     : "--";
 
+  const latencyColor = hasSearched && elapsedMs
+    ? elapsedMs < 1000 ? "is-fast" : elapsedMs < 5000 ? "is-mid" : "is-slow"
+    : "";
+
   return (
     <section className="search-premium-insight premium-surface min-h-0 overflow-hidden rounded-[8px] p-2.5" aria-label="检索洞察">
       <div className="search-premium-insight-header">
         <PanelLabel label="RETRIEVAL INSIGHT" />
-        <span className="search-premium-insight-latency">
-          <b>{hasSearched && elapsedMs ? elapsedMs : "--"}</b> MS
+        <span className={`search-premium-insight-latency ${latencyColor}`}>
+          <span className="search-premium-insight-latency-bar" />
+          <span className="search-premium-insight-latency-value">
+            <b>{hasSearched && elapsedMs ? elapsedMs : "--"}</b> MS
+          </span>
         </span>
       </div>
 
@@ -896,7 +903,7 @@ function RetrievalInsight({
           <div className="search-premium-query-row is-original">
             <span className="search-premium-query-tag is-original">原始问题</span>
             <span className="search-premium-query-text">
-              {hasSearched ? query : "等待搜索"}
+              {hasSearched ? query : ""}
             </span>
           </div>
           <div className="search-premium-query-arrow" aria-hidden="true">
@@ -906,9 +913,11 @@ function RetrievalInsight({
           <div className="search-premium-query-row is-rewritten">
             <span className="search-premium-query-tag is-rewritten">检索词组</span>
             <div className="search-premium-query-terms">
-              <span className="search-premium-query-term">
-                {hasSearched && query.trim() ? query.trim() : "等待搜索"}
-              </span>
+              {hasSearched && query.trim() ? (
+                <span className="search-premium-query-term">
+                  {query.trim()}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1667,10 +1676,15 @@ function renderAnswerText(
   citations: NonNullable<SearchAnswer["citations"]>,
   onPreview: (citation: NonNullable<SearchAnswer["citations"]>[number], index: number) => void,
 ) {
-  return text.split(/(\[\d+\])/g).map((part, index) => {
-    const match = part.match(/^\[(\d+)]$/);
-    if (!match) return <span key={`${part.slice(0, 16)}-${index}`}>{part}</span>;
-    const citationNumber = Number(match[1]);
+  const parts = text.split(/(<em>.*?<\/em>|\[\d+\])/g);
+  return parts.map((part, index) => {
+    const emMatch = part.match(/^<em>(.*?)<\/em>$/);
+    if (emMatch) {
+      return <span key={`em-${index}`}>{emMatch[1]}</span>;
+    }
+    const citationMatch = part.match(/^\[(\d+)]$/);
+    if (!citationMatch) return <span key={`${part.slice(0, 16)}-${index}`}>{part}</span>;
+    const citationNumber = Number(citationMatch[1]);
     const citationIndex = citations.findIndex((item) => item.citationIndex === citationNumber);
     const citation = citations[citationIndex];
     if (!citation) return <span key={`${part}-${index}`}>{part}</span>;

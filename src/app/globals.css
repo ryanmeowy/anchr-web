@@ -1819,6 +1819,8 @@ a {
 
 .search-premium-explore-grid {
   display: flex;
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   flex-wrap: wrap;
   align-content: start;
@@ -1827,10 +1829,12 @@ a {
 
 .search-premium-explore-chip {
   display: inline-flex;
+  flex: 1;
   min-height: 30px;
   max-width: 100%;
   min-width: 0;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   border: 1px solid var(--premium-line);
   border-radius: 999px;
@@ -1883,9 +1887,10 @@ a {
 
 .search-premium-insight-latency {
   display: inline-flex;
+  flex-direction: column;
   min-height: 20px;
-  align-items: center;
-  gap: 3px;
+  align-items: flex-end;
+  gap: 2px;
   border-left: 1px solid var(--premium-line);
   padding-left: 10px;
   color: var(--premium-muted);
@@ -1894,9 +1899,36 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+.search-premium-insight-latency-bar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--premium-line);
+}
+
+.search-premium-insight-latency.is-fast .search-premium-insight-latency-bar {
+  background: #c9ff50;
+}
+
+.search-premium-insight-latency.is-mid .search-premium-insight-latency-bar {
+  background: #ffa726;
+}
+
+.search-premium-insight-latency.is-slow .search-premium-insight-latency-bar {
+  background: #ff715f;
+}
+
 .search-premium-insight-latency b {
   color: var(--premium-ink);
   font-size: 12px;
+}
+
+.search-premium-insight-latency-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
 }
 
 .search-premium-insight-body {
@@ -2060,14 +2092,6 @@ a {
   background: var(--premium-panel-strong);
 }
 
-.search-premium-pipe-item.is-lime {
-  background: rgba(187, 255, 102, 0.13);
-}
-
-.search-premium-pipe-item.is-lime:hover {
-  background: rgba(187, 255, 102, 0.2);
-}
-
 .search-premium-pipe-number {
   display: grid;
   width: 24px;
@@ -2178,14 +2202,6 @@ a {
 
 .search-premium-quality-item:nth-child(4) {
   animation-delay: 150ms;
-}
-
-.search-premium-quality-item.is-intent {
-  background: var(--premium-panel-muted);
-}
-
-.search-premium-quality-item.is-citations {
-  background: rgba(187, 255, 102, 0.13);
 }
 
 .search-premium-quality-label {
@@ -2471,9 +2487,9 @@ a {
   align-self: start;
   align-items: center;
   border-radius: 999px;
-  background: var(--premium-blue-soft);
+  background: rgba(201, 255, 80, 0.24);
   padding: 0 7px;
-  color: var(--premium-blue);
+  color: #486b08;
   font-size: 10px;
   font-weight: 900;
   white-space: nowrap;
