@@ -54,7 +54,6 @@ import type {
 const DEFAULT_SEARCH_LIMIT = 10;
 const MIN_SEARCH_LIMIT = 1;
 const MAX_SEARCH_LIMIT = 200;
-const SEARCH_TOP_K = 50;
 const RECENT_SEARCH_PAGE_SIZE = 8;
 
 const SOURCE_TYPE_LABEL: Record<string, string> = {
@@ -238,11 +237,10 @@ export function SearchPremiumPage() {
     mutationFn: (variables) =>
       apiClient.searchKnowledgeBase({
         query: variables.query,
-        topK: SEARCH_TOP_K,
         limit: variables.filters.limit,
         kbIds: variables.filters.kbIds,
         assetTypes: variables.filters.assetTypes.length ? variables.filters.assetTypes : undefined,
-        hitType: variables.filters.hitType.length ? variables.filters.hitType : undefined,
+        hitTypes: variables.filters.hitType.length ? variables.filters.hitType : undefined,
         dateRange: buildDateRange(variables.filters),
         cursor: variables.cursor ?? undefined,
         withAnswer: variables.filters.withAnswer,
@@ -255,6 +253,8 @@ export function SearchPremiumPage() {
           ...data,
           items: [...previous.items, ...(data.items ?? [])],
           answer: previous.answer ?? data.answer,
+          suggestedQuestions: previous.suggestedQuestions ?? data.suggestedQuestions,
+          rewrittenKeywords: previous.rewrittenKeywords ?? data.rewrittenKeywords,
           facets: data.facets ?? previous.facets,
         };
       });
@@ -293,6 +293,18 @@ export function SearchPremiumPage() {
     const trimmed = query.trim();
     if (!trimmed || searchMutation.isPending) return;
     const filters = buildFilters(true);
+    setSubmittedQuery(trimmed);
+    setSubmittedFilters(filters);
+    setActiveTab("answer");
+    setSearchData(null);
+    executeSearch(trimmed, filters);
+  };
+
+  const handleSuggestedQuestion = (question: string) => {
+    const trimmed = question.trim();
+    if (!trimmed || searchMutation.isPending) return;
+    const filters = buildFilters(true);
+    setQuery(trimmed);
     setSubmittedQuery(trimmed);
     setSubmittedFilters(filters);
     setActiveTab("answer");
@@ -537,14 +549,20 @@ export function SearchPremiumPage() {
                       />
                     )}
 
-                    {activeTab === "answer" ? <ContinueExploring /> : <span />}
+                    {activeTab === "answer" ? (
+                      <ContinueExploring
+                        questions={searchData?.suggestedQuestions ?? []}
+                        onSelect={handleSuggestedQuestion}
+                      />
+                    ) : <span />}
                   </div>
                 </article>
 
                 <RetrievalInsight
                   hasSearched={hasSearched}
                   query={submittedQuery}
-                  elapsedMs={elapsedMs}
+                  rewrittenKeywords={searchData?.rewrittenKeywords ?? []}
+                  elapsedMs={searchData?.insight?.latencyMs ?? elapsedMs}
                   evidenceCount={normalizedCitations.length}
                   insight={insight}
                 />
@@ -819,9 +837,7 @@ function ResultRow({
   knowledgeBaseName: string;
   onPreview: () => void;
 }) {
-  const type = item.resultType === "IMAGE_OCR_BLOCK"
-    ? "OCR"
-    : SOURCE_TYPE_LABEL[item.assetType] ?? item.assetType;
+  const type = getEvidenceSourceLabel(item);
   const position = formatResultPosition(item);
 
   return (
@@ -854,22 +870,37 @@ function ResultRow({
   );
 }
 
-function ContinueExploring() {
+function ContinueExploring({
+  questions,
+  onSelect,
+}: {
+  questions: string[];
+  onSelect: (question: string) => void;
+}) {
+  const visibleQuestions = Array.from(
+    new Set(questions.map((question) => question.trim()).filter(Boolean)),
+  ).slice(0, 3);
+
+  if (!visibleQuestions.length) {
+    return null;
+  }
+
   return (
     <div className="search-premium-explore">
       <span className="search-premium-explore-label">继续探索</span>
       <div className="search-premium-explore-grid">
-        {[1, 2, 3].map((item) => (
+        {visibleQuestions.map((question) => (
           <button
-            key={item}
+            key={question}
             type="button"
-            disabled
+            onClick={() => onSelect(question)}
             className="search-premium-explore-chip"
+            title={question}
           >
             <span className="search-premium-explore-icon">
               <Search size={13} />
             </span>
-            <span className="search-premium-explore-text">建议追问待接入</span>
+            <span className="search-premium-explore-text">{question}</span>
           </button>
         ))}
       </div>
@@ -880,6 +911,25 @@ function ContinueExploring() {
 type InsightData = {
   kbCount: number | null;
   fileCount: number | null;
+  pipeline: {
+    keywordCandidates: number | null;
+    vectorCandidates: number | null;
+    fusedRetained: number | null;
+    rerankAdopted: number | null;
+  };
+  semanticHitCount: number | null;
+  keywordHitCount: number | null;
+  queryIntent: {
+    intent: string;
+    category: string;
+    fallback: boolean;
+  } | null;
+  lowRelevanceCount: number | null;
+  relevanceDistribution: {
+    high: number;
+    medium: number;
+    low: number;
+  } | null;
   sourceCounts: Array<{ label: string; count: number }>;
   scopeNames: string[];
 };
@@ -887,12 +937,14 @@ type InsightData = {
 function RetrievalInsight({
   hasSearched,
   query,
+  rewrittenKeywords,
   elapsedMs,
   evidenceCount,
   insight,
 }: {
   hasSearched: boolean;
   query: string;
+  rewrittenKeywords: string[];
   elapsedMs: number | null;
   evidenceCount: number;
   insight: InsightData;
@@ -900,8 +952,45 @@ function RetrievalInsight({
   const coverage = insight.kbCount !== null && insight.fileCount !== null
     ? `${insight.kbCount} 库 · ${insight.fileCount} 文件`
     : "--";
+  let hitSourceValue = "--";
+  let hitSourceNote = "--";
+  if (insight.semanticHitCount !== null && insight.keywordHitCount !== null) {
+    hitSourceValue = `语义 ${insight.semanticHitCount} · 关键词 ${insight.keywordHitCount}`;
+    if (insight.semanticHitCount === 0 && insight.keywordHitCount === 0) {
+      hitSourceNote = "暂无命中信号";
+    } else if (insight.semanticHitCount > insight.keywordHitCount) {
+      hitSourceNote = "向量为主混合召回";
+    } else if (insight.keywordHitCount > insight.semanticHitCount) {
+      hitSourceNote = "关键词为主混合召回";
+    } else {
+      hitSourceNote = "语义与关键词混合召回";
+    }
+  }
+  const intentValue = insight.queryIntent?.intent || "--";
+  const intentNote = insight.queryIntent
+    ? [
+        insight.queryIntent.category || "OTHER",
+        insight.queryIntent.fallback ? "FALLBACK" : "",
+      ].filter(Boolean).join(" · ")
+    : "--";
+  const riskValue = insight.lowRelevanceCount === null
+    ? "--"
+    : insight.lowRelevanceCount === 0
+      ? "低风险"
+      : `${insight.lowRelevanceCount} 条需复核`;
+  const riskNote = insight.lowRelevanceCount === null
+    ? "--"
+    : insight.lowRelevanceCount === 0
+      ? "无低相关证据"
+      : `含 ${insight.lowRelevanceCount} 条低相关证据`;
+  const queryTerms = Array.from(
+    new Set(rewrittenKeywords.map((keyword) => keyword.trim()).filter(Boolean)),
+  );
+  if (!queryTerms.length && query.trim()) {
+    queryTerms.push(query.trim());
+  }
 
-  const latencyColor = hasSearched && elapsedMs
+  const latencyColor = hasSearched && elapsedMs !== null
     ? elapsedMs < 1000 ? "is-fast" : elapsedMs < 5000 ? "is-mid" : "is-slow"
     : "";
 
@@ -912,7 +1001,7 @@ function RetrievalInsight({
         <span className={`search-premium-insight-latency ${latencyColor}`}>
           <span className="search-premium-insight-latency-bar" />
           <span className="search-premium-insight-latency-value">
-            <b>{hasSearched && elapsedMs ? elapsedMs : "--"}</b> MS
+            <b>{hasSearched && elapsedMs !== null ? formatNumber(elapsedMs) : "--"}</b> MS
           </span>
         </span>
       </div>
@@ -932,25 +1021,48 @@ function RetrievalInsight({
           <div className="search-premium-query-row is-rewritten">
             <span className="search-premium-query-tag is-rewritten">检索词组</span>
             <div className="search-premium-query-terms">
-              {hasSearched && query.trim() ? (
-                <span className="search-premium-query-term">
-                  {query.trim()}
-                </span>
-              ) : null}
+              {hasSearched
+                ? queryTerms.map((term) => (
+                    <span key={term} className="search-premium-query-term">
+                      {term}
+                    </span>
+                  ))
+                : null}
             </div>
           </div>
         </div>
 
         <div className="search-premium-pipeline" aria-label="检索链路">
           {[
-            { index: 1, name: "关键词召回", detail: "BM25 精确命中", value: "--", unit: "条候选", tone: "blue" },
-            { index: 2, name: "语义召回", detail: "向量相似度匹配", value: "--", unit: "条候选", tone: "violet" },
-            { index: 3, name: "融合去重", detail: "RRF 合并排序", value: "--", unit: "条保留", tone: "coral" },
+            {
+              index: 1,
+              name: "关键词召回",
+              detail: "BM25 精确命中",
+              value: insight.pipeline.keywordCandidates,
+              unit: "条候选",
+              tone: "blue",
+            },
+            {
+              index: 2,
+              name: "语义召回",
+              detail: "向量相似度匹配",
+              value: insight.pipeline.vectorCandidates,
+              unit: "条候选",
+              tone: "violet",
+            },
+            {
+              index: 3,
+              name: "融合去重",
+              detail: "RRF 合并排序",
+              value: insight.pipeline.fusedRetained,
+              unit: "条保留",
+              tone: "coral",
+            },
             {
               index: 4,
               name: "重排采纳",
               detail: "Cross-encoder 精排",
-              value: hasSearched ? formatNumber(evidenceCount) : "--",
+              value: insight.pipeline.rerankAdopted ?? (hasSearched ? evidenceCount : null),
               unit: "条证据",
               tone: "lime",
             },
@@ -962,7 +1074,7 @@ function RetrievalInsight({
                 <small className="search-premium-pipe-detail">{item.detail}</small>
               </span>
               <span className="search-premium-pipe-value">
-                <b>{item.value}</b>
+                <b>{hasSearched && item.value !== null ? formatNumber(item.value) : "--"}</b>
                 <small>{item.unit}</small>
               </span>
             </div>
@@ -970,10 +1082,15 @@ function RetrievalInsight({
         </div>
 
         <div className="search-premium-quality" aria-label="查询理解与答案质量">
-          <QualityItem label="查询意图" value="待接入" note="--" intent />
+          <QualityItem label="查询意图" value={hasSearched ? intentValue : "--"} note={hasSearched ? intentNote : "--"} intent />
           <QualityItem label="证据覆盖" value={hasSearched ? coverage : "--"} note={hasSearched ? `采用 ${evidenceCount} 个片段` : "--"} />
-          <QualityItem label="引用覆盖" value="待接入" note="--" accent />
-          <QualityItem label="证据风险" value="待接入" note="--" />
+          <QualityItem
+            label="命中来源"
+            value={hasSearched ? hitSourceValue : "--"}
+            note={hasSearched ? hitSourceNote : "--"}
+            hitSource
+          />
+          <QualityItem label="证据风险" value={hasSearched ? riskValue : "--"} note={hasSearched ? riskNote : "--"} />
         </div>
 
         <div className="search-premium-distributions">
@@ -982,7 +1099,7 @@ function RetrievalInsight({
             items={
               hasSearched && insight.sourceCounts.length
                 ? insight.sourceCounts.map((item) => `${item.label} ${item.count} 条`)
-                : ["待接入"]
+                : ["--"]
             }
             tone="coral"
           />
@@ -991,7 +1108,19 @@ function RetrievalInsight({
             items={hasSearched && insight.scopeNames.length ? insight.scopeNames : ["全部知识库"]}
             tone="blue"
           />
-          <DistributionRow label="证据相关性" items={["待接入"]} tone="lime" />
+          <DistributionRow
+            label="证据相关性"
+            items={
+              hasSearched && insight.relevanceDistribution
+                ? [
+                    `高相关 ${insight.relevanceDistribution.high}`,
+                    `中相关 ${insight.relevanceDistribution.medium}`,
+                    `低相关 ${insight.relevanceDistribution.low}`,
+                  ]
+                : ["--"]
+            }
+            tone="lime"
+          />
         </div>
       </div>
     </section>
@@ -1002,17 +1131,17 @@ function QualityItem({
   label,
   value,
   note,
-  accent = false,
+  hitSource = false,
   intent = false,
 }: {
   label: string;
   value: string;
   note: string;
-  accent?: boolean;
+  hitSource?: boolean;
   intent?: boolean;
 }) {
   return (
-    <div className={["search-premium-quality-item", accent ? "is-citations" : "", intent ? "is-intent" : ""].filter(Boolean).join(" ")}>
+    <div className={["search-premium-quality-item", hitSource ? "is-hit-source" : "", intent ? "is-intent" : ""].filter(Boolean).join(" ")}>
       <span className="search-premium-quality-label">{label}</span>
       <strong className="search-premium-quality-value">{value}</strong>
       <small className="search-premium-quality-note">{note}</small>
@@ -1902,26 +2031,72 @@ function buildInsightData(
   kbById: Map<string, KnowledgeBase>,
 ): InsightData {
   if (!data) {
-    return { kbCount: null, fileCount: null, sourceCounts: [], scopeNames: [] };
+    return {
+      kbCount: null,
+      fileCount: null,
+      pipeline: {
+        keywordCandidates: null,
+        vectorCandidates: null,
+        fusedRetained: null,
+        rerankAdopted: null,
+      },
+      semanticHitCount: null,
+      keywordHitCount: null,
+      queryIntent: null,
+      lowRelevanceCount: null,
+      relevanceDistribution: null,
+      sourceCounts: [],
+      scopeNames: [],
+    };
   }
 
   const itemBySegment = new Map(
     data.items.filter((item) => item.segmentId).map((item) => [item.segmentId as string, item]),
   );
-  const evidenceItems = citations
-    .map((citation) => citation.segmentId ? itemBySegment.get(citation.segmentId) : undefined)
-    .filter((item): item is SearchResult => Boolean(item));
+  const itemByAsset = new Map(
+    data.items.filter((item) => item.assetId).map((item) => [item.assetId as string, item]),
+  );
   const kbIds = new Set(citations.map((item) => item.kbId).filter(Boolean));
   const fileIds = new Set(
     citations.map((item) => item.assetId || item.fileName).filter(Boolean),
   );
   const sourceCountMap = new Map<string, number>();
 
-  evidenceItems.forEach((item) => {
-    const label = item.resultType === "IMAGE_OCR_BLOCK"
-      ? "OCR"
-      : SOURCE_TYPE_LABEL[item.assetType] ?? item.assetType;
-    sourceCountMap.set(label, (sourceCountMap.get(label) ?? 0) + 1);
+  citations.forEach((citation) => {
+    const item = (citation.segmentId ? itemBySegment.get(citation.segmentId) : undefined)
+      ?? (citation.assetId ? itemByAsset.get(citation.assetId) : undefined);
+    const label = item
+      ? getEvidenceSourceLabel(item)
+      : getSourceLabelFromFileName(citation.fileName);
+    if (label) {
+      sourceCountMap.set(label, (sourceCountMap.get(label) ?? 0) + 1);
+    }
+  });
+
+  const apiHitSources = data.insight?.hitSourceDistribution;
+  let fallbackSemanticCount = 0;
+  let fallbackKeywordCount = 0;
+  let hasFallbackHitSourceData = false;
+
+  data.items.forEach((item) => {
+    const hitSources = (item.explain?.hitSources ?? []).map((source) => source.toLowerCase());
+    const isSemanticHit = Boolean(item.explain?.segments?.vector)
+      || Boolean(item.explain?.matchedBy?.vector)
+      || Boolean(item.explain?.textSignals?.semantic)
+      || Boolean(item.explain?.imageSignals?.vector)
+      || hitSources.some((source) => source.includes("vector") || source.includes("semantic"));
+    const isKeywordHit = Boolean(item.explain?.segments?.keyword)
+      || Boolean(item.explain?.matchedBy?.content)
+      || Boolean(item.explain?.textSignals?.keyword)
+      || hitSources.some((source) =>
+        source.includes("content") || source.includes("keyword") || source.includes("bm25"),
+      );
+
+    if (isSemanticHit || isKeywordHit || hitSources.length) {
+      hasFallbackHitSourceData = true;
+    }
+    if (isSemanticHit) fallbackSemanticCount += 1;
+    if (isKeywordHit) fallbackKeywordCount += 1;
   });
 
   const scopeNames = (filters?.kbIds ?? [])
@@ -1931,9 +2106,57 @@ function buildInsightData(
   return {
     kbCount: kbIds.size || null,
     fileCount: fileIds.size || null,
+    pipeline: {
+      keywordCandidates: nullableCount(data.insight?.pipeline?.keywordCandidates),
+      vectorCandidates: nullableCount(data.insight?.pipeline?.vectorCandidates),
+      fusedRetained: nullableCount(data.insight?.pipeline?.fusedRetained),
+      rerankAdopted: nullableCount(data.insight?.pipeline?.rerankAdopted),
+    },
+    semanticHitCount:
+      nullableCount(apiHitSources?.vectorCount)
+      ?? (hasFallbackHitSourceData ? fallbackSemanticCount : null),
+    keywordHitCount:
+      nullableCount(apiHitSources?.contentCount)
+      ?? (hasFallbackHitSourceData ? fallbackKeywordCount : null),
+    queryIntent: data.insight?.queryIntent
+      ? {
+          intent: data.insight.queryIntent.intent?.trim() ?? "",
+          category: data.insight.queryIntent.category?.trim() ?? "OTHER",
+          fallback: Boolean(data.insight.queryIntent.fallback),
+        }
+      : null,
+    lowRelevanceCount: nullableCount(data.insight?.risk?.lowRelevanceCount),
+    relevanceDistribution: data.insight?.relevanceDistribution
+      ? {
+          high: nullableCount(data.insight.relevanceDistribution.high) ?? 0,
+          medium: nullableCount(data.insight.relevanceDistribution.medium) ?? 0,
+          low: nullableCount(data.insight.relevanceDistribution.low) ?? 0,
+        }
+      : null,
     sourceCounts: Array.from(sourceCountMap, ([label, count]) => ({ label, count })),
     scopeNames,
   };
+}
+
+function nullableCount(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.round(value))
+    : null;
+}
+
+function getEvidenceSourceLabel(item: SearchResult) {
+  if (item.segmentType === "IMAGE_OCR_BLOCK") {
+    return "OCR";
+  }
+  return SOURCE_TYPE_LABEL[item.assetType] ?? item.assetType;
+}
+
+function getSourceLabelFromFileName(fileName?: string) {
+  const extension = fileName?.split(".").pop()?.trim().toUpperCase();
+  if (!extension) return "";
+  if (extension === "MARKDOWN") return "MD";
+  if (["PNG", "JPG", "JPEG", "WEBP", "GIF", "BMP"].includes(extension)) return "IMAGE";
+  return SOURCE_TYPE_LABEL[extension] ?? extension;
 }
 
 function renderAnswerText(

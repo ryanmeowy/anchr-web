@@ -296,17 +296,17 @@ export type UploadIngestionItem = {
 
 export type SearchAssetType = string;
 export type SearchHitType = "TEXT_CHUNK" | "IMAGE_OCR_BLOCK";
+export type SearchResultType = "TEXT" | "IMAGE" | "MIXED";
 export type SearchStrategy = "KB_RRF" | "KB_RRF_RERANK";
 export type SearchAnswerMode = "STRICT";
 
 export type SearchRequest = {
   query: string;
-  topK?: number;
   limit?: number;
   strategy?: SearchStrategy;
   kbIds?: string[];
   assetTypes?: SearchAssetType[];
-  hitType?: SearchHitType[];
+  hitTypes?: SearchHitType[];
   dateRange?: {
     from?: number;
     to?: number;
@@ -330,7 +330,7 @@ export type SearchResult = {
   score?: number;
   thumbnail?: string;
   ocrSummary?: string;
-  resultType?: SearchHitType;
+  resultType?: SearchResultType;
   explain?: {
     strategyEffective?: string;
     hitSources?: string[];
@@ -339,6 +339,24 @@ export type SearchResult = {
       ocr?: boolean;
       tag?: boolean;
       vector?: boolean;
+    };
+    matchedBy?: {
+      vector?: boolean;
+      title?: boolean;
+      content?: boolean;
+      ocr?: boolean;
+    };
+    textSignals?: {
+      semantic?: boolean;
+      keyword?: boolean;
+      pageHit?: boolean;
+      chunkHit?: boolean;
+    };
+    imageSignals?: {
+      vector?: boolean;
+      ocr?: boolean;
+      caption?: boolean;
+      tag?: boolean;
     };
   };
   anchor?: {
@@ -364,7 +382,48 @@ export type SearchAnswer = {
     fileName?: string;
     pageNo?: number;
     snippet?: string;
+    why?: {
+      score?: number | null;
+      hitSources?: string[];
+      matchedBy?: {
+        vector?: boolean;
+        title?: boolean;
+        content?: boolean;
+        ocr?: boolean;
+      } | null;
+      matchSummary?: string | null;
+    } | null;
   }>;
+};
+
+export type SearchInsight = {
+  pipeline?: {
+    keywordCandidates?: number;
+    vectorCandidates?: number;
+    fusedRetained?: number;
+    rerankAdopted?: number;
+  } | null;
+  relevanceDistribution?: {
+    high?: number;
+    medium?: number;
+    low?: number;
+  } | null;
+  risk?: {
+    lowRelevanceCount?: number;
+  } | null;
+  hitSourceDistribution?: {
+    vectorCount?: number;
+    contentCount?: number;
+    ocrCount?: number;
+    tagCount?: number;
+    titleCount?: number;
+  } | null;
+  queryIntent?: {
+    intent?: string | null;
+    category?: string | null;
+    fallback?: boolean;
+  } | null;
+  latencyMs?: number | null;
 };
 
 export type SearchPage = {
@@ -376,8 +435,19 @@ export type SearchPage = {
       value: SearchAssetType;
       count: number;
     }>;
+    assetTypes?: Array<{
+      value: SearchAssetType;
+      count: number;
+    }>;
+    hitTypes?: Array<{
+      value: SearchHitType;
+      count: number;
+    }>;
   } | null;
   answer?: SearchAnswer | null;
+  rewrittenKeywords?: string[] | null;
+  suggestedQuestions?: string[] | null;
+  insight?: SearchInsight | null;
 };
 
 export type PreviewSegment = {

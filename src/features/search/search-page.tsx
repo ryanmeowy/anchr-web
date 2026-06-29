@@ -42,7 +42,6 @@ import type { KnowledgeBase, RecentSearch, SearchAnswer, SearchAssetType, Search
 const DEFAULT_SEARCH_LIMIT = 10;
 const MIN_SEARCH_LIMIT = 1;
 const MAX_SEARCH_LIMIT = 200;
-const SEARCH_TOP_K = 50;
 const RECENT_SEARCH_PAGE_SIZE = 5;
 const RECENT_SEARCH_COLLAPSED_SIZE = 3;
 
@@ -223,11 +222,10 @@ export function SearchPage() {
     mutationFn: (variables) =>
       apiClient.searchKnowledgeBase({
         query: variables.query,
-        topK: SEARCH_TOP_K,
         limit: variables.filters.limit,
         kbIds: variables.filters.kbIds,
         assetTypes: variables.filters.assetTypes.length > 0 ? variables.filters.assetTypes : undefined,
-        hitType: variables.filters.hitType.length > 0 ? variables.filters.hitType : undefined,
+        hitTypes: variables.filters.hitType.length > 0 ? variables.filters.hitType : undefined,
         dateRange: buildDateRange(variables.filters),
         cursor: variables.cursor ?? undefined,
         withAnswer: variables.filters.withAnswer

@@ -2606,8 +2606,12 @@ a {
   white-space: nowrap;
 }
 
-.search-premium-quality-item.is-citations .search-premium-quality-value {
-  color: #486b08;
+.search-premium-quality-item.is-hit-source {
+  background: rgba(109, 86, 255, 0.06);
+}
+
+.search-premium-quality-item.is-hit-source .search-premium-quality-value {
+  color: #4d36d6;
 }
 
 .search-premium-quality-note {
