@@ -1479,33 +1479,263 @@ a {
 }
 
 .search-premium-health {
+  --search-health-color: #486b08;
+  --search-health-accent: #c9ff50;
+  --search-health-glow: rgba(201, 255, 80, 0.26);
+  --search-health-surface: rgba(201, 255, 80, 0.12);
+  --search-health-dark: #101214;
+  --search-health-connection-color: #486b08;
+  --search-health-connection-glow: rgba(201, 255, 80, 0.26);
+  --search-health-connection-surface: rgba(201, 255, 80, 0.12);
   animation-delay: 160ms;
+}
+
+.search-premium-health[data-connection-state="offline"],
+.search-premium-health[data-connection-state="error"] {
+  --search-health-connection-color: #ba3327;
+  --search-health-connection-glow: rgba(255, 113, 95, 0.22);
+  --search-health-connection-surface: rgba(255, 113, 95, 0.1);
+}
+
+.search-premium-health[data-connection-state="checking"],
+.search-premium-health[data-connection-state="unknown"] {
+  --search-health-connection-color: var(--premium-muted);
+  --search-health-connection-glow: rgba(98, 109, 120, 0.16);
+  --search-health-connection-surface: rgba(98, 109, 120, 0.08);
+}
+
+.search-premium-health[data-health-state="yellow"] {
+  --search-health-color: #9a5b00;
+  --search-health-accent: #ffc857;
+  --search-health-glow: rgba(255, 190, 60, 0.24);
+  --search-health-surface: rgba(255, 190, 60, 0.1);
+}
+
+.search-premium-health[data-health-state="red"],
+.search-premium-health[data-health-state="offline"],
+.search-premium-health[data-health-state="error"] {
+  --search-health-color: #ba3327;
+  --search-health-accent: #ff715f;
+  --search-health-glow: rgba(255, 113, 95, 0.22);
+  --search-health-surface: rgba(255, 113, 95, 0.1);
+}
+
+.search-premium-health[data-health-state="loading"],
+.search-premium-health[data-health-state="unknown"] {
+  --search-health-color: var(--premium-muted);
+  --search-health-accent: #aab2ba;
+  --search-health-glow: rgba(98, 109, 120, 0.16);
+  --search-health-surface: rgba(98, 109, 120, 0.08);
 }
 
 .search-premium-health-content {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+}
+
+.search-premium-health-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.search-premium-health-header > p {
+  margin: 0;
+  color: var(--search-premium-label);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: normal;
+}
+
+.search-premium-health-connection {
+  appearance: none;
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--search-health-connection-color) 24%, transparent);
+  border-radius: 999px;
+  background: var(--search-health-connection-surface);
+  padding: 0 8px;
+  color: var(--search-health-connection-color);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: normal;
+  opacity: 1;
+  white-space: nowrap;
+}
+
+.search-premium-health-connection::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 3px var(--search-health-connection-glow);
+  content: "";
+  animation: searchPremiumHealthPulse 2.4s cubic-bezier(0.19, 1, 0.22, 1) infinite;
+}
+
+.search-premium-health-connection:disabled {
+  cursor: wait;
+  color: var(--search-health-connection-color);
+  opacity: 1;
+}
+
+.search-premium-health[data-health-state="offline"] .search-premium-health-connection::before,
+.search-premium-health[data-health-state="error"] .search-premium-health-connection::before,
+.search-premium-health[data-health-state="loading"] .search-premium-health-connection::before {
+  animation: none;
 }
 
 .search-premium-health-main {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--premium-ink) 10%, transparent);
+  border-radius: 8px;
+  background:
+    linear-gradient(110deg, var(--search-health-surface), rgba(255, 255, 255, 0.56) 58%, rgba(255, 255, 255, 0.24)),
+    #fffdf5;
+  padding: 8px;
 }
 
-.search-premium-health-main strong {
-  color: #486b08;
-  font-size: clamp(30px, 4.4vw, 46px);
-  font-weight: 900;
-  line-height: 0.88;
+.search-premium-health-orb {
+  position: relative;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background:
+    radial-gradient(
+      circle at 70% 24%,
+      color-mix(in srgb, var(--search-health-accent) 36%, transparent),
+      transparent 42%
+    ),
+    var(--search-health-dark);
+  color: var(--search-health-accent);
+  box-shadow:
+    0 8px 20px rgba(16, 18, 20, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: searchPremiumHealthFloat 3.8s cubic-bezier(0.19, 1, 0.22, 1) infinite alternate;
 }
 
-.search-premium-health-main span {
-  max-width: 128px;
+.search-premium-health-orb::before {
+  position: absolute;
+  inset: -50% 0 auto;
+  height: 50%;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--search-health-accent) 16%, transparent),
+    transparent
+  );
+  content: "";
+  animation: searchPremiumHealthScan 3.2s cubic-bezier(0.19, 1, 0.22, 1) infinite;
+}
+
+.search-premium-health-orb::after {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--search-health-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--search-health-accent) 16%, transparent);
+  content: "";
+  animation: searchPremiumHealthPulse 2.4s cubic-bezier(0.19, 1, 0.22, 1) infinite;
+}
+
+.search-premium-health[data-health-state="offline"] .search-premium-health-orb::after,
+.search-premium-health[data-health-state="error"] .search-premium-health-orb::after,
+.search-premium-health[data-health-state="loading"] .search-premium-health-orb::after {
+  animation: none;
+}
+
+.search-premium-health-orb > svg {
+  position: relative;
+  z-index: 1;
+}
+
+.search-premium-health-spinner {
+  animation: searchPremiumHealthSpin 800ms linear infinite;
+}
+
+.search-premium-health-readout {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.search-premium-health-kicker {
   color: var(--premium-muted);
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+.search-premium-health-status-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-premium-health-status-row strong {
+  overflow: hidden;
+  color: var(--premium-ink);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-premium-health-grade {
+  display: inline-flex;
+  min-height: 18px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--search-health-dark);
+  padding: 0 7px;
+  color: var(--search-health-accent);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+
+.search-premium-health-grade::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--search-health-accent) 12%, transparent);
+  content: "";
+}
+
+.search-premium-health-summary {
+  overflow: hidden;
+  margin: 0;
+  color: var(--premium-muted);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-premium-health-stats {
@@ -1515,20 +1745,63 @@ a {
 }
 
 .search-premium-health-stat {
-  min-height: 46px;
+  display: grid;
+  min-width: 0;
+  min-height: 56px;
+  align-content: space-between;
+  gap: 4px;
   border: 1px solid color-mix(in srgb, var(--premium-ink) 10%, transparent);
   border-radius: 8px;
-  background: var(--premium-panel-muted);
-  padding: 6px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.42)),
+    var(--search-health-surface);
+  padding: 7px 8px;
   color: var(--premium-muted);
-  font-size: 10px;
+  transition:
+    border-color 260ms cubic-bezier(0.19, 1, 0.22, 1),
+    transform 260ms cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.search-premium-health-stat:hover {
+  border-color: color-mix(in srgb, var(--search-health-color) 30%, transparent);
+  transform: translateY(-2px);
+}
+
+.search-premium-health-stat-primary {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 4px;
 }
 
 .search-premium-health-stat b {
-  display: block;
-  margin-bottom: 3px;
   color: var(--premium-ink);
-  font-size: 14px;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.search-premium-health-stat em {
+  overflow: hidden;
+  color: var(--premium-ink-soft);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-premium-health-stat small {
+  overflow: hidden;
+  color: var(--premium-muted);
+  font-size: 9px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-premium-health-stat.is-alert small {
+  color: var(--search-health-color);
+  font-weight: 850;
 }
 
 .search-premium-answer-card {
@@ -3168,6 +3441,40 @@ a {
   background: var(--premium-panel);
 }
 
+.search-premium-page[data-premium-theme="dark"] .search-premium-health {
+  --search-health-color: #b8ef48;
+  --search-health-connection-color: #b8ef48;
+}
+
+.search-premium-page[data-premium-theme="dark"] .search-premium-health-main {
+  border-color: rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(110deg, var(--search-health-surface), rgba(20, 23, 21, 0.82) 58%, rgba(16, 18, 17, 0.66)),
+    #121514;
+}
+
+.search-premium-page[data-premium-theme="dark"] .search-premium-health-stat {
+  border-color: rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(145deg, rgba(26, 29, 27, 0.9), rgba(18, 20, 19, 0.72)),
+    var(--search-health-surface);
+}
+
+.search-premium-page[data-premium-theme="dark"] .search-premium-health[data-health-state="yellow"] {
+  --search-health-color: #ffc857;
+}
+
+.search-premium-page[data-premium-theme="dark"] .search-premium-health[data-health-state="red"],
+.search-premium-page[data-premium-theme="dark"] .search-premium-health[data-health-state="offline"],
+.search-premium-page[data-premium-theme="dark"] .search-premium-health[data-health-state="error"] {
+  --search-health-color: #ff8878;
+}
+
+.search-premium-page[data-premium-theme="dark"] .search-premium-health[data-connection-state="offline"],
+.search-premium-page[data-premium-theme="dark"] .search-premium-health[data-connection-state="error"] {
+  --search-health-connection-color: #ff8878;
+}
+
 .search-premium-page[data-premium-theme="dark"] .search-premium-answer-card::before {
   opacity: 1;
   background:
@@ -3274,7 +3581,7 @@ a {
 
   .search-premium-side-column {
     height: 100%;
-    grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.5fr);
+    grid-template-rows: auto minmax(0, 0.92fr) minmax(0, 0.58fr);
   }
 
 }
@@ -3445,25 +3752,56 @@ a {
   }
 
   .search-premium-health-content {
-    gap: 6px;
+    gap: 4px;
   }
 
   .search-premium-health-main {
-    gap: 10px;
+    gap: 7px;
+    padding: 5px;
   }
 
-  .search-premium-health-main strong {
-    font-size: 32px;
+  .search-premium-health-connection {
+    min-height: 18px;
+    padding: 0 6px;
+    font-size: 8px;
   }
 
-  .search-premium-health-main span {
-    font-size: 10px;
-    line-height: 1.25;
+  .search-premium-health-orb {
+    width: 36px;
+    height: 36px;
+  }
+
+  .search-premium-health-orb > svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .search-premium-health-status-row {
+    gap: 5px;
+  }
+
+  .search-premium-health-status-row strong {
+    font-size: 14px;
+  }
+
+  .search-premium-health-grade {
+    min-height: 15px;
+    padding: 0 5px;
+    font-size: 7px;
+  }
+
+  .search-premium-health-summary,
+  .search-premium-health-kicker {
+    font-size: 7px;
   }
 
   .search-premium-health-stat {
-    min-height: 38px;
+    min-height: 40px;
     padding: 5px;
+  }
+
+  .search-premium-health-stat b {
+    font-size: 14px;
   }
 
   .search-premium-filter {
@@ -3802,5 +4140,46 @@ a {
 
   84% {
     transform: translateX(2px);
+  }
+}
+
+@keyframes searchPremiumHealthFloat {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes searchPremiumHealthScan {
+  0%,
+  18% {
+    transform: translateY(-50%);
+  }
+
+  72%,
+  100% {
+    transform: translateY(300%);
+  }
+}
+
+@keyframes searchPremiumHealthPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--search-health-accent) 16%, transparent);
+    transform: scale(1);
+  }
+
+  50% {
+    box-shadow: 0 0 0 5px transparent;
+    transform: scale(0.86);
+  }
+}
+
+@keyframes searchPremiumHealthSpin {
+  to {
+    transform: rotate(360deg);
   }
 }

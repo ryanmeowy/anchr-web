@@ -1145,28 +1145,180 @@
       }
 
       .health {
+        --health-color: var(--lime-deep);
+        --health-accent: var(--lime);
+        --health-glow: rgba(201, 255, 80, 0.26);
+        --health-surface: rgba(201, 255, 80, 0.12);
         display: grid;
-        gap: 8px;
+        gap: 10px;
+      }
+
+      .health-panel[data-health-state="yellow"] .health {
+        --health-color: #9a5b00;
+        --health-accent: #ffc857;
+        --health-glow: rgba(255, 190, 60, 0.24);
+        --health-surface: rgba(255, 190, 60, 0.1);
+      }
+
+      .health-panel[data-health-state="red"] .health,
+      .health-panel[data-health-state="offline"] .health {
+        --health-color: #ba3327;
+        --health-accent: #ff715f;
+        --health-glow: rgba(255, 113, 95, 0.22);
+        --health-surface: rgba(255, 113, 95, 0.1);
+      }
+
+      .health-panel[data-health-state="loading"] .health {
+        --health-color: var(--muted);
+        --health-accent: #aab2ba;
+        --health-glow: rgba(98, 109, 120, 0.16);
+        --health-surface: rgba(98, 109, 120, 0.08);
+      }
+
+      .health-connection {
+        min-height: 22px;
+        border: 1px solid color-mix(in srgb, var(--health-color) 24%, transparent);
+        border-radius: var(--pill);
+        background: var(--health-surface);
+        padding: 0 8px;
+        color: var(--health-color);
+        letter-spacing: 0.06em;
+      }
+
+      .health-connection::before {
+        width: 6px;
+        height: 6px;
+        border-radius: var(--pill);
+        background: currentColor;
+        box-shadow: 0 0 0 3px var(--health-glow);
+        content: "";
+        animation: pulse 2.4s var(--ease) infinite;
+      }
+
+      .health-panel[data-health-state="offline"] .health-connection::before,
+      .health-panel[data-health-state="loading"] .health-connection::before {
+        animation: none;
       }
 
       .health-main {
         display: flex;
-        align-items: end;
-        justify-content: space-between;
-        gap: 16px;
+        align-items: center;
+        gap: 12px;
+        overflow: hidden;
+        border: 1px solid rgba(16, 18, 20, 0.1);
+        border-radius: var(--radius);
+        background:
+          linear-gradient(110deg, var(--health-surface), rgba(255, 255, 255, 0.56) 58%, rgba(255, 255, 255, 0.24)),
+          var(--paper);
+        padding: 8px;
       }
 
-      .health-main strong {
-        color: var(--lime-deep);
-        font-size: clamp(30px, 4.4vw, 46px);
-        line-height: 0.88;
+      .health-orb {
+        position: relative;
+        display: grid;
+        width: 48px;
+        height: 48px;
+        flex: 0 0 auto;
+        overflow: hidden;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: var(--radius);
+        background:
+          radial-gradient(circle at 70% 24%, color-mix(in srgb, var(--health-accent) 36%, transparent), transparent 42%),
+          var(--ink);
+        color: var(--health-accent);
+        box-shadow:
+          0 8px 20px rgba(16, 18, 20, 0.18),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+        animation: healthFloat 3.8s var(--ease) infinite alternate;
       }
 
-      .health-main span {
-        max-width: 128px;
+      .health-orb::before {
+        position: absolute;
+        inset: -50% 0 auto;
+        height: 50%;
+        background: linear-gradient(to bottom, transparent, rgba(201, 255, 80, 0.16), transparent);
+        content: "";
+        animation: healthScan 3.2s var(--ease) infinite;
+      }
+
+      .health-orb::after {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 5px;
+        height: 5px;
+        border-radius: var(--pill);
+        background: var(--health-accent);
+        box-shadow: 0 0 0 3px rgba(201, 255, 80, 0.16);
+        content: "";
+        animation: pulse 2.4s var(--ease) infinite;
+      }
+
+      .health-orb svg {
+        position: relative;
+        z-index: 1;
+      }
+
+      .health-readout {
+        display: grid;
+        min-width: 0;
+        flex: 1;
+        gap: 3px;
+      }
+
+      .health-kicker {
         color: var(--muted);
-        font-size: 11px;
-        line-height: 1.5;
+        font-size: 8px;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        line-height: 1;
+      }
+
+      .health-status-row {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .health-status-row strong {
+        color: var(--ink);
+        font-size: 18px;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
+      }
+
+      .health-grade {
+        display: inline-flex;
+        min-height: 18px;
+        align-items: center;
+        gap: 4px;
+        border-radius: var(--pill);
+        background: var(--ink);
+        padding: 0 7px;
+        color: var(--health-accent);
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        line-height: 1;
+      }
+
+      .health-grade::before {
+        width: 5px;
+        height: 5px;
+        border-radius: var(--pill);
+        background: currentColor;
+        box-shadow: 0 0 0 2px rgba(201, 255, 80, 0.12);
+        content: "";
+      }
+
+      .health-summary {
+        margin: 0;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 650;
+        line-height: 1.25;
       }
 
       .health-stats {
@@ -1175,21 +1327,59 @@
         gap: 6px;
       }
 
-      .health-stats span {
-        min-height: 46px;
+      .health-stat {
+        display: grid;
+        min-width: 0;
+        min-height: 56px;
+        align-content: space-between;
+        gap: 4px;
         border: 1px solid rgba(16, 18, 20, 0.1);
         border-radius: var(--radius);
-        background: rgba(255, 255, 255, 0.56);
-        padding: 6px;
+        background:
+          linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.42)),
+          var(--health-surface);
+        padding: 7px 8px;
         color: var(--muted);
-        font-size: 10px;
+        transition:
+          border-color 260ms var(--ease),
+          transform 260ms var(--ease);
       }
 
-      .health-stats b {
-        display: block;
-        margin-bottom: 3px;
+      .health-stat:hover {
+        border-color: color-mix(in srgb, var(--health-color) 30%, transparent);
+        transform: translateY(-2px);
+      }
+
+      .health-stat-primary {
+        display: flex;
+        min-width: 0;
+        align-items: baseline;
+        gap: 4px;
+      }
+
+      .health-stat b {
         color: var(--ink);
-        font-size: 14px;
+        font-size: 17px;
+        line-height: 1;
+      }
+
+      .health-stat em {
+        overflow: hidden;
+        color: var(--ink-soft);
+        font-size: 9px;
+        font-style: normal;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .health-stat small {
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       svg {
@@ -1214,6 +1404,26 @@
           opacity: 1;
           transform: translateY(0) scale(1);
           clip-path: inset(0 0 0 0 round 8px);
+        }
+      }
+
+      @keyframes healthFloat {
+        from {
+          transform: translateY(0);
+        }
+        to {
+          transform: translateY(-2px);
+        }
+      }
+
+      @keyframes healthScan {
+        0%,
+        18% {
+          transform: translateY(-50%);
+        }
+        72%,
+        100% {
+          transform: translateY(300%);
         }
       }
 
@@ -2179,25 +2389,60 @@
         }
 
         .health {
-          gap: 6px;
+          gap: 4px;
+        }
+
+        .health-panel {
+          padding: 8px;
+        }
+
+        .health-connection {
+          min-height: 18px;
+          padding: 0 6px;
+          font-size: 8px;
         }
 
         .health-main {
-          gap: 10px;
-        }
-
-        .health-main strong {
-          font-size: 32px;
-        }
-
-        .health-main span {
-          font-size: 10px;
-          line-height: 1.25;
-        }
-
-        .health-stats span {
-          min-height: 38px;
+          gap: 7px;
           padding: 5px;
+        }
+
+        .health-orb {
+          width: 36px;
+          height: 36px;
+        }
+
+        .health-orb svg {
+          width: 22px;
+          height: 22px;
+        }
+
+        .health-status-row {
+          gap: 5px;
+        }
+
+        .health-status-row strong {
+          font-size: 14px;
+        }
+
+        .health-grade {
+          min-height: 15px;
+          padding: 0 5px;
+          font-size: 7px;
+        }
+
+        .health-summary,
+        .health-kicker {
+          font-size: 7px;
+        }
+
+        .health-stat {
+          min-height: 40px;
+          padding: 5px;
+        }
+
+        .health-stat b {
+          font-size: 14px;
         }
       }
 
@@ -2932,17 +3177,44 @@
                 </div>
               </section>
 
-              <section class="panel health-panel" aria-label="检索健康度" style="grid-row:3">
+              <section class="panel health-panel" aria-label="ES 服务健康信息" data-health-state="green" style="grid-row:3">
                 <div class="health">
-                  <p class="label">SEARCH HEALTH <span>ONLINE</span></p>
+                  <p class="label">
+                    ES SERVICE HEALTH
+                    <span class="health-connection">ONLINE</span>
+                  </p>
                   <div class="health-main">
-                    <strong>GREEN</strong>
-                    <span>ES 集群可用，主分片与副本状态正常。</span>
+                    <span class="health-orb" aria-hidden="true">
+                      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                        <path d="M8 9.5 14 6l6 3.5v7L14 20l-6-3.5v-7Z" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="m8.5 9.8 5.5 3.1 5.5-3.1M14 13v6.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        <circle cx="8" cy="9.5" r="2" fill="currentColor"/>
+                        <circle cx="20" cy="9.5" r="2" fill="currentColor"/>
+                        <circle cx="14" cy="20" r="2" fill="currentColor"/>
+                      </svg>
+                    </span>
+                    <div class="health-readout">
+                      <span class="health-kicker">CLUSTER STATUS</span>
+                      <div class="health-status-row">
+                        <strong>运行正常</strong>
+                        <span class="health-grade">GREEN</span>
+                      </div>
+                      <p class="health-summary">Elasticsearch 已连接 · 搜索可用</p>
+                    </div>
                   </div>
                   <div class="health-stats">
-                    <span><b>3 / 3</b>检索节点</span>
-                    <span><b>12 / 12</b>活跃分片</span>
-                    <span><b>0</b>未分配分片</span>
+                    <div class="health-stat" title="节点总数 1，数据节点 1">
+                      <span class="health-stat-primary"><b>1</b><em>节点</em></span>
+                      <small>1 个数据节点</small>
+                    </div>
+                    <div class="health-stat" title="活跃分片 14，未分配分片 0">
+                      <span class="health-stat-primary"><b>14</b><em>活跃分片</em></span>
+                      <small>0 个未分配</small>
+                    </div>
+                    <div class="health-stat" title="文档 48,231 条，占用 27,845,632 字节">
+                      <span class="health-stat-primary"><b>48.2K</b><em>文档</em></span>
+                      <small>占用 26.6 MB</small>
+                    </div>
                   </div>
                 </div>
               </section>

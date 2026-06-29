@@ -84,6 +84,28 @@ export type KnowledgeBaseHealth = {
   sourceTypes: KnowledgeBaseHealthSourceType[];
 };
 
+export type ElasticsearchHealthIndices = {
+  count: number;
+  docsCount: number;
+  storeSizeBytes: number;
+};
+
+export type ElasticsearchHealth = {
+  connected: boolean;
+  status?: "green" | "yellow" | "red" | string | null;
+  clusterName?: string | null;
+  nodeCount?: number;
+  dataNodeCount?: number;
+  activeShards?: number;
+  activePrimaryShards?: number;
+  unassignedShards?: number;
+  initializingShards?: number;
+  relocatingShards?: number;
+  indices?: ElasticsearchHealthIndices | null;
+  version?: string | null;
+  error?: string | null;
+};
+
 export type DocumentAsset = {
   id: string;
   kbId: string;
