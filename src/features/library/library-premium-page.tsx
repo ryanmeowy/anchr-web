@@ -306,7 +306,7 @@ export function LibraryPremiumPage() {
               <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
                 LIBRARY
               </div>
-              <section className="relative z-10 flex min-w-0 flex-col justify-between gap-2">
+              <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
                   <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
                     <span className="size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />

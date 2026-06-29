@@ -426,25 +426,25 @@ export function SearchPremiumPage() {
         <div className="search-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
 
-          <div className="search-premium-workspace grid min-h-0 min-w-0">
-            <header className="search-premium-hero relative overflow-hidden border-b border-[var(--premium-line)] px-4 py-3 sm:px-5">
+          <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
+            <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div
-                className="search-premium-watermark pointer-events-none absolute -bottom-[18px] right-[18px] text-[clamp(48px,9vw,132px)] font-[950] leading-[0.8] text-black/[0.052]"
+                className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]"
                 aria-hidden="true"
               >
                 SEARCH
               </div>
-              <div className="relative flex h-full items-center">
+              <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
-                  <p className="mb-1.5 flex items-center gap-2 text-[10px] font-black text-[var(--premium-blue)]">
-                    <span className="search-premium-live-dot size-1.5 rounded-full bg-[var(--premium-accent)]" />
+                  <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
+                    <span className="size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
                     SEARCH / EVIDENCE RADAR
                   </p>
-                  <h1 className="text-[clamp(22px,2.6vw,36px)] font-black leading-none text-[var(--premium-ink)]">
+                  <h1 className="max-w-[720px] text-[clamp(16px,2.4vw,34px)] font-black leading-none">
                     从一条问题，抵达可验证的证据链。
                   </h1>
                 </div>
-              </div>
+              </section>
             </header>
 
             <main className="search-premium-content grid min-h-0 min-w-0 gap-3 px-4 py-3 sm:px-5">

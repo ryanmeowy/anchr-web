@@ -275,6 +275,7 @@ export function ImportsPremiumPage() {
     return (
       <ImportsPremiumShell theme={theme} onThemeChange={setTheme}>
         <StateCard
+          theme={theme}
           icon={<Loader2 size={24} className="animate-spin" />}
           title="正在检查导入配置"
           description="稍等片刻，系统正在确认对象存储与向量模型状态。"
@@ -286,19 +287,22 @@ export function ImportsPremiumPage() {
   if (missingConfigs) {
     return (
       <ImportsPremiumShell theme={theme} onThemeChange={setTheme}>
-        <ConfigurationGate missingConfigs={missingConfigs} />
+        <ConfigurationGate missingConfigs={missingConfigs} theme={theme} />
       </ImportsPremiumShell>
     );
   }
 
   return (
     <ImportsPremiumShell theme={theme} onThemeChange={setTheme}>
-      <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr] lg:h-[111.111%] lg:w-[111.111%] lg:origin-top-left lg:scale-90">
-        <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
+      <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
+        <header
+          className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5"
+          style={{ fontFamily: APP_FONT_STACK }}
+        >
           <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
             IMPORT
           </div>
-          <section className="relative z-10 flex min-w-0 flex-col justify-between gap-2">
+          <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
             <div>
               <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
                 <span className="size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
@@ -311,7 +315,7 @@ export function ImportsPremiumPage() {
           </section>
         </header>
 
-        <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[1fr_minmax(308px,363px)] lg:items-stretch lg:overflow-hidden lg:px-5">
+        <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:h-[111.111%] lg:w-[111.111%] lg:origin-top-left lg:scale-90 lg:grid-cols-[1fr_minmax(308px,363px)] lg:items-stretch lg:overflow-hidden lg:px-5">
           <section className="grid min-h-0 min-w-0 gap-3 overflow-hidden lg:h-full lg:grid-rows-[minmax(200px,0.95fr)_minmax(145px,0.62fr)_minmax(200px,0.9fr)]" aria-label="导入资料">
             <section
               className="imports-panel premium-surface relative grid min-h-[220px] place-items-center overflow-hidden rounded-[8px] p-4 text-center backdrop-blur-xl lg:min-h-0"
@@ -577,9 +581,19 @@ function ImportsPremiumShell({
   );
 }
 
-function StateCard({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
+function StateCard({
+  theme,
+  icon,
+  title,
+  description,
+}: {
+  theme: ThemeMode;
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
   return (
-    <div className="grid min-h-0 min-w-0 place-items-center bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4">
+    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface grid w-full max-w-[420px] place-items-center rounded-[8px] p-6 text-center">
         <div className="mb-4 grid size-12 place-items-center rounded-[8px] bg-[#111315] text-white dark:bg-white dark:text-[#111315]">
           {icon}
@@ -591,9 +605,15 @@ function StateCard({ icon, title, description }: { icon: ReactNode; title: strin
   );
 }
 
-function ConfigurationGate({ missingConfigs }: { missingConfigs: { storage: boolean; embedding: boolean } }) {
+function ConfigurationGate({
+  missingConfigs,
+  theme,
+}: {
+  missingConfigs: { storage: boolean; embedding: boolean };
+  theme: ThemeMode;
+}) {
   return (
-    <div className="grid min-h-0 min-w-0 place-items-center bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4">
+    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
         <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
           <Info size={24} />
@@ -605,11 +625,17 @@ function ConfigurationGate({ missingConfigs }: { missingConfigs: { storage: bool
           <ConfigStateRow label="Embedding 模型" missing={missingConfigs.embedding} />
         </div>
         <Link href="/settings" className={`${BUTTON_PRIMARY_CLASS} mt-5 justify-center`}>
-          前往设置
+          <span className="text-white dark:text-[#111315]">前往设置</span>
         </Link>
       </div>
     </div>
   );
+}
+
+function statePageBackgroundClass(theme: ThemeMode) {
+  return theme === "dark"
+    ? "bg-[#070908]"
+    : "bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)]";
 }
 
 function ConfigStateRow({ label, missing }: { label: string; missing: boolean }) {
@@ -1227,6 +1253,9 @@ function stageStatusText(status: string) {
 
 const IMPORTS_FONT_STACK =
   '"Sora", "Outfit", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
+
+const APP_FONT_STACK =
+  'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
 
 const BUTTON_PRIMARY_CLASS =
   "imports-primary-action inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#111315] px-3.5 text-[12px] font-black text-white shadow-[0_16px_38px_rgba(17,19,21,0.2)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:bg-[#111315]/35 disabled:shadow-none";
