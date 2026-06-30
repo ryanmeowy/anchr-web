@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   ArrowRight,
@@ -17,7 +17,16 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useDeferredValue, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type UIEvent,
+  type WheelEvent,
+} from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatNumber, statusText } from "@/lib/format";
@@ -113,17 +122,29 @@ export function LibraryPremiumPage() {
     refetchOnWindowFocus: false,
   });
 
-  const citationsQuery = useQuery({
+  const citationsQuery = useInfiniteQuery({
     queryKey: ["activity", "recent-citations", RECENT_LIMIT],
-    queryFn: () => apiClient.recentCitations(RECENT_LIMIT),
+    queryFn: ({ pageParam }) => apiClient.recentCitations(RECENT_LIMIT, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
-  const questionsQuery = useQuery({
+  const questionsQuery = useInfiniteQuery({
     queryKey: ["activity", "recent-questions", RECENT_LIMIT],
-    queryFn: () => apiClient.recentQuestions(RECENT_LIMIT),
+    queryFn: ({ pageParam }) => apiClient.recentQuestions(RECENT_LIMIT, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
   const items = useMemo(() => kbsQuery.data?.items ?? [], [kbsQuery.data?.items]);
+  const recentCitations = useMemo(
+    () => citationsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [citationsQuery.data?.pages],
+  );
+  const recentQuestions = useMemo(
+    () => questionsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [questionsQuery.data?.pages],
+  );
   const activeStatsKbIds = useMemo(
     () => items.filter(isActiveKnowledgeBase).map((item) => item.id),
     [items],
@@ -529,16 +550,22 @@ export function LibraryPremiumPage() {
                 </div>
               </section>
 
-              <aside className="grid gap-2 overflow-visible lg:min-w-0" aria-label="活动洞察">
+              <aside className="grid content-start gap-2 overflow-visible lg:min-w-0" aria-label="活动洞察">
                 <RecentCitationPanel
-                  items={citationsQuery.data?.items ?? []}
+                  items={recentCitations}
                   isLoading={citationsQuery.isLoading}
                   isError={citationsQuery.isError}
+                  hasNextPage={Boolean(citationsQuery.hasNextPage)}
+                  isFetchingNextPage={citationsQuery.isFetchingNextPage}
+                  onLoadMore={() => void citationsQuery.fetchNextPage()}
                 />
                 <RecentQuestionPanel
-                  items={questionsQuery.data?.items ?? []}
+                  items={recentQuestions}
                   isLoading={questionsQuery.isLoading}
                   isError={questionsQuery.isError}
+                  hasNextPage={Boolean(questionsQuery.hasNextPage)}
+                  isFetchingNextPage={questionsQuery.isFetchingNextPage}
+                  onLoadMore={() => void questionsQuery.fetchNextPage()}
                 />
                 <div className="min-h-[184px]">
                   <HealthPanel
@@ -1193,15 +1220,46 @@ function KnowledgeBasePagination({
   );
 }
 
-function RecentCitationPanel({ items, isLoading, isError }: { items: RecentCitation[]; isLoading: boolean; isError: boolean }) {
+function RecentCitationPanel({
+  items,
+  isLoading,
+  isError,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+}: {
+  items: RecentCitation[];
+  isLoading: boolean;
+  isError: boolean;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
+}) {
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 28) onLoadMore();
+  };
+
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (!hasNextPage || isFetchingNextPage || event.deltaY <= 0) return;
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 28) onLoadMore();
+  };
+
   return (
     <section className="rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近引用">
       <PanelLabel label="RECENT CITATIONS" value="OPENED" dark />
-      <div className="mt-2.5 grid gap-2">
+      <div
+        className="mt-2.5 grid max-h-[320px] content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
+        onScroll={handleScroll}
+        onWheel={handleWheel}
+      >
         {isLoading ? <DarkState label="加载最近引用" /> : null}
         {isError ? <DarkState label="最近引用暂不可用" /> : null}
         {!isLoading && !isError && items.length === 0 ? <DarkState label="暂无最近引用" /> : null}
-        {!isLoading && !isError ? items.slice(0, RECENT_LIMIT).map((item, index) => <CitationItem key={`${item.segmentId}-${item.openedAt ?? index}`} item={item} index={index} />) : null}
+        {items.map((item, index) => <CitationItem key={`${item.segmentId}-${item.openedAt ?? index}-${index}`} item={item} index={index} />)}
+        {isFetchingNextPage ? <DarkState label="加载更多" /> : null}
       </div>
     </section>
   );
@@ -1220,15 +1278,46 @@ function CitationItem({ item, index }: { item: RecentCitation; index: number }) 
   );
 }
 
-function RecentQuestionPanel({ items, isLoading, isError }: { items: RecentQuestion[]; isLoading: boolean; isError: boolean }) {
+function RecentQuestionPanel({
+  items,
+  isLoading,
+  isError,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+}: {
+  items: RecentQuestion[];
+  isLoading: boolean;
+  isError: boolean;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
+}) {
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 28) onLoadMore();
+  };
+
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (!hasNextPage || isFetchingNextPage || event.deltaY <= 0) return;
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 28) onLoadMore();
+  };
+
   return (
     <section className="flex min-h-[152px] flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近问过">
       <PanelLabel label="RECENT QUESTIONS" value={String(items.length)} dark />
-      <div className="mt-2.5 grid gap-2">
+      <div
+        className="mt-2.5 grid max-h-[208px] min-h-0 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
+        onScroll={handleScroll}
+        onWheel={handleWheel}
+      >
         {isLoading ? <DarkState label="加载最近提问" /> : null}
         {isError ? <DarkState label="最近提问暂不可用" /> : null}
         {!isLoading && !isError && items.length === 0 ? <DarkState label="暂无最近提问" /> : null}
-        {!isLoading && !isError ? items.slice(0, RECENT_LIMIT).map((item) => <QuestionItem key={item.turnId} item={item} />) : null}
+        {items.map((item, index) => <QuestionItem key={`${item.turnId}-${index}`} item={item} />)}
+        {isFetchingNextPage ? <DarkState label="加载更多" /> : null}
       </div>
     </section>
   );
