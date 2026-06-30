@@ -550,7 +550,7 @@ export function LibraryPremiumPage() {
                 </div>
               </section>
 
-              <aside className="grid content-start gap-2 overflow-visible lg:min-w-0" aria-label="活动洞察">
+              <aside className="flex flex-col gap-2 overflow-visible lg:min-w-0 lg:justify-between lg:gap-0" aria-label="活动洞察">
                 <RecentCitationPanel
                   items={recentCitations}
                   isLoading={citationsQuery.isLoading}
