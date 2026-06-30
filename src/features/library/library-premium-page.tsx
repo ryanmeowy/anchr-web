@@ -1264,21 +1264,21 @@ function HealthPanel({
   const sourceTypes = health?.sourceTypes ?? [];
 
   return (
-    <section className="flex h-full flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] p-3 text-[var(--premium-ink)] shadow-[var(--premium-tight-shadow)]" aria-label="知识库健康度">
-      <PanelLabel label="LIBRARY HEALTH" value={health?.status ?? selectedKb?.status ?? "READY"} />
+    <section className="flex h-full flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="知识库健康度">
+      <PanelLabel label="LIBRARY HEALTH" value={health?.status ?? selectedKb?.status ?? "READY"} dark />
       <div className="mt-2.5 grid min-h-0 flex-1 gap-2.5">
-        {!selectedKb ? <InlineState label="选择知识库查看健康度" fill /> : null}
-        {selectedKb && isLoading ? <InlineState label="加载健康状态" fill /> : null}
-        {selectedKb && isError ? <InlineState label="健康状态暂不可用" fill /> : null}
+        {!selectedKb ? <DarkState label="选择知识库查看健康度" /> : null}
+        {selectedKb && isLoading ? <DarkState label="加载健康状态" /> : null}
+        {selectedKb && isError ? <DarkState label="健康状态暂不可用" /> : null}
         {selectedKb && !isLoading && !isError ? (
           <>
             <div className="flex items-end justify-between gap-3">
               <strong className="text-[clamp(34px,4.6vw,58px)] font-black leading-[0.88]">{score}%</strong>
-              <span className="max-w-[140px] text-[11px] leading-4 text-[var(--premium-muted)]">
+              <span className="max-w-[140px] text-[11px] leading-4 text-white/70">
                 {health?.kbName ?? selectedKb.name} 的索引、片段与导入状态综合评分。
               </span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/10" aria-label={`健康度 ${score}%`}>
+            <div className="h-2 overflow-hidden rounded-full bg-white/10" aria-label={`健康度 ${score}%`}>
               <span className="block h-full rounded-full bg-[linear-gradient(90deg,var(--premium-blue),var(--premium-accent))] transition-[width] duration-500" style={{ width: `${score}%` }} />
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -1297,8 +1297,8 @@ function HealthPanel({
 
 function HealthMetric({ value, label }: { value: string; label: string }) {
   return (
-    <span className="min-h-12 rounded-[8px] border border-[var(--premium-line)] bg-white/55 p-2 text-[10px] text-[var(--premium-muted)] dark:bg-white/5">
-      <b className="mb-0.5 block break-words text-sm text-[var(--premium-ink)]">{value}</b>
+    <span className="min-h-12 rounded-[8px] border border-white/10 bg-white/10 p-2 text-[10px] text-white/60">
+      <b className="mb-0.5 block break-words text-sm text-white">{value}</b>
       {label}
     </span>
   );
