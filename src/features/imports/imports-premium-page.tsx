@@ -137,10 +137,7 @@ export function ImportsPremiumPage() {
     queryFn: () => apiClient.listIngestionTasks(selectedKbId, MAX_TASK_LIST_SIZE),
     enabled: Boolean(selectedKbId),
     refetchOnWindowFocus: false,
-    refetchInterval: (query) => {
-      const tasks = query.state.data?.items ?? [];
-      return tasks.some((task) => !isFinishedTaskStatus(task.status)) ? 5000 : false;
-    },
+    refetchOnReconnect: false,
   });
 
   const activeTaskId = currentTaskId;
