@@ -1585,19 +1585,12 @@ a {
   background: currentColor;
   box-shadow: 0 0 0 3px var(--search-health-connection-glow);
   content: "";
-  animation: searchPremiumHealthPulse 2.4s cubic-bezier(0.19, 1, 0.22, 1) infinite;
 }
 
 .search-premium-health-connection:disabled {
   cursor: wait;
   color: var(--search-health-connection-color);
   opacity: 1;
-}
-
-.search-premium-health[data-health-state="offline"] .search-premium-health-connection::before,
-.search-premium-health[data-health-state="error"] .search-premium-health-connection::before,
-.search-premium-health[data-health-state="loading"] .search-premium-health-connection::before {
-  animation: none;
 }
 
 .search-premium-health-main {
@@ -3095,8 +3088,12 @@ a {
 }
 
 .search-premium-kb-option.is-selected {
-  background: var(--premium-blue-soft);
-  color: var(--premium-blue);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.search-premium-kb-option.is-selected svg {
+  color: var(--search-filter-blue);
 }
 
 .search-premium-kb-option + .search-premium-kb-option {
@@ -4182,19 +4179,6 @@ a {
   72%,
   100% {
     transform: translateY(300%);
-  }
-}
-
-@keyframes searchPremiumHealthPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--search-health-accent) 16%, transparent);
-    transform: scale(1);
-  }
-
-  50% {
-    box-shadow: 0 0 0 5px transparent;
-    transform: scale(0.86);
   }
 }
 
