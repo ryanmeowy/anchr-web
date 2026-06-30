@@ -766,15 +766,18 @@ export function AskPremiumPage() {
           </aside>
 
           <main className="ask-premium-main flex min-h-0 min-w-0 flex-col bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)]">
-            <header className="ask-premium-hero grid min-h-[112px] items-center gap-3 border-b border-black/10 px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:px-5">
-              <div className="min-w-0">
+            <header className="ask-premium-hero relative grid min-h-[112px] items-center gap-3 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:px-5">
+              <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05]">
+                ASK
+              </div>
+              <div className="relative z-10 min-w-0">
                 <p className="ask-premium-kicker mb-1.5 inline-flex items-center gap-2 text-[10px] font-black text-blue-700">
                   <span className="size-1.5 rounded-full bg-[#bbff66] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
                   ASK / {selectedAnswerMode} ANSWER MODE
                 </p>
                 <h1 className="max-w-[720px] text-[clamp(28px,3.2vw,42px)] font-black leading-none">Anchor Your Answer</h1>
               </div>
-              <div className="ask-premium-scope-chip inline-flex h-10 max-w-full items-center gap-2.5 rounded-full border border-black/10 bg-white/80 px-3.5 text-xs font-bold text-slate-700 shadow-[0_10px_24px_rgba(17,19,21,0.07)]">
+              <div className="ask-premium-scope-chip relative z-10 inline-flex h-10 max-w-full items-center gap-2.5 rounded-full border border-black/10 bg-white/80 px-3.5 text-xs font-bold text-slate-700 shadow-[0_10px_24px_rgba(17,19,21,0.07)]">
                 <Database size={15} />
                 <span className="truncate">{selectedKbLabel} · {selectedAnswerModeLabel}</span>
               </div>
@@ -784,7 +787,6 @@ export function AskPremiumPage() {
               <div className="mx-auto flex min-h-0 w-full max-w-[980px] flex-1 flex-col gap-4">
                 <section ref={messageScrollRef} className="min-h-0 flex-1 overflow-auto pr-1">
                   <div className="relative grid gap-4">
-                    <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute right-0 top-10 text-[clamp(86px,14vw,190px)] font-black leading-none text-black/[0.035]">ASK</div>
                     {messageError ? (
                       <ErrorBlock message={messageError} />
                     ) : isLoadingMessages ? (
