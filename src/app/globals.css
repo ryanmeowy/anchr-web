@@ -2273,7 +2273,7 @@ a {
 }
 
 .search-premium-insight-latency.is-fast .search-premium-insight-latency-bar {
-  background: #c9ff50;
+  background: #b8ef48;
 }
 
 .search-premium-insight-latency.is-mid .search-premium-insight-latency-bar {
@@ -2287,6 +2287,18 @@ a {
 .search-premium-insight-latency b {
   color: var(--premium-ink);
   font-size: 12px;
+}
+
+.search-premium-insight-latency.is-fast b {
+  color: #b8ef48;
+}
+
+.search-premium-insight-latency.is-mid b {
+  color: #ffa726;
+}
+
+.search-premium-insight-latency.is-slow b {
+  color: #ff715f;
 }
 
 .search-premium-insight-latency-value {
@@ -2356,6 +2368,27 @@ a {
 .search-premium-query-tag.is-rewritten {
   background: var(--premium-blue-soft);
   color: var(--premium-blue);
+}
+
+.search-premium-query-tag-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.search-premium-query-fallback {
+  display: inline-flex;
+  min-height: 18px;
+  align-items: center;
+  border: 1px solid rgba(154, 91, 0, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 190, 60, 0.12);
+  padding: 0 6px;
+  color: #8a5200;
+  font-size: 8px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .search-premium-query-text {
@@ -3466,6 +3499,12 @@ a {
 .search-premium-page[data-premium-theme="dark"] .search-premium-query-tag.is-rewritten {
   background: rgba(111, 131, 214, 0.16);
   color: #d7e1ff;
+}
+
+.search-premium-page[data-premium-theme="dark"] .search-premium-query-fallback {
+  border-color: rgba(255, 200, 87, 0.24);
+  background: rgba(255, 200, 87, 0.12);
+  color: #ffc857;
 }
 
 .search-premium-page[data-premium-theme="dark"] .search-premium-query-term {

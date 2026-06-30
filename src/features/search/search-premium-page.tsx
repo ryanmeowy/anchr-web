@@ -278,6 +278,7 @@ export function SearchPremiumPage() {
     (searchText: string, filters: SearchFiltersValue, cursor?: string | null, append = false) => {
       const trimmed = searchText.trim();
       if (!trimmed) return;
+      if (!append) setElapsedMs(null);
       searchMutation.mutate({
         query: trimmed,
         filters,
@@ -560,9 +561,10 @@ export function SearchPremiumPage() {
 
                 <RetrievalInsight
                   hasSearched={hasSearched}
+                  rewriteResolved={searchData !== null && !searchMutation.isPending}
                   query={submittedQuery}
                   rewrittenKeywords={searchData?.rewrittenKeywords ?? []}
-                  elapsedMs={searchData?.insight?.latencyMs ?? elapsedMs}
+                  elapsedMs={elapsedMs}
                   evidenceCount={normalizedCitations.length}
                   insight={insight}
                 />
@@ -936,6 +938,7 @@ type InsightData = {
 
 function RetrievalInsight({
   hasSearched,
+  rewriteResolved,
   query,
   rewrittenKeywords,
   elapsedMs,
@@ -943,6 +946,7 @@ function RetrievalInsight({
   insight,
 }: {
   hasSearched: boolean;
+  rewriteResolved: boolean;
   query: string;
   rewrittenKeywords: string[];
   elapsedMs: number | null;
@@ -986,12 +990,13 @@ function RetrievalInsight({
   const queryTerms = Array.from(
     new Set(rewrittenKeywords.map((keyword) => keyword.trim()).filter(Boolean)),
   );
-  if (!queryTerms.length && query.trim()) {
+  const rewriteFallback = rewriteResolved && !queryTerms.length && Boolean(query.trim());
+  if (rewriteFallback) {
     queryTerms.push(query.trim());
   }
 
   const latencyColor = hasSearched && elapsedMs !== null
-    ? elapsedMs < 1000 ? "is-fast" : elapsedMs < 5000 ? "is-mid" : "is-slow"
+    ? elapsedMs < 2000 ? "is-fast" : elapsedMs < 5000 ? "is-mid" : "is-slow"
     : "";
 
   return (
@@ -1019,7 +1024,12 @@ function RetrievalInsight({
             <small>语义改写</small>
           </div>
           <div className="search-premium-query-row is-rewritten">
-            <span className="search-premium-query-tag is-rewritten">检索词组</span>
+            <div className="search-premium-query-tag-row">
+              <span className="search-premium-query-tag is-rewritten">检索词组</span>
+              {rewriteFallback ? (
+                <span className="search-premium-query-fallback">改写失败 · 已降级</span>
+              ) : null}
+            </div>
             <div className="search-premium-query-terms">
               {hasSearched
                 ? queryTerms.map((term) => (
