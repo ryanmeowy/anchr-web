@@ -550,7 +550,7 @@ export function LibraryPremiumPage() {
                 </div>
               </section>
 
-              <aside className="flex flex-col gap-2 overflow-visible lg:min-w-0 lg:justify-between lg:gap-0" aria-label="活动洞察">
+              <aside className="grid content-start gap-3 overflow-visible lg:h-full lg:min-h-0 lg:min-w-0 lg:grid-rows-[minmax(0,5fr)_minmax(0,6fr)_minmax(184px,auto)]" aria-label="活动洞察">
                 <RecentCitationPanel
                   items={recentCitations}
                   isLoading={citationsQuery.isLoading}
@@ -1248,10 +1248,10 @@ function RecentCitationPanel({
   };
 
   return (
-    <section className="rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近引用">
+    <section className="flex h-[220px] flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)] lg:h-full lg:min-h-0" aria-label="最近引用">
       <PanelLabel label="RECENT CITATIONS" value="OPENED" dark />
       <div
-        className="mt-2.5 grid max-h-[320px] content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
+        className="mt-2.5 grid min-h-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
         onScroll={handleScroll}
         onWheel={handleWheel}
       >
@@ -1306,10 +1306,10 @@ function RecentQuestionPanel({
   };
 
   return (
-    <section className="flex min-h-[152px] flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近问过">
+    <section className="flex h-[220px] flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)] lg:h-full lg:min-h-0" aria-label="最近问过">
       <PanelLabel label="RECENT QUESTIONS" value={String(items.length)} dark />
       <div
-        className="mt-2.5 grid max-h-[208px] min-h-0 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
+        className="mt-2.5 grid min-h-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
         onScroll={handleScroll}
         onWheel={handleWheel}
       >

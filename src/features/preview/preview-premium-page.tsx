@@ -20,7 +20,11 @@ import { PremiumRail } from "@/components/app/premium-rail";
 import { ErrorBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
-import { readPreviewNavigation, type PreviewNavigationContext } from "@/lib/preview-context";
+import {
+  buildPreviewRequest,
+  readPreviewNavigation,
+  type PreviewNavigationContext,
+} from "@/lib/preview-context";
 import type { PreviewBBox, PreviewBBoxRecord, PreviewSegment } from "@/lib/types";
 import styles from "./preview-premium-page.module.css";
 
@@ -49,6 +53,15 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
   const contextKey = searchParams.get("contextKey");
   const citationIndexFromUrl = Number(searchParams.get("citationIndex") ?? "");
   const context = useMemo(() => readPreviewNavigation(contextKey), [contextKey]);
+  const previewRequest = useMemo(
+    () => buildPreviewRequest({
+      source: from,
+      segmentId: decodedSegmentId,
+      citationIndex: citationIndexFromUrl,
+      context,
+    }),
+    [citationIndexFromUrl, context, decodedSegmentId, from],
+  );
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -66,12 +79,12 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
   }, [theme, themeHydrated]);
 
   const previewQuery = useQuery({
-    queryKey: ["preview", decodedSegmentId],
-    queryFn: () => apiClient.previewSegment(decodedSegmentId),
+    queryKey: ["preview", decodedSegmentId, from, contextKey, citationIndexFromUrl],
+    queryFn: () => apiClient.previewSegment(decodedSegmentId, previewRequest),
   });
 
   const refreshMutation = useMutation({
-    mutationFn: () => apiClient.refreshSegmentPreview(decodedSegmentId),
+    mutationFn: () => apiClient.refreshSegmentPreview(decodedSegmentId, previewRequest),
     onSuccess: () => {
       void previewQuery.refetch();
     },

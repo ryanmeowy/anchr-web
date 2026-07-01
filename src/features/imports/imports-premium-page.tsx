@@ -33,6 +33,7 @@ import type {
 } from "@/lib/types";
 
 const MAX_TASK_LIST_SIZE = 100;
+const RECENT_IMPORT_REFRESH_INTERVAL_MS = 10_000;
 
 const FLOW_STEPS = [
   { key: "UPLOAD", label: "上传", helper: "文件接收与入队" },
@@ -136,6 +137,8 @@ export function ImportsPremiumPage() {
     queryKey: ["ingestion-tasks", "premium", selectedKbId],
     queryFn: () => apiClient.listIngestionTasks(selectedKbId, MAX_TASK_LIST_SIZE),
     enabled: Boolean(selectedKbId),
+    refetchInterval: RECENT_IMPORT_REFRESH_INTERVAL_MS,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

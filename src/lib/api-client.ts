@@ -26,6 +26,7 @@ import type {
   KnowledgeBaseStats,
   KnowledgeBaseUpdateRequest,
   PagedList,
+  PreviewRequest,
   PreviewSegment,
   RecentCitationList,
   RecentDocumentList,
@@ -375,11 +376,15 @@ export const apiClient = {
     request<ConversationMessageList>(
       `/api/conversations/${encodeURIComponent(sessionId)}/messages?${conversationMessagesQuery(limit, beforeTurnId)}`,
     ),
-  previewSegment: (segmentId: string) =>
-    request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}`),
-  refreshSegmentPreview: (segmentId: string) =>
+  previewSegment: (segmentId: string, body: PreviewRequest = {}) =>
+    request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}`, {
+      method: "POST",
+      body,
+    }),
+  refreshSegmentPreview: (segmentId: string, body: PreviewRequest = {}) =>
     request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}/refresh`, {
       method: "POST",
+      body,
     }),
   previewNeighbors: (segmentId: string) =>
     request<{ items?: PreviewSegment["surroundingChunks"] }>(

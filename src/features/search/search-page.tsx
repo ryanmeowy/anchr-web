@@ -768,6 +768,8 @@ function ResultRow({ item, onPreviewResult }: { item: SearchResult; onPreviewRes
 }
 
 function searchResultToCitation(item: SearchResult): PreviewCitation {
+  const hitSources = item.explain?.hitSources;
+
   return {
     citationIndex: 1,
     segmentId: item.segmentId,
@@ -776,6 +778,14 @@ function searchResultToCitation(item: SearchResult): PreviewCitation {
     fileName: displaySourceName(item.sourceRef, item.assetId),
     pageNo: item.pageNo ?? item.anchor?.pageNo ?? undefined,
     snippet: item.snippet || item.content || item.ocrSummary,
+    ...(item.score !== undefined || hitSources?.length
+      ? {
+          why: {
+            ...(item.score !== undefined ? { score: item.score } : {}),
+            ...(hitSources?.length ? { hitSources } : {}),
+          },
+        }
+      : {}),
   };
 }
 

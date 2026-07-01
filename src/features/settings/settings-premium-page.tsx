@@ -382,13 +382,20 @@ export function SettingsPremiumPage() {
     mutationFn: () => apiClient.reindexCapability(),
   });
 
+  const hasEnabledEmbeddingConfig = useMemo(
+    () =>
+      configsByCapability.EMBEDDING.some((config) => config.enabled) ||
+      configsByCapability.MULTI_EMBEDDING.some((config) => config.enabled),
+    [configsByCapability],
+  );
+
   const handleEnable = useCallback((capability: CapabilityName, id: number) => {
-    if (embeddingSwitchAffects(capability)) {
+    if (embeddingSwitchAffects(capability) && hasEnabledEmbeddingConfig) {
       setPendingEnable({ capability, id });
       return;
     }
     enableMutation.mutate({ capability, id });
-  }, [enableMutation]);
+  }, [enableMutation, hasEnabledEmbeddingConfig]);
 
   const confirmEnable = useCallback(() => {
     if (!pendingEnable) return;

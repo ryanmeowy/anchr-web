@@ -1,6 +1,6 @@
 "use client";
 
-import type { ConversationCitation, SearchAnswer } from "./types";
+import type { ConversationCitation, PreviewRequest, SearchAnswer } from "./types";
 
 const STORAGE_PREFIX = "anchr.preview.context.";
 const RESTORE_PREFIX = "anchr.preview.restore.";
@@ -15,6 +15,11 @@ export type PreviewCitation = {
   fileName?: string;
   pageNo?: number;
   snippet?: string;
+  why?: {
+    score?: number | null;
+    hitSources?: string[];
+    matchSummary?: string | null;
+  } | null;
 };
 
 export type PreviewNavigationPayload<TReturnState = unknown> = {
@@ -98,7 +103,58 @@ export function normalizeSearchCitations(citations: SearchAnswer["citations"] | 
     fileName: item.fileName,
     pageNo: item.pageNo,
     snippet: item.snippet,
+    why: item.why,
   }));
+}
+
+export function buildPreviewRequest({
+  source,
+  segmentId,
+  citationIndex,
+  context,
+}: {
+  source: PreviewSource;
+  segmentId: string;
+  citationIndex?: number;
+  context: PreviewNavigationContext | null;
+}): PreviewRequest {
+  if (source !== "search") {
+    return {};
+  }
+
+  const searchContext = context?.source === "search" ? context : null;
+  const normalizedCitationIndex = typeof citationIndex === "number"
+    && Number.isFinite(citationIndex)
+    && citationIndex > 0
+    ? citationIndex
+    : 1;
+  const citation = searchContext?.citations?.find(
+    (item) => item.segmentId === segmentId && item.citationIndex === normalizedCitationIndex,
+  )
+    ?? searchContext?.citations?.find((item) => item.segmentId === segmentId)
+    ?? searchContext?.citations?.find((item) => item.citationIndex === normalizedCitationIndex);
+  const why = citation?.why;
+  const hasWhy = why?.score != null
+    || Boolean(why?.hitSources?.length)
+    || Boolean(why?.matchSummary);
+
+  return {
+    sourceType: "SEARCH",
+    ...(searchContext?.question ? { question: searchContext.question } : {}),
+    citationInfo: {
+      segmentId,
+      citationIndex: String(citation?.citationIndex ?? normalizedCitationIndex),
+      ...(hasWhy
+        ? {
+            why: {
+              ...(why?.score != null ? { score: String(why.score) } : {}),
+              ...(why?.hitSources?.length ? { hitSources: why.hitSources } : {}),
+              ...(why?.matchSummary ? { matchSummary: why.matchSummary } : {}),
+            },
+          }
+        : {}),
+    },
+  };
 }
 
 function readJson<T>(key: string) {

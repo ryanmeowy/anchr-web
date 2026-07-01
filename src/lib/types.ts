@@ -450,6 +450,25 @@ export type SearchPage = {
   insight?: SearchInsight | null;
 };
 
+export type PreviewCitationInfo = {
+  segmentId?: string;
+  citationIndex?: string;
+  why?: {
+    score?: string;
+    hitSources?: string[];
+    matchSummary?: string;
+  };
+};
+
+export type PreviewRequest = {
+  recordId?: string;
+  sourceType?: "ASK" | "SEARCH";
+  sourceId?: string;
+  sessionId?: string;
+  question?: string;
+  citationInfo?: PreviewCitationInfo;
+};
+
 export type PreviewSegment = {
   segmentId: string;
   assetId?: string;

@@ -800,6 +800,17 @@ export function SettingsPage() {
     queryFn: () => apiClient.getAllCapabilityConfigs(selectedType),
   });
   const configs = allQuery.data ?? [];
+  const embeddingConfigsQuery = useQuery({
+    queryKey: ["settings", "embedding", "all"],
+    queryFn: () => apiClient.getAllCapabilityConfigs("EMBEDDING"),
+  });
+  const multiEmbeddingConfigsQuery = useQuery({
+    queryKey: ["settings", "multi_embedding", "all"],
+    queryFn: () => apiClient.getAllCapabilityConfigs("MULTI_EMBEDDING"),
+  });
+  const hasEnabledEmbeddingConfig =
+    (embeddingConfigsQuery.data ?? []).some((config) => config.enabled) ||
+    (multiEmbeddingConfigsQuery.data ?? []).some((config) => config.enabled);
 
   // find the selected config
   const selectedConfig = useMemo(() => {
@@ -848,12 +859,12 @@ export function SettingsPage() {
 
   const handleEnable = useCallback((id: number) => {
     const isEmbeddingSwitch = selectedType === "EMBEDDING" || selectedType === "MULTI_EMBEDDING";
-    if (isEmbeddingSwitch) {
+    if (isEmbeddingSwitch && hasEnabledEmbeddingConfig) {
       setPendingEnableId(id);
       return;
     }
     enableMutation.mutate(id);
-  }, [enableMutation, selectedType]);
+  }, [enableMutation, hasEnabledEmbeddingConfig, selectedType]);
 
   const confirmEnable = useCallback(() => {
     if (pendingEnableId == null) return;

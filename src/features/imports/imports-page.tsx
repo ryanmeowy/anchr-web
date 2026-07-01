@@ -26,6 +26,7 @@ import { buildDisplayNameFromUrl, inferFileType, uploadFilesToOss } from "@/lib/
 import type { IngestionTask, KnowledgeBase, RecentDocument, SupportedFormat } from "@/lib/types";
 
 const RECENT_DOCUMENT_LIMIT = 8;
+const RECENT_IMPORT_REFRESH_INTERVAL_MS = 10_000;
 const FLOW_STEPS = [
   { key: "UPLOAD", label: "上传", helper: "文件接收与入队" },
   { key: "PARSE", label: "解析", helper: "提取文本与结构" },
@@ -73,6 +74,8 @@ export function ImportsPage() {
   const recentDocumentsQuery = useQuery({
     queryKey: ["activity", "recent-document", RECENT_DOCUMENT_LIMIT],
     queryFn: () => apiClient.recentDocument(RECENT_DOCUMENT_LIMIT),
+    refetchInterval: RECENT_IMPORT_REFRESH_INTERVAL_MS,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

@@ -22,7 +22,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
-import { readPreviewNavigation, type PreviewNavigationContext } from "@/lib/preview-context";
+import {
+  buildPreviewRequest,
+  readPreviewNavigation,
+  type PreviewNavigationContext,
+} from "@/lib/preview-context";
 import type { PreviewBBox, PreviewBBoxRecord, PreviewSegment } from "@/lib/types";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -48,14 +52,23 @@ export function PreviewPage({ segmentId }: { segmentId: string }) {
   const contextKey = searchParams.get("contextKey");
   const citationIndexFromUrl = Number(searchParams.get("citationIndex") ?? "");
   const context = useMemo(() => readPreviewNavigation(contextKey), [contextKey]);
+  const previewRequest = useMemo(
+    () => buildPreviewRequest({
+      source: from,
+      segmentId: decodedSegmentId,
+      citationIndex: citationIndexFromUrl,
+      context,
+    }),
+    [citationIndexFromUrl, context, decodedSegmentId, from],
+  );
 
   const previewQuery = useQuery({
-    queryKey: ["preview", decodedSegmentId],
-    queryFn: () => apiClient.previewSegment(decodedSegmentId),
+    queryKey: ["preview", decodedSegmentId, from, contextKey, citationIndexFromUrl],
+    queryFn: () => apiClient.previewSegment(decodedSegmentId, previewRequest),
   });
 
   const refreshMutation = useMutation({
-    mutationFn: () => apiClient.refreshSegmentPreview(decodedSegmentId),
+    mutationFn: () => apiClient.refreshSegmentPreview(decodedSegmentId, previewRequest),
     onSuccess: (data) => {
       previewQuery.refetch();
       return data;
