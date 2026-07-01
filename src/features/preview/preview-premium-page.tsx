@@ -39,6 +39,7 @@ type PdfPageProxy = Awaited<ReturnType<PdfDocumentProxy["getPage"]>>;
 type PdfPageSize = { width: number; height: number; widthPt: number; heightPt: number };
 type PdfRenderTask = ReturnType<PdfPageProxy["render"]>;
 type PdfFitMode = "frame" | "manual";
+type PreviewSurroundingChunk = NonNullable<PreviewSegment["surroundingChunks"]>[number];
 
 const DEFAULT_PDF_SCALE = 1.23;
 const MIN_PDF_SCALE = 0.55;
@@ -169,6 +170,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
                 />
               ) : item ? (
                 <PreviewContent
+                  key={item.segmentId}
                   item={item}
                   context={context}
                   citationIndex={citationIndex}
@@ -208,6 +210,7 @@ function PreviewContent({
   const [pdfPage, setPdfPage] = useState(item.anchor?.pageNo ?? 1);
   const [pdfScale, setPdfScale] = useState(DEFAULT_PDF_SCALE);
   const [pdfFitMode, setPdfFitMode] = useState<PdfFitMode>("manual");
+  const [activeChunkSegmentId, setActiveChunkSegmentId] = useState(item.segmentId);
   const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
   const [pdfPageSize, setPdfPageSize] = useState<PdfPageSize | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null);
@@ -289,6 +292,30 @@ function PreviewContent({
 
     void shell.requestFullscreen();
   }, []);
+
+  const handleChunkSelect = useCallback((chunk: PreviewSurroundingChunk) => {
+    if (previewType === "IMAGE") {
+      return;
+    }
+
+    const isCurrent = chunk.relation === "current" || chunk.segmentId === item.segmentId;
+    setActiveChunkSegmentId(chunk.segmentId);
+
+    if (previewType === "PDF") {
+      const targetPage = chunk.pageNo ?? (isCurrent ? item.anchor?.pageNo : undefined);
+      if (targetPage) {
+        setPdfPage(targetPage);
+      }
+      return;
+    }
+
+    const scroller = previewScrollerRef.current;
+    const target = Array.from(
+      scroller?.querySelectorAll<HTMLElement>("[data-preview-segment-id]") ?? [],
+    ).find((element) => element.dataset.previewSegmentId === chunk.segmentId);
+
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [item.anchor?.pageNo, item.segmentId, previewType]);
 
   return (
     <div
@@ -418,7 +445,14 @@ function PreviewContent({
         </div>
       </section>
 
-      <CitationSidebar item={item} context={context} citationIndex={citationIndex} from={from} />
+      <CitationSidebar
+        item={item}
+        context={context}
+        citationIndex={citationIndex}
+        from={from}
+        activeChunkSegmentId={activeChunkSegmentId}
+        onChunkSelect={handleChunkSelect}
+      />
     </div>
   );
 }
@@ -428,13 +462,18 @@ function CitationSidebar({
   context,
   citationIndex,
   from,
+  activeChunkSegmentId,
+  onChunkSelect,
 }: {
   item: PreviewSegment;
   context: PreviewNavigationContext | null;
   citationIndex: number;
   from: PreviewSource;
+  activeChunkSegmentId: string;
+  onChunkSelect: (chunk: PreviewSurroundingChunk) => void;
 }) {
   const citations = context?.citations ?? [];
+  const previewType = getPreviewType(item);
   const reason = item.citationContext?.citationReason
     ?? "该片段命中当前检索或问答引用，可作为原文证据查看。";
 
@@ -495,23 +534,38 @@ function CitationSidebar({
         <div className="mt-3.5 grid gap-2.5">
           {(item.surroundingChunks ?? []).map((chunk, index) => {
             const isCurrent = chunk.relation === "current" || chunk.segmentId === item.segmentId;
+            const isActive = chunk.segmentId === activeChunkSegmentId;
+            const targetPage = chunk.pageNo ?? (isCurrent ? item.anchor?.pageNo : undefined);
+            const canJump = previewType === "PDF" ? Boolean(targetPage) : previewType !== "IMAGE";
             return (
-              <article
+              <button
                 key={`${chunk.segmentId}-${chunk.relation ?? index}-${index}`}
+                type="button"
+                disabled={!canJump}
+                onClick={() => onChunkSelect(chunk)}
+                aria-current={isActive ? "location" : undefined}
                 className={[
-                  "rounded-[8px] border p-3 transition hover:-translate-x-[3px]",
-                  isCurrent
+                  "w-full rounded-[8px] border p-3 text-left transition focus-visible:ring-2 focus-visible:ring-[var(--premium-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--premium-panel-muted)]",
+                  canJump ? "hover:-translate-x-[3px]" : "cursor-not-allowed opacity-55",
+                  isActive && !isCurrent
+                    ? "border-[var(--premium-blue)] bg-[var(--premium-blue-soft)]"
+                    : isCurrent
                     ? "border-amber-500/30 bg-amber-400/10"
                     : "border-[var(--premium-line)] bg-[var(--premium-panel-muted)] hover:bg-amber-400/10",
                 ].join(" ")}
               >
-                <strong className="mb-1.5 block text-[13px] text-[var(--premium-ink)]">
-                  {relationLabel(chunk.relation)}
-                </strong>
+                <span className="mb-1.5 flex items-center justify-between gap-3">
+                  <strong className="text-[13px] text-[var(--premium-ink)]">
+                    {relationLabel(chunk.relation)}
+                  </strong>
+                  <span className="text-[10px] font-black text-[var(--premium-muted)]">
+                    {targetPage ? `第 ${targetPage} 页` : canJump ? "跳转" : "无法定位"}
+                  </span>
+                </span>
                 <p className="m-0 line-clamp-3 text-xs leading-[1.6] text-[var(--premium-muted)]">
                   {stripEmTags(chunk.content ?? chunk.snippet ?? "")}
                 </p>
-              </article>
+              </button>
             );
           })}
         </div>
@@ -1007,6 +1061,7 @@ function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIn
           return isCurrent ? (
             <div
               key={`${chunk.segmentId}-${chunk.relation ?? index}-${index}`}
+              data-preview-segment-id={chunk.segmentId}
               className={`${styles.highlight} relative rounded-[8px] border-2 border-amber-400 bg-amber-300/10 p-[18px] text-[#101214]`}
             >
               <span className="absolute -right-4 -top-4 grid size-[34px] place-items-center rounded-[8px] bg-amber-400 font-black text-[#1c1400]">
@@ -1015,7 +1070,11 @@ function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIn
               {renderEmText(chunk.content ?? chunk.snippet ?? "")}
             </div>
           ) : (
-            <p key={`${chunk.segmentId}-${chunk.relation ?? index}-${index}`} className="m-0">
+            <p
+              key={`${chunk.segmentId}-${chunk.relation ?? index}-${index}`}
+              data-preview-segment-id={chunk.segmentId}
+              className="m-0"
+            >
               {renderEmText(chunk.content ?? chunk.snippet ?? "")}
             </p>
           );
