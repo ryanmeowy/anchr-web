@@ -3242,12 +3242,12 @@ a {
 }
 
 .search-premium-date-popover {
-  --calendar-ink: #20242a;
-  --calendar-muted: #526071;
-  --calendar-outside: #c7ccd5;
-  --calendar-line: #e2e5ea;
-  --calendar-blue: #3158ff;
-  --calendar-range: rgba(49, 88, 255, 0.1);
+  --calendar-ink: #f4f7ec;
+  --calendar-muted: rgba(244, 247, 236, 0.68);
+  --calendar-outside: rgba(244, 247, 236, 0.28);
+  --calendar-line: rgba(255, 255, 255, 0.13);
+  --calendar-blue: #8da0ff;
+  --calendar-range: rgba(141, 160, 255, 0.16);
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
@@ -3256,11 +3256,12 @@ a {
   overflow: hidden;
   border: 1px solid var(--calendar-line);
   border-radius: 10px;
-  background: #fff;
+  background: #121514;
   color: var(--calendar-ink);
   box-shadow:
-    0 30px 90px rgba(16, 18, 20, 0.24),
-    0 8px 28px rgba(16, 18, 20, 0.12);
+    0 30px 90px rgba(0, 0, 0, 0.5),
+    0 8px 28px rgba(0, 0, 0, 0.32);
+  color-scheme: dark;
   font-family: inherit;
   transform: scale(0.8);
   transform-origin: top right;
@@ -3367,7 +3368,7 @@ a {
 .search-premium-calendar-day:hover {
   z-index: 1;
   border-radius: 999px;
-  background: rgba(32, 36, 42, 0.07);
+  background: rgba(141, 160, 255, 0.16);
 }
 
 .search-premium-calendar-day.is-outside {
