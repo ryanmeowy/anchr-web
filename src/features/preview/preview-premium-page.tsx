@@ -24,6 +24,7 @@ import {
   buildPreviewRequest,
   readPreviewNavigation,
   type PreviewNavigationContext,
+  type PreviewSource,
 } from "@/lib/preview-context";
 import type { PreviewBBox, PreviewBBoxRecord, PreviewSegment } from "@/lib/types";
 import styles from "./preview-premium-page.module.css";
@@ -49,7 +50,12 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
   const [theme, setTheme] = useState<PremiumThemeMode>("light");
   const [themeHydrated, setThemeHydrated] = useState(false);
   const decodedSegmentId = useMemo(() => decodeURIComponent(segmentId), [segmentId]);
-  const from = searchParams.get("from") === "search" ? "search" : "ask";
+  const fromParam = searchParams.get("from");
+  const from: PreviewSource = fromParam === "search"
+    ? "search"
+    : fromParam === "library"
+      ? "library"
+      : "ask";
   const contextKey = searchParams.get("contextKey");
   const citationIndexFromUrl = Number(searchParams.get("citationIndex") ?? "");
   const context = useMemo(() => readPreviewNavigation(contextKey), [contextKey]);
@@ -99,7 +105,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
       return;
     }
 
-    router.push(from === "search" ? "/search" : "/ask");
+    router.push(from === "search" ? "/search" : from === "library" ? "/library" : "/ask");
   };
 
   return (
@@ -147,7 +153,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
                     {item?.fileName ?? "引用预览"}
                   </h1>
                   <p className="mt-1.5 truncate text-[11px] font-bold text-[var(--premium-muted)]">
-                    {decodedSegmentId} · {item?.kbName ?? item?.kbId ?? "知识库"} · 来自{from === "search" ? " Search" : " Ask"} 回答引用
+                    {decodedSegmentId} · {item?.kbName ?? item?.kbId ?? "知识库"} · 来自{from === "search" ? " Search" : from === "library" ? " Library Recent Citations" : " Ask"} 引用
                   </p>
                 </section>
               </div>
@@ -192,7 +198,7 @@ function PreviewContent({
   item: PreviewSegment;
   context: PreviewNavigationContext | null;
   citationIndex: number;
-  from: "ask" | "search";
+  from: PreviewSource;
   onRefresh: () => void;
   isRefreshing: boolean;
 }) {
@@ -426,7 +432,7 @@ function CitationSidebar({
   item: PreviewSegment;
   context: PreviewNavigationContext | null;
   citationIndex: number;
-  from: "ask" | "search";
+  from: PreviewSource;
 }) {
   const citations = context?.citations ?? [];
   const reason = item.citationContext?.citationReason
@@ -448,7 +454,9 @@ function CitationSidebar({
               ? `来自你的问题：“${context.question}”`
               : from === "search"
                 ? "来自搜索回答引用。"
-                : "来自对话回答引用。"}
+                : from === "library"
+                  ? "来自最近引用记录。"
+                  : "来自对话回答引用。"}
           </p>
         </div>
       </SidePanel>

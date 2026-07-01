@@ -134,14 +134,21 @@ export type RecentQuestion = {
 };
 
 export type RecentCitation = {
+  recordId?: string;
   segmentId: string;
   assetId?: string | null;
   kbId?: string | null;
+  kbName?: string | null;
   fileName?: string | null;
   title?: string | null;
   snippet?: string | null;
   citationReason?: string | null;
   openedAt?: string;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  sessionId?: string | null;
+  citationIndex?: string | null;
+  question?: string | null;
 };
 
 export type RecentSearch = {
@@ -453,6 +460,7 @@ export type SearchPage = {
 export type PreviewCitationInfo = {
   segmentId?: string;
   citationIndex?: string;
+  reason?: string;
   why?: {
     score?: string;
     hitSources?: string[];

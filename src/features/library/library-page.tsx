@@ -18,10 +18,12 @@ import {
   Star,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useDeferredValue, useMemo, useState } from "react";
 import { LoadingBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatNumber, statusText } from "@/lib/format";
+import { saveRecentCitationPreviewNavigation } from "@/lib/preview-context";
 import type { KnowledgeBase, RecentCitation, RecentQuestion } from "@/lib/types";
 
 const coverStyles = [
@@ -641,8 +643,14 @@ function RecentCitationPanel({
 }
 
 function CitationRow({ item, index }: { item: RecentCitation; index: number }) {
+  const router = useRouter();
+
   return (
-    <Link href={`/preview/${item.segmentId}`} className="block py-4">
+    <button
+      type="button"
+      onClick={() => router.push(saveRecentCitationPreviewNavigation(item, index))}
+      className="block w-full py-4 text-left"
+    >
       <div className="flex items-start gap-3">
         <span className={`mt-1 rounded-[5px] px-1.5 py-1 text-[11px] font-bold text-white ${citationBadgeColor(index)}`}>
           {fileExtension(item.fileName)}
@@ -664,7 +672,7 @@ function CitationRow({ item, index }: { item: RecentCitation; index: number }) {
           </div>
         </div>
       </div>
-    </Link>
+    </button>
   );
 }
 

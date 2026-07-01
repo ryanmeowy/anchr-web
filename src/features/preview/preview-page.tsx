@@ -26,6 +26,7 @@ import {
   buildPreviewRequest,
   readPreviewNavigation,
   type PreviewNavigationContext,
+  type PreviewSource,
 } from "@/lib/preview-context";
 import type { PreviewBBox, PreviewBBoxRecord, PreviewSegment } from "@/lib/types";
 
@@ -48,7 +49,12 @@ export function PreviewPage({ segmentId }: { segmentId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const decodedSegmentId = useMemo(() => decodeURIComponent(segmentId), [segmentId]);
-  const from = searchParams.get("from") === "search" ? "search" : "ask";
+  const fromParam = searchParams.get("from");
+  const from: PreviewSource = fromParam === "search"
+    ? "search"
+    : fromParam === "library"
+      ? "library"
+      : "ask";
   const contextKey = searchParams.get("contextKey");
   const citationIndexFromUrl = Number(searchParams.get("citationIndex") ?? "");
   const context = useMemo(() => readPreviewNavigation(contextKey), [contextKey]);
@@ -84,15 +90,15 @@ export function PreviewPage({ segmentId }: { segmentId: string }) {
       return;
     }
 
-    router.push(from === "search" ? "/search" : "/ask");
+    router.push(from === "search" ? "/search" : from === "library" ? "/library" : "/ask");
   };
 
   return (
     <div className="min-h-[calc(100vh-68px)] px-4 pb-8 sm:px-6 lg:min-h-[calc(100vh-82px)] lg:px-10 lg:pb-10">
       <div className="mx-auto flex h-full max-w-[1440px] flex-col">
         <nav className="mb-4 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-          <Link href={from === "search" ? "/search" : "/ask"} className="hover:text-slate-900 dark:hover:text-slate-100">
-            {from === "search" ? "Search" : "Ask"}
+          <Link href={from === "search" ? "/search" : from === "library" ? "/library" : "/ask"} className="hover:text-slate-900 dark:hover:text-slate-100">
+            {from === "search" ? "Search" : from === "library" ? "Library" : "Ask"}
           </Link>
           <span>/</span>
           <span>引用来源</span>
@@ -768,7 +774,7 @@ function CitationPanel({
   item?: PreviewSegment;
   context: PreviewNavigationContext | null;
   citationIndex: number;
-  from: "ask" | "search";
+  from: PreviewSource;
 }) {
   const citations = context?.citations ?? [];
   const currentCitation = citations.find((citation) => citation.citationIndex === citationIndex || citation.segmentId === item?.segmentId);
@@ -788,7 +794,9 @@ function CitationPanel({
           {context?.question ? (
             <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">来自你的问题：{context.question}</p>
           ) : (
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{from === "search" ? "来自搜索回答" : "来自对话回答"}</p>
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+              {from === "search" ? "来自搜索回答" : from === "library" ? "来自最近引用记录" : "来自对话回答"}
+            </p>
           )}
         </div>
       </div>

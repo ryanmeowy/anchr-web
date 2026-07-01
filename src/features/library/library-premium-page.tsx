@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useDeferredValue,
   useEffect,
@@ -31,6 +32,7 @@ import { PremiumRail } from "@/components/app/premium-rail";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatNumber, statusText } from "@/lib/format";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
+import { saveRecentCitationPreviewNavigation } from "@/lib/preview-context";
 import type { KnowledgeBase, KnowledgeBaseHealth, KnowledgeBaseStats, RecentCitation, RecentQuestion } from "@/lib/types";
 
 type ViewMode = "grid" | "list";
@@ -1249,7 +1251,7 @@ function RecentCitationPanel({
 
   return (
     <section className="flex h-[320px] min-h-0 flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近引用">
-      <PanelLabel label="RECENT CITATIONS" value="OPENED" dark />
+      <PanelLabel label="RECENT CITATIONS" value={String(items.length)} dark />
       <div
         className="mt-2.5 grid min-h-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
         onScroll={handleScroll}
@@ -1266,15 +1268,28 @@ function RecentCitationPanel({
 }
 
 function CitationItem({ item, index }: { item: RecentCitation; index: number }) {
+  const router = useRouter();
+
   return (
-    <Link href={`/preview/${encodeURIComponent(item.segmentId)}`} className="grid gap-1.5 rounded-[8px] border border-white/10 bg-white/10 p-2.5 transition hover:-translate-x-0.5 hover:bg-white/[0.14]">
+    <button
+      type="button"
+      onClick={() => router.push(saveRecentCitationPreviewNavigation(item, index))}
+      className="grid w-full gap-1.5 rounded-[8px] border border-white/10 bg-white/10 p-2.5 text-left transition hover:-translate-x-0.5 hover:bg-white/[0.14]"
+    >
       <div className="flex flex-wrap gap-1">
         <span className="rounded-full bg-[rgba(187,255,102,0.16)] px-2 py-0.5 text-[10px] font-black text-[var(--premium-accent)]">{fileExtension(item.fileName)}</span>
         <span className="rounded-full bg-[rgba(187,255,102,0.16)] px-2 py-0.5 text-[10px] font-black text-[var(--premium-accent)]">#{index + 1}</span>
       </div>
-      <strong className="break-words text-xs">{item.title || item.fileName || "引用片段"}</strong>
-      <p className="line-clamp-1 text-[11px] leading-4 text-white/70">{item.snippet || item.citationReason || "暂无引用摘要。"}</p>
-    </Link>
+      <strong className="line-clamp-1 break-words text-xs">{item.fileName || "未命名文件"}</strong>
+      <div className="flex min-w-0 items-center gap-2 text-[11px] leading-4">
+        <span className="max-w-[42%] shrink-0 truncate text-white/70">{item.kbName || "未知知识库"}</span>
+        <span aria-hidden="true" className="shrink-0 text-white/35">|</span>
+        <p className="min-w-0 flex-1 truncate text-white/85">{item.question || "未记录问题"}</p>
+      </div>
+      <time className="text-[10px] leading-4 text-white/55" dateTime={item.openedAt}>
+        {formatDateTime(item.openedAt)}
+      </time>
+    </button>
   );
 }
 
