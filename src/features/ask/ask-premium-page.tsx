@@ -397,6 +397,8 @@ export function AskPremiumPage() {
 
     const contextKey = savePreviewNavigation<AskPremiumReturnState>({
       source: "ask",
+      sourceId: message.turnId,
+      sessionId: message.sessionId,
       question,
       answer: stripTraceText(message.content),
       citations: normalizeConversationCitations(message.citations),

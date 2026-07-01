@@ -24,6 +24,8 @@ export type PreviewCitation = {
 
 export type PreviewNavigationPayload<TReturnState = unknown> = {
   source: PreviewSource;
+  sourceId?: string;
+  sessionId?: string;
   question?: string;
   answer?: string;
   citations?: PreviewCitation[];
@@ -91,6 +93,7 @@ export function normalizeConversationCitations(citations: ConversationCitation[]
     fileName: item.fileName,
     pageNo: item.pageNo,
     snippet: item.snippet,
+    why: item.why,
   }));
 }
 
@@ -118,29 +121,32 @@ export function buildPreviewRequest({
   citationIndex?: number;
   context: PreviewNavigationContext | null;
 }): PreviewRequest {
-  if (source !== "search") {
+  const sourceContext = context?.source === source ? context : null;
+
+  if (source === "ask" && !sourceContext) {
     return {};
   }
 
-  const searchContext = context?.source === "search" ? context : null;
   const normalizedCitationIndex = typeof citationIndex === "number"
     && Number.isFinite(citationIndex)
     && citationIndex > 0
     ? citationIndex
     : 1;
-  const citation = searchContext?.citations?.find(
+  const citation = sourceContext?.citations?.find(
     (item) => item.segmentId === segmentId && item.citationIndex === normalizedCitationIndex,
   )
-    ?? searchContext?.citations?.find((item) => item.segmentId === segmentId)
-    ?? searchContext?.citations?.find((item) => item.citationIndex === normalizedCitationIndex);
+    ?? sourceContext?.citations?.find((item) => item.segmentId === segmentId)
+    ?? sourceContext?.citations?.find((item) => item.citationIndex === normalizedCitationIndex);
   const why = citation?.why;
   const hasWhy = why?.score != null
     || Boolean(why?.hitSources?.length)
     || Boolean(why?.matchSummary);
 
   return {
-    sourceType: "SEARCH",
-    ...(searchContext?.question ? { question: searchContext.question } : {}),
+    sourceType: source === "search" ? "SEARCH" : "ASK",
+    ...(source === "ask" && sourceContext?.sourceId ? { sourceId: sourceContext.sourceId } : {}),
+    ...(source === "ask" && sourceContext?.sessionId ? { sessionId: sourceContext.sessionId } : {}),
+    ...(sourceContext?.question ? { question: sourceContext.question } : {}),
     citationInfo: {
       segmentId,
       citationIndex: String(citation?.citationIndex ?? normalizedCitationIndex),

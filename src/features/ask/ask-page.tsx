@@ -333,6 +333,8 @@ export function AskPage() {
 
     const contextKey = savePreviewNavigation<AskPreviewReturnState>({
       source: "ask",
+      sourceId: message.turnId,
+      sessionId: message.sessionId,
       question,
       answer: stripTraceText(message.content),
       citations: normalizeConversationCitations(message.citations),

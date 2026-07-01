@@ -603,6 +603,11 @@ export type ConversationCitation = {
   hitType?: string;
   assetId?: string;
   segmentId?: string;
+  why?: {
+    score?: number | null;
+    hitSources?: string[];
+    matchSummary?: string | null;
+  } | null;
 };
 
 export type ConversationSession = {
