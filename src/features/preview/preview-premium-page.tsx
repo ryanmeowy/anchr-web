@@ -40,7 +40,7 @@ type PdfPageSize = { width: number; height: number; widthPt: number; heightPt: n
 type PdfRenderTask = ReturnType<PdfPageProxy["render"]>;
 type PdfFitMode = "frame" | "manual";
 
-const DEFAULT_PDF_SCALE = 1.15;
+const DEFAULT_PDF_SCALE = 1.23;
 const MIN_PDF_SCALE = 0.55;
 const MAX_PDF_SCALE = 2.2;
 
@@ -124,7 +124,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
       />
 
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:min-h-[calc(100vh-48px)] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
+        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:min-h-[calc(100vh-48px)] lg:scale-[0.96] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
 
           <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
@@ -153,13 +153,13 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
                     {item?.fileName ?? "引用预览"}
                   </h1>
                   <p className="mt-1.5 truncate text-[11px] font-bold text-[var(--premium-muted)]">
-                    {decodedSegmentId} · {item?.kbName ?? item?.kbId ?? "知识库"} · 来自{from === "search" ? " Search" : from === "library" ? " Library Recent Citations" : " Ask"} 引用
+                    {item?.kbName ?? item?.kbId ?? "知识库"} · 来自{from === "search" ? " Search" : from === "library" ? " Library Recent Citations" : " Ask"} 引用
                   </p>
                 </section>
               </div>
             </header>
 
-            <main className="min-h-0 min-w-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] dark:bg-[radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.08),transparent_26rem),#070908]">
+            <main className="preview-premium-main min-h-0 min-w-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] dark:bg-[radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.08),transparent_26rem),#070908]">
               {previewQuery.isLoading ? (
                 <PreviewState label="正在加载预览" />
               ) : previewQuery.isError ? (
@@ -207,7 +207,7 @@ function PreviewContent({
   const previewScrollerRef = useRef<HTMLDivElement | null>(null);
   const [pdfPage, setPdfPage] = useState(item.anchor?.pageNo ?? 1);
   const [pdfScale, setPdfScale] = useState(DEFAULT_PDF_SCALE);
-  const [pdfFitMode, setPdfFitMode] = useState<PdfFitMode>("frame");
+  const [pdfFitMode, setPdfFitMode] = useState<PdfFitMode>("manual");
   const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
   const [pdfPageSize, setPdfPageSize] = useState<PdfPageSize | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null);
@@ -297,7 +297,7 @@ function PreviewContent({
     >
       <aside
         aria-label="页面缩略图"
-        className="grid min-h-0 content-start gap-3.5 overflow-auto border-r border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-4 max-[860px]:grid-flow-col max-[860px]:grid-cols-none max-[860px]:auto-cols-[88px] max-[860px]:overflow-x-auto max-[860px]:border-r-0 max-[860px]:border-b"
+        className="preview-premium-thumbnails grid min-h-0 content-start gap-3.5 overflow-auto border-r border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-4 max-[860px]:grid-flow-col max-[860px]:grid-cols-none max-[860px]:auto-cols-[88px] max-[860px]:overflow-x-auto max-[860px]:border-r-0 max-[860px]:border-b"
       >
         {pageNumbers.map((page) => (
           <button
@@ -327,11 +327,11 @@ function PreviewContent({
 
       <section
         aria-label="预览工作区"
-        className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-[radial-gradient(circle_at_18%_10%,rgba(36,89,255,0.08),transparent_24rem),rgba(16,18,20,0.04)] dark:bg-[radial-gradient(circle_at_18%_10%,rgba(49,88,255,0.12),transparent_24rem),rgba(255,255,255,0.03)] max-[860px]:min-h-[760px]"
+        className="preview-premium-workspace grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-[radial-gradient(circle_at_18%_10%,rgba(36,89,255,0.08),transparent_24rem),rgba(16,18,20,0.04)] dark:bg-[radial-gradient(circle_at_18%_10%,rgba(49,88,255,0.12),transparent_24rem),rgba(255,255,255,0.03)] max-[860px]:min-h-[760px]"
       >
         <div
           aria-label="预览工具栏"
-          className="flex min-h-16 items-center justify-between gap-3 border-b border-[var(--premium-line)] bg-[var(--premium-panel)] px-4 py-2.5 backdrop-blur-xl max-[860px]:items-start max-[860px]:flex-col"
+          className="preview-premium-toolbar flex min-h-16 items-center justify-between gap-3 border-b border-[var(--premium-line)] bg-[var(--premium-panel)] px-4 py-2.5 backdrop-blur-xl max-[860px]:items-start max-[860px]:flex-col"
         >
           <div className="flex flex-wrap items-center gap-2 max-[500px]:w-full max-[500px]:items-stretch max-[500px]:flex-col">
             <ToolButton
@@ -441,7 +441,7 @@ function CitationSidebar({
   return (
     <aside
       aria-label="引用上下文"
-      className="grid min-h-0 content-start gap-3.5 overflow-auto border-l border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-4 max-[1240px]:col-span-2 max-[1240px]:grid-cols-2 max-[1240px]:border-l-0 max-[1240px]:border-t max-[860px]:grid-cols-1"
+      className="preview-premium-sidebar grid min-h-0 content-start gap-3.5 overflow-auto border-l border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-4 max-[1240px]:col-span-2 max-[1240px]:grid-cols-2 max-[1240px]:border-l-0 max-[1240px]:border-t max-[860px]:grid-cols-1"
     >
       <SidePanel>
         <PanelLabel label="WHY THIS CITATION" value={`#${citationIndex}`} />
@@ -555,7 +555,7 @@ function CitationSidebar({
 
 function SidePanel({ children }: { children: ReactNode }) {
   return (
-    <section className={`${styles.reveal} rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] p-4 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl`}>
+    <section className={`${styles.reveal} preview-premium-side-panel rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] p-4 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl`}>
       {children}
     </section>
   );

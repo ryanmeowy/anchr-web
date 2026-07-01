@@ -1296,6 +1296,7 @@ function FilterPanel({
               value={recallLimit}
               onChange={(event) => onRecallLimitChange(clampSearchLimit(event.target.valueAsNumber))}
               className="min-w-0 flex-1 bg-transparent outline-none"
+              style={{ colorScheme: "dark" }}
               aria-label="召回数量"
             />
             <span>有效值 1-200</span>
