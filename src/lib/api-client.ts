@@ -53,13 +53,14 @@ type StreamMessageCallbacks = {
   onTrace?: (event: { stage?: string; message?: string; answerMode?: ConversationAnswerMode | string }) => void;
   onDelta?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }) => void;
 };
 
 type ConversationMessageRequest = {
   query: string;
   limit?: number;
   kbIds?: string[];
+  assetIdList?: string[];
   answerMode?: ConversationAnswerMode;
   preferredModalities?: Array<"TEXT" | "IMAGE" | "MIXED">;
   debug?: boolean;
@@ -187,7 +188,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "done") {
-    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
+    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
     return;
   }
 

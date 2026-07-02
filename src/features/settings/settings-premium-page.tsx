@@ -192,7 +192,7 @@ function ResultPill({ result }: { result: CapabilityConnectionTestResult | Stora
       }
     >
       {result.success ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-      {result.success ? "连接成功" : "连接失败"}
+      {result.success ? "连接成功" : result.message || "连接失败"}
       {result.success && result.latencyMs > 0 ? ` · ${result.latencyMs}ms` : ""}
     </span>
   );

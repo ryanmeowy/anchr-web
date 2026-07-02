@@ -19,9 +19,16 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { ErrorBlock } from "@/components/ui/query-state";
 import { apiClient } from "@/lib/api-client";
+import {
+  saveAskAssetScope,
+  saveAssetScopeHandoff,
+  saveSearchAssetScope,
+  type AssetScope,
+} from "@/lib/asset-scope";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import {
   buildPreviewRequest,
+  clearPreviewRestoreState,
   readPreviewNavigation,
   type PreviewCitation,
   type PreviewNavigationContext,
@@ -132,6 +139,31 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
     searchParams,
   ]);
 
+  const handleContinueWithAsset = useCallback((previewItem: PreviewSegment) => {
+    if (!previewItem.assetId || from === "library") return;
+
+    const scope: AssetScope = {
+      assetId: previewItem.assetId,
+      fileName: previewItem.fileName ?? previewItem.title ?? previewItem.assetId,
+      ...(previewItem.kbId ? { kbId: previewItem.kbId } : {}),
+    };
+
+    if (from === "ask") {
+      const sessionId = context?.sessionId ?? "";
+      if (sessionId) {
+        saveAskAssetScope(sessionId, scope);
+      }
+      saveAssetScopeHandoff({ destination: "ask", scope, sessionId: sessionId || undefined });
+      router.push(sessionId ? `/ask?session=${encodeURIComponent(sessionId)}` : "/ask");
+      return;
+    }
+
+    saveSearchAssetScope(scope);
+    saveAssetScopeHandoff({ destination: "search", scope });
+    clearPreviewRestoreState("search");
+    router.push("/search");
+  }, [context?.sessionId, from, router]);
+
   const handleBack = () => {
     if (window.history.length > 1) {
       router.back();
@@ -208,6 +240,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
                   citationIndex={citationIndex}
                   from={from}
                   onCitationSelect={handleCitationSelect}
+                  onContinueWithAsset={handleContinueWithAsset}
                   onRefresh={() => refreshMutation.mutate()}
                   isRefreshing={refreshMutation.isPending}
                 />
@@ -228,6 +261,7 @@ function PreviewContent({
   citationIndex,
   from,
   onCitationSelect,
+  onContinueWithAsset,
   onRefresh,
   isRefreshing,
 }: {
@@ -236,6 +270,7 @@ function PreviewContent({
   citationIndex: number;
   from: PreviewSource;
   onCitationSelect: (citation: PreviewCitation, fallbackIndex: number) => void;
+  onContinueWithAsset: (item: PreviewSegment) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
 }) {
@@ -602,6 +637,7 @@ function PreviewContent({
         citationIndex={citationIndex}
         from={from}
         onCitationSelect={onCitationSelect}
+        onContinueWithAsset={onContinueWithAsset}
         activeChunkSegmentId={activeChunkSegmentId}
         onChunkSelect={handleChunkSelect}
         onHeightChange={handleSidebarHeightChange}
@@ -616,6 +652,7 @@ function CitationSidebar({
   citationIndex,
   from,
   onCitationSelect,
+  onContinueWithAsset,
   activeChunkSegmentId,
   onChunkSelect,
   onHeightChange,
@@ -625,6 +662,7 @@ function CitationSidebar({
   citationIndex: number;
   from: PreviewSource;
   onCitationSelect: (citation: PreviewCitation, fallbackIndex: number) => void;
+  onContinueWithAsset: (item: PreviewSegment) => void;
   activeChunkSegmentId: string;
   onChunkSelect: (chunk: PreviewSurroundingChunk) => void;
   onHeightChange: (height: number) => void;
@@ -789,13 +827,16 @@ function CitationSidebar({
               <ExternalLink size={16} />
             </a>
           ) : null}
-          <button
-            type="button"
-            className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-full border-0 bg-[var(--premium-ink)] px-4 text-[13px] font-black text-[var(--premium-bg)] shadow-[0_16px_38px_rgba(16,18,20,0.2)]"
-          >
-            <MessageCircle size={16} />
-            向此资料继续提问
-          </button>
+          {from !== "library" && item.assetId ? (
+            <button
+              type="button"
+              onClick={() => onContinueWithAsset(item)}
+              className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-full border-0 bg-[var(--premium-ink)] px-4 text-[13px] font-black text-[var(--premium-bg)] shadow-[0_16px_38px_rgba(16,18,20,0.2)]"
+            >
+              <MessageCircle size={16} />
+              {from === "search" ? "在此资料中继续搜索" : "向此资料继续提问"}
+            </button>
+          ) : null}
         </div>
       </SidePanel>
 

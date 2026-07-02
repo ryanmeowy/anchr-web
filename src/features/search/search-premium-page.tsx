@@ -30,7 +30,16 @@ import {
   type UIEvent,
 } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
+import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
+import { TransientNotice } from "@/components/shared/transient-notice";
 import { apiClient } from "@/lib/api-client";
+import {
+  consumeAssetScopeHandoff,
+  readSearchAssetScope,
+  rememberAssetScopes,
+  saveSearchAssetScope,
+  type AssetScope,
+} from "@/lib/asset-scope";
 import { formatFileSize, formatNumber } from "@/lib/format";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import {
@@ -76,6 +85,7 @@ type ThemeMode = PremiumThemeMode;
 
 type SearchFiltersValue = {
   kbIds: string[];
+  assetScope: AssetScope | null;
   assetTypes: SearchAssetType[];
   hitType: SearchHitType[];
   limit: number;
@@ -99,6 +109,7 @@ type SearchPremiumReturnState = {
   selectedKbIds: string[];
   selectedAssetTypes: SearchAssetType[];
   selectedHitTypes: SearchHitType[];
+  activeAssetScope: AssetScope | null;
   recallLimit: number;
   dateFrom: string;
   dateTo: string;
@@ -135,6 +146,8 @@ export function SearchPremiumPage() {
   const [searchData, setSearchData] = useState<SearchPageData | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [isKbMenuOpen, setIsKbMenuOpen] = useState(false);
+  const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
+  const [scopeNotice, setScopeNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -193,9 +206,27 @@ export function SearchPremiumPage() {
   );
 
   useEffect(() => {
+    const handoff = consumeAssetScopeHandoff("search");
+    if (handoff) {
+      const frame = window.requestAnimationFrame(() => {
+        setQuery("");
+        setSubmittedQuery("");
+        setSubmittedFilters(null);
+        setSearchData(null);
+        setElapsedMs(null);
+        setActiveTab("answer");
+        setActiveAssetScope(handoff.scope);
+        clearPreviewRestoreState("search");
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+
     const restored = readPreviewRestoreState<SearchPremiumReturnState>("search");
     if (!restored?.context.returnState) {
-      return;
+      const frame = window.requestAnimationFrame(() => {
+        setActiveAssetScope(readSearchAssetScope());
+      });
+      return () => window.cancelAnimationFrame(frame);
     }
 
     const state = restored.context.returnState;
@@ -207,6 +238,7 @@ export function SearchPremiumPage() {
       setSelectedKbIds(state.selectedKbIds);
       setSelectedAssetTypes(state.selectedAssetTypes);
       setSelectedHitTypes(state.selectedHitTypes ?? []);
+      setActiveAssetScope(state.activeAssetScope ?? readSearchAssetScope());
       setRecallLimit(clampSearchLimit(state.recallLimit));
       setDateFrom(state.dateFrom);
       setDateTo(state.dateTo);
@@ -238,7 +270,10 @@ export function SearchPremiumPage() {
       apiClient.searchKnowledgeBase({
         query: variables.query,
         limit: variables.filters.limit,
-        kbIds: variables.filters.kbIds,
+        kbIds: variables.filters.assetScope?.kbId
+          ? [variables.filters.assetScope.kbId]
+          : variables.filters.kbIds,
+        assetIdList: variables.filters.assetScope ? [variables.filters.assetScope.assetId] : undefined,
         assetTypes: variables.filters.assetTypes.length ? variables.filters.assetTypes : undefined,
         hitTypes: variables.filters.hitType.length ? variables.filters.hitType : undefined,
         dateRange: buildDateRange(variables.filters),
@@ -246,6 +281,10 @@ export function SearchPremiumPage() {
         withAnswer: variables.filters.withAnswer,
       }),
     onSuccess: (data, variables) => {
+      rememberAssetScopes((data.answer?.citations ?? []).map((citation) => ({
+        assetId: citation.assetId,
+        fileName: citation.fileName,
+      })));
       setElapsedMs(Math.max(1, Math.round(performance.now() - variables.startedAt)));
       setSearchData((previous) => {
         if (!variables.append || !previous) return data;
@@ -264,6 +303,7 @@ export function SearchPremiumPage() {
   const buildFilters = useCallback(
     (withAnswer: boolean): SearchFiltersValue => ({
       kbIds: selectedKbIds,
+      assetScope: activeAssetScope,
       assetTypes: selectedAssetTypes,
       hitType: selectedHitTypes,
       limit: clampSearchLimit(recallLimit),
@@ -271,7 +311,7 @@ export function SearchPremiumPage() {
       dateTo,
       withAnswer,
     }),
-    [dateFrom, dateTo, recallLimit, selectedAssetTypes, selectedHitTypes, selectedKbIds],
+    [activeAssetScope, dateFrom, dateTo, recallLimit, selectedAssetTypes, selectedHitTypes, selectedKbIds],
   );
 
   const executeSearch = useCallback(
@@ -330,8 +370,19 @@ export function SearchPremiumPage() {
   };
 
   const handleRecentSearchSelect = (item: RecentSearch) => {
+    let scopeForSearch = activeAssetScope;
+    const changesKbScope = JSON.stringify([...(item.kbIds ?? [])].sort())
+      !== JSON.stringify([...selectedKbIds].sort());
+    if (activeAssetScope && changesKbScope) {
+      saveSearchAssetScope(null);
+      setActiveAssetScope(null);
+      setScopeNotice("已关闭“仅此资料”范围，并切换知识库");
+      scopeForSearch = null;
+    }
+
     const filters: SearchFiltersValue = {
       kbIds: item.kbIds ?? [],
+      assetScope: scopeForSearch,
       assetTypes: (item.assetTypes ?? []) as SearchAssetType[],
       hitType: [],
       limit: DEFAULT_SEARCH_LIMIT,
@@ -360,6 +411,7 @@ export function SearchPremiumPage() {
       selectedKbIds,
       selectedAssetTypes,
       selectedHitTypes,
+      activeAssetScope,
       recallLimit: clampSearchLimit(recallLimit),
       dateFrom,
       dateTo,
@@ -380,6 +432,7 @@ export function SearchPremiumPage() {
       searchData,
       selectedAssetTypes,
       selectedHitTypes,
+      activeAssetScope,
       selectedKbIds,
       submittedFilters,
       submittedQuery,
@@ -428,6 +481,17 @@ export function SearchPremiumPage() {
   const hasSearched = Boolean(submittedQuery);
   const onlyImageSelected = selectedAssetTypes.length === 1 && selectedAssetTypes[0] === "IMAGE";
   const ocrDisabled = selectedAssetTypes.length > 0 && !selectedAssetTypes.includes("IMAGE");
+  const closeSearchAssetScope = () => {
+    saveSearchAssetScope(null);
+    setActiveAssetScope(null);
+  };
+  const handleSelectedKbIdsChange = (ids: string[]) => {
+    if (activeAssetScope) {
+      closeSearchAssetScope();
+      setScopeNotice("已关闭“仅此资料”范围，并切换知识库");
+    }
+    setSelectedKbIds(ids);
+  };
 
   return (
     <div
@@ -514,6 +578,31 @@ export function SearchPremiumPage() {
                         setSubmittedFilters(filters);
                         executeSearch(submittedQuery, filters);
                       }}
+                      scopeContent={activeAssetScope || submittedFilters?.assetScope || scopeNotice ? (
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+                          {activeAssetScope ? (
+                            <AssetScopeChip
+                              scope={activeAssetScope}
+                              label="当前范围"
+                              onClear={closeSearchAssetScope}
+                            />
+                          ) : null}
+                          {submittedFilters?.assetScope
+                            && submittedFilters.assetScope.assetId !== activeAssetScope?.assetId ? (
+                              <AssetScopeChip
+                                scope={submittedFilters.assetScope}
+                                label="当前结果"
+                              />
+                            ) : null}
+                          {scopeNotice ? (
+                            <TransientNotice
+                              message={scopeNotice}
+                              onDismiss={() => setScopeNotice(null)}
+                              placement="card"
+                            />
+                          ) : null}
+                        </div>
+                      ) : null}
                     />
 
                     {searchMutation.error ? (
@@ -578,7 +667,7 @@ export function SearchPremiumPage() {
                   isKbMenuOpen={isKbMenuOpen}
                   onKbMenuToggle={() => setIsKbMenuOpen((open) => !open)}
                   onKbMenuClose={() => setIsKbMenuOpen(false)}
-                  onSelectedKbIdsChange={setSelectedKbIds}
+                  onSelectedKbIdsChange={handleSelectedKbIdsChange}
                   sourceTypes={supportedAssetTypes}
                   sourceTypesLoading={capabilitiesQuery.isLoading}
                   sourceTypesError={capabilitiesQuery.isError}
@@ -664,6 +753,7 @@ function AnswerHeader({
   answer,
   canRegenerate,
   onRegenerate,
+  scopeContent,
 }: {
   activeTab: SearchTab;
   evidenceCount: number;
@@ -671,6 +761,7 @@ function AnswerHeader({
   answer?: string;
   canRegenerate: boolean;
   onRegenerate: () => void;
+  scopeContent?: ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -694,6 +785,7 @@ function AnswerHeader({
         <p className="search-premium-answer-description truncate">
           {activeTab === "answer" ? "严格回答模式，保留可点击引用来源。" : "按知识库与相关性组织检索结果。"}
         </p>
+        {scopeContent}
       </div>
       {activeTab === "answer" && answer?.trim() ? (
         <div className="search-premium-answer-actions">

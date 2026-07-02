@@ -312,6 +312,7 @@ export type SearchRequest = {
   limit?: number;
   strategy?: SearchStrategy;
   kbIds?: string[];
+  assetIdList?: string[];
   assetTypes?: SearchAssetType[];
   hitTypes?: SearchHitType[];
   dateRange?: {
@@ -626,6 +627,7 @@ export type ConversationSession = {
   status?: string;
   lastMessagePreview?: string | null;
   kbScope?: string[];
+  assetScope?: string[];
   createdAt?: number;
   updatedAt?: number;
   expiresAt?: number;
@@ -643,6 +645,7 @@ export type ConversationTurn = {
   rewrittenQuery?: string;
   answer?: string;
   kbScope?: string[];
+  assetScope?: string[];
   answerMode?: string;
   citations?: ConversationCitation[];
   resultCards?: Array<{
@@ -684,6 +687,7 @@ export type ConversationMessage = {
   rewrittenQuery?: string;
   answer?: string;
   kbScope?: string[];
+  assetScope?: string[];
   answerMode?: string;
   retrievalStage?: string;
   citations?: ConversationCitation[];

@@ -435,7 +435,7 @@ function ConfigEditor({
             : "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
         }`}>
           {testResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          {testResult.success ? "连接成功" : "连接失败"}
+          {testResult.success ? "连接成功" : testResult.message || "连接失败"}
           {testResult.success && testResult.latencyMs > 0 ? ` (${testResult.latencyMs}ms)` : ""}
         </div>
       )}
@@ -700,7 +700,7 @@ function StoragePanel() {
       {testResult && (
         <div className={`mt-4 inline-flex items-center gap-2 rounded-[8px] px-3 py-2 text-sm ${testResult.success ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" : "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"}`}>
           {testResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          {testResult.success ? "连接成功" : "连接失败"}{testResult.success && testResult.latencyMs > 0 ? ` (${testResult.latencyMs}ms)` : ""}
+          {testResult.success ? "连接成功" : testResult.message || "连接失败"}{testResult.success && testResult.latencyMs > 0 ? ` (${testResult.latencyMs}ms)` : ""}
         </div>
       )}
       {saveMutation.error && (
