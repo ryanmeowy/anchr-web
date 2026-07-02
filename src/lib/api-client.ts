@@ -42,6 +42,8 @@ import type {
 } from "./types";
 
 const TOKEN_KEY = "anchr.accessToken";
+const DEFAULT_GUEST_ACCESS_TOKEN = "xIu-ZTIfGSjRcWZpw23Le0c7SwAv1sjI";
+export const ACCESS_TOKEN_CHANGED_EVENT = "anchr:access-token-changed";
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
@@ -79,20 +81,36 @@ export class ApiError extends Error {
   }
 }
 
-export function getAccessToken() {
+export function getConfiguredAccessToken() {
   if (typeof window === "undefined") {
     return "";
   }
 
-  return window.localStorage.getItem(TOKEN_KEY) ?? "";
+  return window.localStorage.getItem(TOKEN_KEY)?.trim() ?? "";
+}
+
+export function getAccessToken() {
+  return getConfiguredAccessToken() || DEFAULT_GUEST_ACCESS_TOKEN;
 }
 
 export function saveAccessToken(token: string) {
-  window.localStorage.setItem(TOKEN_KEY, token.trim());
+  const normalizedToken = token.trim();
+  if (!normalizedToken) {
+    clearAccessToken();
+    return;
+  }
+  window.localStorage.setItem(TOKEN_KEY, normalizedToken);
+  emitAccessTokenChanged();
 }
 
 export function clearAccessToken() {
   window.localStorage.removeItem(TOKEN_KEY);
+  emitAccessTokenChanged();
+}
+
+function emitAccessTokenChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(ACCESS_TOKEN_CHANGED_EVENT));
 }
 
 async function request<T>(path: string, options: RequestOptions = {}) {

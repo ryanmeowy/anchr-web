@@ -16,7 +16,13 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
-import { apiClient, clearAccessToken, getAccessToken, saveAccessToken } from "@/lib/api-client";
+import {
+  ACCESS_TOKEN_CHANGED_EVENT,
+  apiClient,
+  clearAccessToken,
+  getConfiguredAccessToken,
+  saveAccessToken,
+} from "@/lib/api-client";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import type {
   CapabilityConfig,
@@ -59,8 +65,6 @@ const ENABLE_BUTTON_LABEL_CLASS =
   "block max-w-full truncate text-center text-[11px] font-black leading-none";
 const INFO_NOTICE_CLASS =
   "mb-4 inline-flex items-center gap-2 rounded-[8px] border border-[rgba(49,88,255,0.16)] bg-[rgba(49,88,255,0.08)] px-3 py-2 text-[11px] font-black leading-[1.55] text-[var(--premium-ink-soft)]";
-const ACCESS_TOKEN_CHANGED_EVENT = "anchr:access-token-changed";
-
 const CAPABILITY_OPTIONS: CapabilityOption[] = [
   { value: "GENERATION", label: "Generation", description: "Chat & answer generation", modelLabel: "生成模型", code: "GEN", icon: Stars },
   { value: "EMBEDDING", label: "Embedding", description: "Text vectorization", modelLabel: "向量模型", code: "EMB", icon: Waypoints },
@@ -94,7 +98,7 @@ function subscribeAccessToken(callback: () => void) {
 }
 
 function getClientAccessTokenSnapshot(): string | null {
-  return getAccessToken();
+  return getConfiguredAccessToken();
 }
 
 function getServerAccessTokenSnapshot(): string | null {
@@ -103,10 +107,6 @@ function getServerAccessTokenSnapshot(): string | null {
 
 function useAccessTokenSnapshot() {
   return useSyncExternalStore(subscribeAccessToken, getClientAccessTokenSnapshot, getServerAccessTokenSnapshot);
-}
-
-function emitAccessTokenChanged() {
-  window.dispatchEvent(new Event(ACCESS_TOKEN_CHANGED_EVENT));
 }
 
 function capabilityQueryKey(capability: CapabilityName) {
@@ -1074,7 +1074,7 @@ function RuntimeStatusPanel({
 }) {
   const token = useAccessTokenSnapshot();
   const enabledCount = Object.values(enabledConfigs).filter(Boolean).length;
-  const tokenStatus = token == null ? "检查中" : token ? "已启用" : "未配置";
+  const tokenStatus = token == null ? "检查中" : token ? "已启用" : "访客";
 
   return (
     <article className={`${PANEL_CLASS} grid content-start gap-3`} aria-label="运行状态">
@@ -1431,7 +1431,6 @@ function SecurityPanel() {
             try {
               saveAccessToken(token);
               setTokenDraft(token.trim());
-              emitAccessTokenChanged();
               setSaveError(null);
               setSaved(true);
               window.setTimeout(() => setSaved(false), 2000);
@@ -1450,7 +1449,6 @@ function SecurityPanel() {
             try {
               clearAccessToken();
               setTokenDraft("");
-              emitAccessTokenChanged();
               setSaveError(null);
               setSaved(true);
               window.setTimeout(() => setSaved(false), 2000);

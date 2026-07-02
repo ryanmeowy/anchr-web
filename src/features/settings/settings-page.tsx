@@ -21,7 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiClient, getAccessToken, saveAccessToken, clearAccessToken } from "@/lib/api-client";
+import { apiClient, getConfiguredAccessToken, saveAccessToken, clearAccessToken } from "@/lib/api-client";
 import type {
   CapabilityConfig,
   CapabilityConfigUpdateRequest,
@@ -727,7 +727,7 @@ function StoragePanel() {
 // ── security panel ──────────────────────────────────────────────────────────
 
 function SecurityPanel() {
-  const [token, setToken] = useState(() => getAccessToken());
+  const [token, setToken] = useState(() => getConfiguredAccessToken());
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
