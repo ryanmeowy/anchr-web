@@ -338,7 +338,7 @@ export function ImportsPremiumPage() {
                   <Download size={24} strokeWidth={1.9} />
                 </div>
                 <h2 className="text-[clamp(20px,2.6vw,34px)] font-black leading-none text-[var(--premium-ink)]">
-                  拖入文件，或连接一个远程资料源。
+                  拖入文件，或手动选择资料源。
                 </h2>
                 <p className="mx-auto mt-2 max-w-[520px] text-xs leading-[1.45] text-[var(--premium-ink-soft)]">
                   {supportedFormatSummary}
