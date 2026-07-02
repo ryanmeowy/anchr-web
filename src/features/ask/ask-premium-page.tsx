@@ -1002,7 +1002,7 @@ export function AskPremiumPage() {
                             key={config.id}
                             selected={config.id === activeGenerationConfig?.id}
                             onClick={() => void handleSelectGenerationConfig(config)}
-                            title={config.modelName || config.baseUrl}
+                            title={config.modelName || config.baseUrl || "未命名模型"}
                             detail={`${config.enabled ? "生效中" : "可切换"} · 全局生效`}
                           />
                         ))

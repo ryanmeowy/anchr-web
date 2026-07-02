@@ -537,10 +537,10 @@ export type PreviewBBoxRecord = {
 
 export type CapabilityConfig = {
   id: number;
-  baseUrl: string;
-  modelName?: string;
-  extraConfig?: Record<string, unknown>;
-  apiKeyMasked: string;
+  baseUrl?: string | null;
+  modelName?: string | null;
+  extraConfig?: Record<string, unknown> | null;
+  apiKeyMasked?: string | null;
   enabled: boolean;
 };
 

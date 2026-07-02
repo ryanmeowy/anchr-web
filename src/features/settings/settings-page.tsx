@@ -244,7 +244,7 @@ function ConfigEditor({
         lastSyncedId.current = null;
       }
     } else if (config && config.id !== lastSyncedId.current) {
-      setBaseUrl(config.baseUrl);
+      setBaseUrl(config.baseUrl ?? "");
       setModelName(config.modelName ?? "");
       lastSyncedId.current = config.id;
     }
@@ -328,9 +328,9 @@ function ConfigEditor({
   const savedCapabilityConfig = useMemo<CapabilityConfigUpdateRequest | null>(() => {
     if (!config) return null;
     return {
-      baseUrl: config.baseUrl.trim(),
+      baseUrl: config.baseUrl?.trim() ?? "",
       modelName: config.modelName?.trim() || undefined,
-      extraConfig: normalizeExtraConfig(config.extraConfig, paramItems),
+      extraConfig: normalizeExtraConfig(config.extraConfig ?? undefined, paramItems),
     };
   }, [config, paramItems]);
 

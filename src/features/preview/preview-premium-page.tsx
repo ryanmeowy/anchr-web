@@ -880,7 +880,7 @@ function PanelLabel({ label, value, dark = false }: { label: string; value: stri
 
 function PreviewState({ label }: { label: string }) {
   return (
-    <div className="grid min-h-[760px] place-items-center p-6">
+    <div className="grid min-h-[calc(100vh-112px)] place-items-center p-6 lg:min-h-[calc(100vh-160px)]">
       <div className="premium-surface grid min-h-40 w-full max-w-[420px] place-items-center rounded-[8px] p-6 text-center">
         <Loader2 className="animate-spin text-[var(--premium-blue)]" size={26} />
         <p className="mt-3 text-sm font-black text-[var(--premium-ink-soft)]">{label}</p>
@@ -891,7 +891,7 @@ function PreviewState({ label }: { label: string }) {
 
 function PreviewError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="grid min-h-[760px] place-items-center p-6">
+    <div className="grid min-h-[calc(100vh-112px)] place-items-center p-6 lg:min-h-[calc(100vh-160px)]">
       <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
         <h2 className="text-lg font-black text-[var(--premium-ink)]">预览加载失败</h2>
         <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">{message}</p>

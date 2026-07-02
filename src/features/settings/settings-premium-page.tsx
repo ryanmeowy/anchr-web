@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Info,
+  LockKeyhole,
   Loader2,
   Stars,
   Waypoints,
@@ -244,6 +245,10 @@ function DeleteConfirmDialog({
 
 export function SettingsPremiumPage() {
   const queryClient = useQueryClient();
+  const configuredAccessToken = useAccessTokenSnapshot();
+  const isGuest = configuredAccessToken === "";
+  const tokenResolved = configuredAccessToken !== null;
+  const hasOwnerAccess = Boolean(configuredAccessToken);
   const [theme, setTheme] = useState<PremiumThemeMode>("light");
   const [themeHydrated, setThemeHydrated] = useState(false);
   const [selectedType, setSelectedType] = useState<CapabilityName>("GENERATION");
@@ -273,25 +278,52 @@ export function SettingsPremiumPage() {
     return () => window.clearTimeout(timer);
   }, [enableError]);
 
+  useEffect(() => {
+    if (!isGuest) return;
+    CAPABILITY_OPTIONS.forEach((option) => {
+      void queryClient.cancelQueries({ queryKey: paramsQueryKey(option.value) });
+      queryClient.removeQueries({ queryKey: paramsQueryKey(option.value) });
+    });
+  }, [isGuest, queryClient]);
+
+  useEffect(() => {
+    if (!tokenResolved) return;
+    void queryClient.resetQueries({
+      queryKey: ["settings", "storage"],
+      exact: true,
+    });
+    CAPABILITY_OPTIONS.forEach((option) => {
+      void queryClient.resetQueries({
+        queryKey: capabilityQueryKey(option.value),
+        exact: true,
+      });
+    });
+  }, [configuredAccessToken, queryClient, tokenResolved]);
+
   const generationQuery = useQuery({
     queryKey: capabilityQueryKey("GENERATION"),
     queryFn: () => apiClient.getAllCapabilityConfigs("GENERATION"),
+    enabled: tokenResolved,
   });
   const embeddingQuery = useQuery({
     queryKey: capabilityQueryKey("EMBEDDING"),
     queryFn: () => apiClient.getAllCapabilityConfigs("EMBEDDING"),
+    enabled: tokenResolved,
   });
   const rerankQuery = useQuery({
     queryKey: capabilityQueryKey("RERANK"),
     queryFn: () => apiClient.getAllCapabilityConfigs("RERANK"),
+    enabled: tokenResolved,
   });
   const multiEmbeddingQuery = useQuery({
     queryKey: capabilityQueryKey("MULTI_EMBEDDING"),
     queryFn: () => apiClient.getAllCapabilityConfigs("MULTI_EMBEDDING"),
+    enabled: tokenResolved,
   });
   const storageStatusQuery = useQuery({
     queryKey: ["settings", "storage"],
     queryFn: apiClient.getStorageConfig,
+    enabled: tokenResolved,
   });
 
   const configsByCapability = useMemo<Record<CapabilityName, CapabilityConfig[]>>(
@@ -456,6 +488,7 @@ export function SettingsPremiumPage() {
                   configsByCapability={configsByCapability}
                   selectedId={selectedId}
                   isAdding={isAdding}
+                  allowAdd={hasOwnerAccess}
                   onTypeChange={(type) => {
                     setSelectedType(type);
                     setSelectedId(null);
@@ -478,10 +511,12 @@ export function SettingsPremiumPage() {
                 <section className="grid min-w-0 gap-3">
                   <div className="grid min-w-0 gap-3 xl:grid-cols-2">
                     <ConfigPanel
-                      key={`${selectedType}-${selectedConfig?.id ?? "new"}-${isAdding ? "new" : "edit"}`}
+                      key={`${selectedType}-${selectedConfig?.id ?? "new"}-${isAdding ? "new" : "edit"}-${hasOwnerAccess ? "owner" : "guest"}`}
                       capability={selectedType}
-                      config={selectedConfig}
-                      isNew={isAdding}
+                      config={hasOwnerAccess ? selectedConfig : null}
+                      isNew={hasOwnerAccess && isAdding}
+                      restricted={!hasOwnerAccess}
+                      restrictedMessage={configuredAccessToken == null ? "正在检查访问权限" : "访客无权查看模型配置"}
                       onSaved={(savedConfig) => {
                         setSelectedId(savedConfig.id);
                         setIsAdding(false);
@@ -494,12 +529,18 @@ export function SettingsPremiumPage() {
                     <RuntimeStatusPanel
                       enabledConfigs={enabledConfigsByCapability}
                       configsByCapability={configsByCapability}
-                      storageConfigured={Boolean(storageStatusQuery.data?.endpoint && storageStatusQuery.data?.bucket)}
+                      storageConfigured={isGuest
+                        ? Boolean(storageStatusQuery.data?.enabled)
+                        : Boolean(storageStatusQuery.data?.endpoint && storageStatusQuery.data?.bucket)}
+                      storageLoading={!tokenResolved || storageStatusQuery.isLoading}
                     />
                   </div>
 
                   <div className="grid min-w-0 gap-3 xl:grid-cols-2">
-                    <StoragePanel />
+                    <StoragePanel
+                      restricted={!hasOwnerAccess}
+                      restrictedMessage={configuredAccessToken == null ? "正在检查访问权限" : "访客无权查看存储配置"}
+                    />
                     <SecurityPanel />
                   </div>
                 </section>
@@ -509,7 +550,7 @@ export function SettingsPremiumPage() {
         </div>
       </div>
 
-      {pendingEnable != null ? (
+      {hasOwnerAccess && pendingEnable != null ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm">
           <div className="w-full max-w-[440px] rounded-[8px] border border-[var(--premium-line)] bg-[rgba(255,253,245,0.92)] p-4 shadow-[var(--premium-menu-shadow)] backdrop-blur-xl dark:bg-[var(--premium-elevated)]">
             <div className="flex items-start justify-between gap-4">
@@ -546,11 +587,28 @@ export function SettingsPremiumPage() {
   );
 }
 
+function RestrictedPanelOverlay({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="absolute inset-0 z-20 grid grid-rows-[auto_minmax(0,1fr)] gap-4 rounded-[8px] bg-white p-3 dark:bg-[#121814]">
+      <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">{title}</h2>
+      <div className="grid place-items-center rounded-[8px] border border-[rgba(49,88,255,0.16)] bg-[rgba(49,88,255,0.08)] p-4 text-center">
+        <div className="grid place-items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-full bg-[#111315] text-[#c9ff50] shadow-[0_8px_24px_rgba(17,19,21,0.2)] dark:bg-[#c9ff50] dark:text-[#111315] dark:shadow-[0_8px_28px_rgba(201,255,80,0.18)]">
+            <LockKeyhole size={18} aria-hidden="true" />
+          </span>
+          <p className="text-xs font-black text-[var(--premium-ink-soft)]">{message}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CapabilitySelector({
   selectedType,
   configsByCapability,
   selectedId,
   isAdding,
+  allowAdd,
   onTypeChange,
   onSelect,
   onEnable,
@@ -562,6 +620,7 @@ function CapabilitySelector({
   configsByCapability: Record<CapabilityName, CapabilityConfig[]>;
   selectedId: number | null;
   isAdding: boolean;
+  allowAdd: boolean;
   onTypeChange: (type: CapabilityName) => void;
   onSelect: (id: number) => void;
   onEnable: (capability: CapabilityName, id: number) => void;
@@ -626,6 +685,7 @@ function CapabilitySelector({
                   configs={configs}
                   value={selectedConfigId}
                   ariaLabel={`选择 ${option.label} 模型`}
+                  allowAdd={allowAdd}
                   onSelect={(value) => {
                     if (value === ADD_CONFIG_VALUE) {
                       onAdd(option.value);
@@ -680,11 +740,13 @@ function CapabilityConfigPicker({
   value,
   ariaLabel,
   onSelect,
+  allowAdd = true,
 }: {
   configs: CapabilityConfig[];
   value: number | string;
   ariaLabel: string;
   onSelect: (value: string) => void;
+  allowAdd?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectedValue = String(value);
@@ -745,19 +807,21 @@ function CapabilityConfigPicker({
               );
             })
           )}
-          <button
-            type="button"
-            onClick={() => handleSelect(ADD_CONFIG_VALUE)}
-            className={[
-              "settings-config-option settings-config-add",
-              selectedValue === ADD_CONFIG_VALUE ? "is-selected" : "",
-            ].join(" ")}
-            role="option"
-            aria-selected={selectedValue === ADD_CONFIG_VALUE}
-          >
-            <span className="min-w-0 flex-1 truncate">+ 添加配置</span>
-            {selectedValue === ADD_CONFIG_VALUE ? <Check size={12} /> : null}
-          </button>
+          {allowAdd ? (
+            <button
+              type="button"
+              onClick={() => handleSelect(ADD_CONFIG_VALUE)}
+              className={[
+                "settings-config-option settings-config-add",
+                selectedValue === ADD_CONFIG_VALUE ? "is-selected" : "",
+              ].join(" ")}
+              role="option"
+              aria-selected={selectedValue === ADD_CONFIG_VALUE}
+            >
+              <span className="min-w-0 flex-1 truncate">+ 添加配置</span>
+              {selectedValue === ADD_CONFIG_VALUE ? <Check size={12} /> : null}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -768,12 +832,16 @@ function ConfigPanel({
   capability,
   config,
   isNew,
+  restricted,
+  restrictedMessage,
   onSaved,
   onDeleted,
 }: {
   capability: CapabilityName;
   config: CapabilityConfig | null;
   isNew: boolean;
+  restricted: boolean;
+  restrictedMessage: string;
   onSaved: (savedConfig: CapabilityConfig) => void;
   onDeleted: () => void;
 }) {
@@ -792,6 +860,7 @@ function ConfigPanel({
   const paramsQuery = useQuery({
     queryKey: paramsQueryKey(capability),
     queryFn: () => apiClient.getCapabilityParams(capability),
+    enabled: !restricted,
   });
   const paramItems = paramsQuery.data?.params ?? EMPTY_PARAMS;
 
@@ -812,7 +881,7 @@ function ConfigPanel({
       setDeleteConfirmOpen(false);
       return;
     }
-    setBaseUrl(config.baseUrl);
+    setBaseUrl(config.baseUrl ?? "");
     setApiKey("");
     setModelName(config.modelName ?? "");
     setExtra(fromExtraConfig(config.extraConfig ?? {}, paramItems));
@@ -836,9 +905,9 @@ function ConfigPanel({
   const savedCapabilityConfig = useMemo<CapabilityConfigUpdateRequest | null>(() => {
     if (!config) return null;
     return {
-      baseUrl: config.baseUrl.trim(),
+      baseUrl: config.baseUrl?.trim() ?? "",
       modelName: config.modelName?.trim() || undefined,
-      extraConfig: normalizeExtraConfig(config.extraConfig, paramItems),
+      extraConfig: normalizeExtraConfig(config.extraConfig ?? undefined, paramItems),
     };
   }, [config, paramItems]);
 
@@ -921,7 +990,9 @@ function ConfigPanel({
   });
 
   return (
-    <article className={`${PANEL_CLASS} min-w-0`} aria-label="模型配置">
+    <article className={`${PANEL_CLASS} relative min-w-0`} aria-label="模型配置">
+      {restricted ? <RestrictedPanelOverlay title="模型配置" message={restrictedMessage} /> : null}
+      <div inert={restricted ? true : undefined} aria-hidden={restricted || undefined}>
       <div className="mb-4 flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">{option.label} 配置</h2>
@@ -1059,6 +1130,7 @@ function ConfigPanel({
           onConfirm={handleDelete}
         />
       ) : null}
+      </div>
     </article>
   );
 }
@@ -1067,10 +1139,12 @@ function RuntimeStatusPanel({
   enabledConfigs,
   configsByCapability,
   storageConfigured,
+  storageLoading,
 }: {
   enabledConfigs: Record<CapabilityName, CapabilityConfig | null>;
   configsByCapability: Record<CapabilityName, CapabilityConfig[]>;
   storageConfigured: boolean;
+  storageLoading: boolean;
 }) {
   const token = useAccessTokenSnapshot();
   const enabledCount = Object.values(enabledConfigs).filter(Boolean).length;
@@ -1097,7 +1171,11 @@ function RuntimeStatusPanel({
               const enabledConfig = enabledConfigs[option.value];
               const configured = configsByCapability[option.value].length > 0;
               const enabled = Boolean(enabledConfig);
-              const statusLabel = enabled ? enabledConfig?.modelName || enabledConfig?.baseUrl : configured ? "未启用" : "未配置";
+              const statusLabel = enabled
+                ? enabledConfig?.modelName || enabledConfig?.baseUrl
+                : configured
+                  ? "未启用"
+                  : "未配置";
               const rowStatusClass = enabled
                 ? "bg-[rgba(187,255,102,0.14)]"
                 : configured
@@ -1126,7 +1204,7 @@ function RuntimeStatusPanel({
         <div className="settings-status-card rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
           <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
             <span>存储配置状态</span>
-            <strong className="text-[#426b09]">{storageConfigured ? "已配置" : "未配置"}</strong>
+            <strong className="text-[#426b09]">{storageLoading ? "检查中" : storageConfigured ? "已配置" : "未配置"}</strong>
           </div>
         </div>
 
@@ -1141,11 +1219,18 @@ function RuntimeStatusPanel({
   );
 }
 
-function StoragePanel() {
+function StoragePanel({
+  restricted,
+  restrictedMessage,
+}: {
+  restricted: boolean;
+  restrictedMessage: string;
+}) {
   const queryClient = useQueryClient();
   const configQuery = useQuery({
     queryKey: ["settings", "storage"],
     queryFn: apiClient.getStorageConfig,
+    enabled: !restricted,
   });
 
   const [endpoint, setEndpoint] = useState("");
@@ -1293,7 +1378,9 @@ function StoragePanel() {
   };
 
   return (
-    <article className={`${PANEL_CLASS} min-w-0`} aria-label="存储设置">
+    <article className={`${PANEL_CLASS} relative min-w-0`} aria-label="存储设置">
+      {restricted ? <RestrictedPanelOverlay title="存储设置" message={restrictedMessage} /> : null}
+      <div inert={restricted ? true : undefined} aria-hidden={restricted || undefined}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">存储设置</h2>
@@ -1382,6 +1469,7 @@ function StoragePanel() {
           onConfirm={handleDelete}
         />
       ) : null}
+      </div>
     </article>
   );
 }
