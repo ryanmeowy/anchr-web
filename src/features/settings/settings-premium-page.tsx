@@ -516,7 +516,7 @@ export function SettingsPremiumPage() {
                       config={hasOwnerAccess ? selectedConfig : null}
                       isNew={hasOwnerAccess && isAdding}
                       restricted={!hasOwnerAccess}
-                      restrictedMessage={configuredAccessToken == null ? "正在检查访问权限" : "访客无权查看模型配置"}
+                      restrictedMessage={configuredAccessToken == null ? "正在检查访问权限" : "访客状态无法查看"}
                       onSaved={(savedConfig) => {
                         setSelectedId(savedConfig.id);
                         setIsAdding(false);
@@ -539,7 +539,7 @@ export function SettingsPremiumPage() {
                   <div className="grid min-w-0 gap-3 xl:grid-cols-2">
                     <StoragePanel
                       restricted={!hasOwnerAccess}
-                      restrictedMessage={configuredAccessToken == null ? "正在检查访问权限" : "访客无权查看存储配置"}
+                      restrictedMessage={configuredAccessToken == null ? "正在检查访问权限" : "访客状态无法查看"}
                     />
                     <SecurityPanel />
                   </div>
