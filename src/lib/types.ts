@@ -508,6 +508,7 @@ export type PreviewSegment = {
     pageNo?: number;
     chunkOrder?: number;
     relation?: string;
+    bbox?: PreviewBBoxRecord[] | null;
   }>;
   citationContext?: {
     sourceQuestion?: string;

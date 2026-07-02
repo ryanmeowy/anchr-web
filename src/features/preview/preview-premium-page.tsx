@@ -23,6 +23,7 @@ import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from
 import {
   buildPreviewRequest,
   readPreviewNavigation,
+  type PreviewCitation,
   type PreviewNavigationContext,
   type PreviewSource,
 } from "@/lib/preview-context";
@@ -40,10 +41,17 @@ type PdfPageSize = { width: number; height: number; widthPt: number; heightPt: n
 type PdfRenderTask = ReturnType<PdfPageProxy["render"]>;
 type PdfFitMode = "frame" | "manual";
 type PreviewSurroundingChunk = NonNullable<PreviewSegment["surroundingChunks"]>[number];
+type PreviewOverflow = { horizontal: boolean; vertical: boolean };
+type TransientBBoxHighlight = {
+  id: number;
+  records: PreviewBBoxRecord[];
+};
 
 const DEFAULT_PDF_SCALE = 1.23;
 const MIN_PDF_SCALE = 0.55;
 const MAX_PDF_SCALE = 2.2;
+const PREVIEW_OVERFLOW_TOLERANCE = 12;
+const CONTEXT_HIGHLIGHT_DURATION_MS = 2400;
 
 export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
   const router = useRouter();
@@ -100,6 +108,30 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
   const item = refreshMutation.data ?? previewQuery.data;
   const citationIndex = citationIndexFromUrl || item?.citationContext?.citationIndex || 1;
 
+  const handleCitationSelect = useCallback((citation: PreviewCitation, fallbackIndex: number) => {
+    if (!citation.segmentId) {
+      return;
+    }
+
+    const nextCitationIndex = citation.citationIndex ?? fallbackIndex;
+    if (citation.segmentId === decodedSegmentId && nextCitationIndex === citationIndex) {
+      return;
+    }
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("from", from);
+    params.set("citationIndex", String(nextCitationIndex));
+    refreshMutation.reset();
+    router.push(`/preview/${encodeURIComponent(citation.segmentId)}?${params.toString()}`);
+  }, [
+    citationIndex,
+    decodedSegmentId,
+    from,
+    refreshMutation,
+    router,
+    searchParams,
+  ]);
+
   const handleBack = () => {
     if (window.history.length > 1) {
       router.back();
@@ -125,7 +157,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
       />
 
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:min-h-[calc(100vh-48px)] lg:scale-[0.96] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
+        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:min-h-0 lg:scale-[0.96] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
 
           <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
@@ -175,6 +207,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
                   context={context}
                   citationIndex={citationIndex}
                   from={from}
+                  onCitationSelect={handleCitationSelect}
                   onRefresh={() => refreshMutation.mutate()}
                   isRefreshing={refreshMutation.isPending}
                 />
@@ -194,6 +227,7 @@ function PreviewContent({
   context,
   citationIndex,
   from,
+  onCitationSelect,
   onRefresh,
   isRefreshing,
 }: {
@@ -201,12 +235,16 @@ function PreviewContent({
   context: PreviewNavigationContext | null;
   citationIndex: number;
   from: PreviewSource;
+  onCitationSelect: (citation: PreviewCitation, fallbackIndex: number) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
 }) {
   const previewType = getPreviewType(item);
   const previewShellRef = useRef<HTMLDivElement | null>(null);
   const previewScrollerRef = useRef<HTMLDivElement | null>(null);
+  const contextHighlightTimerRef = useRef<number | null>(null);
+  const contextHighlightSequenceRef = useRef(0);
+  const [sidebarHeight, setSidebarHeight] = useState<number | null>(null);
   const [pdfPage, setPdfPage] = useState(item.anchor?.pageNo ?? 1);
   const [pdfScale, setPdfScale] = useState(DEFAULT_PDF_SCALE);
   const [pdfFitMode, setPdfFitMode] = useState<PdfFitMode>("manual");
@@ -215,6 +253,11 @@ function PreviewContent({
   const [pdfPageSize, setPdfPageSize] = useState<PdfPageSize | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null);
   const [previewFrameSize, setPreviewFrameSize] = useState({ width: 0, height: 0 });
+  const [previewOverflow, setPreviewOverflow] = useState<PreviewOverflow>({
+    horizontal: false,
+    vertical: false,
+  });
+  const [contextHighlight, setContextHighlight] = useState<TransientBBoxHighlight | null>(null);
 
   const pageNumbers = useMemo(() => {
     if (previewType !== "PDF") {
@@ -261,6 +304,73 @@ function PreviewContent({
     };
   }, []);
 
+  const updatePreviewOverflow = useCallback(() => {
+    const scroller = previewScrollerRef.current;
+    if (!scroller) {
+      return;
+    }
+
+    const nextOverflow = {
+      horizontal: scroller.scrollWidth - scroller.clientWidth > PREVIEW_OVERFLOW_TOLERANCE,
+      vertical: scroller.scrollHeight - scroller.clientHeight > PREVIEW_OVERFLOW_TOLERANCE,
+    };
+
+    if (!nextOverflow.horizontal && scroller.scrollLeft !== 0) {
+      scroller.scrollLeft = 0;
+    }
+    if (!nextOverflow.vertical && scroller.scrollTop !== 0) {
+      scroller.scrollTop = 0;
+    }
+
+    setPreviewOverflow((currentOverflow) => (
+      currentOverflow.horizontal === nextOverflow.horizontal
+        && currentOverflow.vertical === nextOverflow.vertical
+        ? currentOverflow
+        : nextOverflow
+    ));
+  }, []);
+
+  useEffect(() => {
+    const scroller = previewScrollerRef.current;
+    if (!scroller) {
+      return;
+    }
+
+    let frame = window.requestAnimationFrame(updatePreviewOverflow);
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(updatePreviewOverflow);
+    };
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
+    const mutationObserver = new MutationObserver(scheduleUpdate);
+
+    resizeObserver.observe(scroller);
+    mutationObserver.observe(scroller, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    window.addEventListener("resize", scheduleUpdate);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [updatePreviewOverflow]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(updatePreviewOverflow);
+    return () => window.cancelAnimationFrame(frame);
+  }, [item.segmentId, pdfPage, pdfPageSize, pdfScale, updatePreviewOverflow]);
+
+  useEffect(() => () => {
+    if (contextHighlightTimerRef.current !== null) {
+      window.clearTimeout(contextHighlightTimerRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     if (previewType !== "PDF" || pdfFitMode !== "frame") {
       return;
@@ -294,18 +404,40 @@ function PreviewContent({
   }, []);
 
   const handleChunkSelect = useCallback((chunk: PreviewSurroundingChunk) => {
-    if (previewType === "IMAGE") {
-      return;
-    }
-
     const isCurrent = chunk.relation === "current" || chunk.segmentId === item.segmentId;
     setActiveChunkSegmentId(chunk.segmentId);
+    const bboxRecords = (chunk.bbox ?? []).filter((record) => Boolean(record.bbox));
+
+    if (contextHighlightTimerRef.current !== null) {
+      window.clearTimeout(contextHighlightTimerRef.current);
+      contextHighlightTimerRef.current = null;
+    }
+
+    if (bboxRecords.length) {
+      contextHighlightSequenceRef.current += 1;
+      setContextHighlight({
+        id: contextHighlightSequenceRef.current,
+        records: bboxRecords,
+      });
+      contextHighlightTimerRef.current = window.setTimeout(() => {
+        setContextHighlight(null);
+        contextHighlightTimerRef.current = null;
+      }, CONTEXT_HIGHLIGHT_DURATION_MS);
+    } else {
+      setContextHighlight(null);
+    }
 
     if (previewType === "PDF") {
-      const targetPage = chunk.pageNo ?? (isCurrent ? item.anchor?.pageNo : undefined);
+      const targetPage = chunk.pageNo
+        ?? bboxRecords.find((record) => record.pageNo)?.pageNo
+        ?? (isCurrent ? item.anchor?.pageNo : undefined);
       if (targetPage) {
         setPdfPage(targetPage);
       }
+      return;
+    }
+
+    if (previewType === "IMAGE") {
       return;
     }
 
@@ -317,10 +449,17 @@ function PreviewContent({
     target?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [item.anchor?.pageNo, item.segmentId, previewType]);
 
+  const handleSidebarHeightChange = useCallback((height: number) => {
+    setSidebarHeight((currentHeight) => (
+      currentHeight === height ? currentHeight : height
+    ));
+  }, []);
+
   return (
     <div
       ref={previewShellRef}
-      className="grid min-h-[760px] min-w-0 grid-cols-[132px_minmax(0,1fr)_minmax(320px,390px)] overflow-hidden max-[1240px]:grid-cols-[116px_minmax(0,1fr)] max-[860px]:block max-[860px]:overflow-visible"
+      style={sidebarHeight ? { height: `${sidebarHeight}px` } : undefined}
+      className="grid min-h-0 min-w-0 grid-cols-[132px_minmax(0,1fr)_minmax(320px,390px)] overflow-hidden max-[1240px]:!h-auto max-[1240px]:min-h-[760px] max-[1240px]:grid-cols-[116px_minmax(0,1fr)] max-[860px]:block max-[860px]:overflow-visible"
     >
       <aside
         aria-label="页面缩略图"
@@ -425,20 +564,32 @@ function PreviewContent({
           </div>
         </div>
 
-        <div ref={previewScrollerRef} className="min-h-0 overflow-auto p-8 max-[860px]:px-3.5 max-[860px]:py-[18px]">
+        <div
+          ref={previewScrollerRef}
+          className={[
+            "min-h-0 p-8 max-[860px]:px-3.5 max-[860px]:py-[18px]",
+            previewOverflow.horizontal ? "overflow-x-auto" : "overflow-x-hidden",
+            previewOverflow.vertical ? "overflow-y-auto" : "overflow-y-hidden",
+          ].join(" ")}
+        >
           {previewType === "PDF" && item.previewUrl ? (
             <PdfPreview
               item={item}
               pageNo={pdfPage}
               scale={pdfScale}
               citationIndex={citationIndex}
+              contextHighlight={contextHighlight}
               onPageCountChange={setPdfPageCount}
               onPageNoChange={setPdfPage}
               onPageSizeChange={setPdfPageSize}
               onDocumentChange={setPdfDoc}
             />
           ) : previewType === "IMAGE" && item.previewUrl ? (
-            <ImagePreview item={item} citationIndex={citationIndex} />
+            <ImagePreview
+              item={item}
+              citationIndex={citationIndex}
+              contextHighlight={contextHighlight}
+            />
           ) : (
             <TextPreview item={item} citationIndex={citationIndex} />
           )}
@@ -450,8 +601,10 @@ function PreviewContent({
         context={context}
         citationIndex={citationIndex}
         from={from}
+        onCitationSelect={onCitationSelect}
         activeChunkSegmentId={activeChunkSegmentId}
         onChunkSelect={handleChunkSelect}
+        onHeightChange={handleSidebarHeightChange}
       />
     </div>
   );
@@ -462,26 +615,64 @@ function CitationSidebar({
   context,
   citationIndex,
   from,
+  onCitationSelect,
   activeChunkSegmentId,
   onChunkSelect,
+  onHeightChange,
 }: {
   item: PreviewSegment;
   context: PreviewNavigationContext | null;
   citationIndex: number;
   from: PreviewSource;
+  onCitationSelect: (citation: PreviewCitation, fallbackIndex: number) => void;
   activeChunkSegmentId: string;
   onChunkSelect: (chunk: PreviewSurroundingChunk) => void;
+  onHeightChange: (height: number) => void;
 }) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const citations = context?.citations ?? [];
+  const fallbackCitation: PreviewCitation = { citationIndex, segmentId: item.segmentId };
+  const currentCitation = citations.find(
+    (citation) => citation.segmentId === item.segmentId && citation.citationIndex === citationIndex,
+  )
+    ?? citations.find((citation) => citation.segmentId === item.segmentId)
+    ?? fallbackCitation;
+  const displayedCitations = from === "library"
+    ? [currentCitation]
+    : citations.length
+      ? citations
+      : [fallbackCitation];
   const previewType = getPreviewType(item);
   const reason = item.citationContext?.citationReason
     ?? "该片段命中当前检索或问答引用，可作为原文证据查看。";
 
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) {
+      return;
+    }
+
+    const updateHeight = () => {
+      onHeightChange(content.scrollHeight + 32);
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(content);
+    window.addEventListener("resize", updateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [onHeightChange]);
+
   return (
     <aside
       aria-label="引用上下文"
-      className="preview-premium-sidebar grid min-h-0 content-start gap-3.5 overflow-auto border-l border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-4 max-[1240px]:col-span-2 max-[1240px]:grid-cols-2 max-[1240px]:border-l-0 max-[1240px]:border-t max-[860px]:grid-cols-1"
+      className="preview-premium-sidebar min-h-0 overflow-hidden border-l border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-4 max-[1240px]:col-span-2 max-[1240px]:border-l-0 max-[1240px]:border-t"
     >
+      <div ref={contentRef} className="grid content-start gap-3.5 max-[1240px]:grid-cols-2 max-[860px]:grid-cols-1">
       <SidePanel>
         <PanelLabel label="WHY THIS CITATION" value={`#${citationIndex}`} />
         <div className="mt-3.5 rounded-[8px] border border-amber-500/35 bg-amber-400/10 p-3.5 text-[13px] leading-[1.7] text-[var(--premium-ink-soft)]">
@@ -510,20 +701,30 @@ function CitationSidebar({
           <InfoRow label="引用位置" value={formatCitationPosition(citationIndex, item)} />
         </div>
         <div className="mt-3.5 flex flex-wrap gap-2" aria-label="本回答中的引用">
-          {(citations.length ? citations : [{ citationIndex, segmentId: item.segmentId }]).map((citation, index) => {
+          {displayedCitations.map((citation, index) => {
             const number = citation.citationIndex ?? index + 1;
+            const isCurrent = citation.segmentId === item.segmentId && number === citationIndex;
+            const canSwitch = from !== "library" && Boolean(citation.segmentId) && !isCurrent;
             return (
-              <span
+              <button
+                type="button"
                 key={`${citation.segmentId ?? index}-${index}`}
+                onClick={() => onCitationSelect(citation, index + 1)}
+                disabled={!canSwitch}
+                aria-current={isCurrent ? "true" : undefined}
+                aria-label={`查看引用 ${number}${citation.fileName ? `：${citation.fileName}` : ""}`}
+                title={citation.segmentId ? citation.fileName : "该引用缺少片段信息，暂时无法预览"}
                 className={[
-                  "grid size-8 place-items-center rounded-[8px] border text-sm font-black",
-                  number === citationIndex
+                  "grid size-8 place-items-center rounded-[8px] border text-sm font-black transition",
+                  isCurrent
                     ? "border-amber-500/80 bg-amber-400/20 text-amber-800 dark:text-amber-200"
-                    : "border-[var(--premium-line)] bg-[var(--premium-blue-soft)] text-[var(--premium-blue)]",
+                    : canSwitch
+                      ? "border-[var(--premium-line)] bg-[var(--premium-blue-soft)] text-[var(--premium-blue)] hover:-translate-y-0.5 hover:border-[var(--premium-blue)] hover:bg-[var(--premium-blue)] hover:text-white"
+                      : "cursor-not-allowed border-[var(--premium-line)] bg-[var(--premium-panel-muted)] text-[var(--premium-muted)] opacity-55",
                 ].join(" ")}
               >
                 {number}
-              </span>
+              </button>
             );
           })}
         </div>
@@ -535,8 +736,15 @@ function CitationSidebar({
           {(item.surroundingChunks ?? []).map((chunk, index) => {
             const isCurrent = chunk.relation === "current" || chunk.segmentId === item.segmentId;
             const isActive = chunk.segmentId === activeChunkSegmentId;
-            const targetPage = chunk.pageNo ?? (isCurrent ? item.anchor?.pageNo : undefined);
-            const canJump = previewType === "PDF" ? Boolean(targetPage) : previewType !== "IMAGE";
+            const hasBbox = Boolean(chunk.bbox?.some((record) => record.bbox));
+            const targetPage = chunk.pageNo
+              ?? chunk.bbox?.find((record) => record.pageNo)?.pageNo
+              ?? (isCurrent ? item.anchor?.pageNo : undefined);
+            const canJump = previewType === "PDF"
+              ? Boolean(targetPage)
+              : previewType === "IMAGE"
+                ? hasBbox
+                : true;
             return (
               <button
                 key={`${chunk.segmentId}-${chunk.relation ?? index}-${index}`}
@@ -603,6 +811,7 @@ function CitationSidebar({
           <i className={`${styles.meterFill} block h-full rounded-[inherit] bg-gradient-to-r from-amber-400 to-lime-300`} />
         </div>
       </section>
+      </div>
     </aside>
   );
 }
@@ -672,6 +881,7 @@ function PdfPreview({
   pageNo,
   scale,
   citationIndex,
+  contextHighlight,
   onPageCountChange,
   onPageNoChange,
   onPageSizeChange,
@@ -681,6 +891,7 @@ function PdfPreview({
   pageNo: number;
   scale: number;
   citationIndex: number;
+  contextHighlight: TransientBBoxHighlight | null;
   onPageCountChange: (count: number) => void;
   onPageNoChange: (pageNo: number) => void;
   onPageSizeChange: (size: PdfPageSize | null) => void;
@@ -787,13 +998,15 @@ function PdfPreview({
         <canvas ref={canvasRef} className="block bg-white" />
         {pageSize ? (
           <BBoxOverlay
-            records={item.anchor?.bbox ?? []}
+            key={contextHighlight ? `context-${contextHighlight.id}` : "citation"}
+            records={contextHighlight?.records ?? item.anchor?.bbox ?? []}
             pageNo={pageNo}
             pageWidthPt={pageSize.widthPt}
             pageHeightPt={pageSize.heightPt}
             renderedWidth={pageSize.width}
             renderedHeight={pageSize.height}
             citationIndex={citationIndex}
+            variant={contextHighlight ? "context" : "citation"}
           />
         ) : null}
         {isRendering ? (
@@ -936,7 +1149,15 @@ function renderPdfPage(page: PdfPageProxy, canvas: HTMLCanvasElement | null, sca
   };
 }
 
-function ImagePreview({ item, citationIndex }: { item: PreviewSegment; citationIndex: number }) {
+function ImagePreview({
+  item,
+  citationIndex,
+  contextHighlight,
+}: {
+  item: PreviewSegment;
+  citationIndex: number;
+  contextHighlight: TransientBBoxHighlight | null;
+}) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [imageSize, setImageSize] = useState<{
     naturalWidth: number;
@@ -973,13 +1194,15 @@ function ImagePreview({ item, citationIndex }: { item: PreviewSegment; citationI
         />
         {imageSize ? (
           <BBoxOverlay
-            records={item.anchor?.bbox ?? []}
+            key={contextHighlight ? `context-${contextHighlight.id}` : "citation"}
+            records={contextHighlight?.records ?? item.anchor?.bbox ?? []}
             pageNo={item.anchor?.pageNo ?? 1}
             pageWidthPt={item.anchor?.imageWidth ?? imageSize.naturalWidth}
             pageHeightPt={item.anchor?.imageHeight ?? imageSize.naturalHeight}
             renderedWidth={imageSize.renderedWidth}
             renderedHeight={imageSize.renderedHeight}
             citationIndex={citationIndex}
+            variant={contextHighlight ? "context" : "citation"}
           />
         ) : null}
       </div>
@@ -995,6 +1218,7 @@ function BBoxOverlay({
   renderedWidth,
   renderedHeight,
   citationIndex,
+  variant = "citation",
 }: {
   records: PreviewBBoxRecord[];
   pageNo: number;
@@ -1003,6 +1227,7 @@ function BBoxOverlay({
   renderedWidth: number;
   renderedHeight: number;
   citationIndex: number;
+  variant?: "citation" | "context";
 }) {
   const scaleX = renderedWidth / pageWidthPt;
   const scaleY = renderedHeight / pageHeightPt;
@@ -1015,7 +1240,13 @@ function BBoxOverlay({
       {rects.map((rect, index) => (
         <div
           key={`${rect.left}-${rect.top}-${index}`}
-          className={`${styles.highlight} absolute rounded-[8px] border-2 border-amber-400 bg-amber-300/15`}
+          className={[
+            variant === "context" ? styles.contextHighlight : styles.highlight,
+            "absolute rounded-[8px] border-2",
+            variant === "context"
+              ? "border-blue-500 bg-blue-400/15"
+              : "border-amber-400 bg-amber-300/15",
+          ].join(" ")}
           style={{
             left: rect.left,
             top: rect.top,
@@ -1023,7 +1254,7 @@ function BBoxOverlay({
             height: rect.height,
           }}
         >
-          {index === 0 ? (
+          {variant === "citation" && index === 0 ? (
             <span className="absolute -right-4 -top-4 grid size-[34px] place-items-center rounded-[8px] bg-amber-400 text-sm font-black text-[#1c1400] shadow-[0_14px_32px_rgba(123,76,0,0.28)]">
               {citationIndex}
             </span>
