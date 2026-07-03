@@ -15,6 +15,12 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  PremiumConfigurationGate,
+  PremiumConfigurationLoading,
+  PremiumConfigurationShell,
+  usePremiumModelConfiguration,
+} from "@/components/app/premium-configuration-gate";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
@@ -143,6 +149,7 @@ export function AskPremiumPage() {
     queryKey: ["settings", "generation", "all"],
     queryFn: () => apiClient.getAllCapabilityConfigs("generation"),
   });
+  const modelConfiguration = usePremiumModelConfiguration();
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -774,6 +781,33 @@ export function AskPremiumPage() {
     }
     setSelectedKbIdsValue([...selectedKbIds, kbId]);
   };
+
+  if (modelConfiguration.isLoading) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumConfigurationLoading
+          theme={theme}
+          title="正在检查模型配置"
+          description="稍等片刻，系统正在确认向量模型与生成模型状态。"
+        />
+      </PremiumConfigurationShell>
+    );
+  }
+
+  if (modelConfiguration.missing.embedding || modelConfiguration.missing.generation) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumConfigurationGate
+          theme={theme}
+          description="使用对话功能需要配置 Embedding 模型和 Generation 模型。"
+          statuses={[
+            { label: "Embedding 模型", missing: modelConfiguration.missing.embedding },
+            { label: "Generation 模型", missing: modelConfiguration.missing.generation },
+          ]}
+        />
+      </PremiumConfigurationShell>
+    );
+  }
 
   return (
     <div className="premium-theme ask-premium-page min-h-screen overflow-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>

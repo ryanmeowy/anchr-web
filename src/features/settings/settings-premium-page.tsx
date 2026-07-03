@@ -137,18 +137,6 @@ function toExtraConfig(extra: Record<string, string>, params: CapabilityParams["
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function normalizeExtraConfig(json: Record<string, unknown> | undefined, params: CapabilityParams["params"]) {
-  return toExtraConfig(fromExtraConfig(json, params), params);
-}
-
-function areCapabilityConfigsEqual(left: CapabilityConfigUpdateRequest, right: CapabilityConfigUpdateRequest) {
-  return (
-    left.baseUrl === right.baseUrl &&
-    (left.modelName ?? "") === (right.modelName ?? "") &&
-    JSON.stringify(left.extraConfig ?? {}) === JSON.stringify(right.extraConfig ?? {})
-  );
-}
-
 function splitParenLabel(label: string) {
   const match = label.match(/^(.*?)(\s*[(（].*[)）])$/);
   return match ? [match[1].trim(), match[2].trim()] : [label];
@@ -164,6 +152,11 @@ function preferredConfig(configs: CapabilityConfig[]) {
 
 function embeddingSwitchAffects(capability: CapabilityName) {
   return capability === "EMBEDDING" || capability === "MULTI_EMBEDDING";
+}
+
+function isVectorDimensionParam(param: CapabilityParams["params"][number]) {
+  const normalizedKey = param.key.replace(/[^a-z]/gi, "").toLowerCase();
+  return normalizedKey.includes("dimension") || /向量维度|dimension/i.test(param.label);
 }
 
 function affectedCapabilitiesFor(capability: CapabilityName) {
@@ -854,6 +847,7 @@ function ConfigPanel({
   const [paramsExpanded, setParamsExpanded] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testResult, setTestResult] = useState<CapabilityConnectionTestResult | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -863,6 +857,8 @@ function ConfigPanel({
     enabled: !restricted,
   });
   const paramItems = paramsQuery.data?.params ?? EMPTY_PARAMS;
+  const requiresVectorDimension = embeddingSwitchAffects(capability);
+  const vectorDimensionParam = paramItems.find(isVectorDimensionParam);
 
   useEffect(() => {
     if (!testResult) return;
@@ -877,6 +873,7 @@ function ConfigPanel({
       setModelName("");
       setExtra({});
       setTestResult(null);
+      setValidationError(null);
       setDeleteNotice(null);
       setDeleteConfirmOpen(false);
       return;
@@ -886,6 +883,7 @@ function ConfigPanel({
     setModelName(config.modelName ?? "");
     setExtra(fromExtraConfig(config.extraConfig ?? {}, paramItems));
     setTestResult(null);
+    setValidationError(null);
     setDeleteNotice(null);
     setDeleteConfirmOpen(false);
   }, [capability, config, isNew, paramItems]);
@@ -893,7 +891,20 @@ function ConfigPanel({
   const clearFeedback = () => {
     setSaved(false);
     setTestResult(null);
+    setValidationError(null);
     setDeleteNotice(null);
+  };
+
+  const getValidationError = () => {
+    if (!requiresVectorDimension) return null;
+    if (paramsQuery.isLoading) return "向量维度参数仍在加载，请稍后重试";
+    if (paramsQuery.isError) return "向量维度参数加载失败，请刷新后重试";
+    if (!vectorDimensionParam) return "未找到向量维度参数，请刷新后重试";
+
+    const value = extra[vectorDimensionParam.key]?.trim() ?? "";
+    if (!value) return "向量维度为必填项";
+    if (!/^\d+$/.test(value) || Number(value) <= 0) return "向量维度必须为正整数";
+    return null;
   };
 
   const currentCapabilityConfig = useMemo<CapabilityConfigUpdateRequest>(() => ({
@@ -902,19 +913,9 @@ function ConfigPanel({
     extraConfig: toExtraConfig(extra, paramItems),
   }), [baseUrl, extra, modelName, paramItems]);
 
-  const savedCapabilityConfig = useMemo<CapabilityConfigUpdateRequest | null>(() => {
-    if (!config) return null;
-    return {
-      baseUrl: config.baseUrl?.trim() ?? "",
-      modelName: config.modelName?.trim() || undefined,
-      extraConfig: normalizeExtraConfig(config.extraConfig ?? undefined, paramItems),
-    };
-  }, [config, paramItems]);
-
-  const hasUnsavedCapabilityChanges = isNew || !savedCapabilityConfig || !areCapabilityConfigsEqual(currentCapabilityConfig, savedCapabilityConfig);
-  const shouldUseSavedCapabilityConfig = Boolean(config && !isNew && !hasUnsavedCapabilityChanges && !apiKey.trim());
+  const savedConfigIdForTest = config && !isNew && !apiKey.trim() ? config.id : undefined;
   const canSave = baseUrl.trim().length > 0;
-  const canTest = canSave && (apiKey.trim().length > 0 || shouldUseSavedCapabilityConfig);
+  const canTest = canSave && (apiKey.trim().length > 0 || savedConfigIdForTest != null);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -975,7 +976,7 @@ function ConfigPanel({
       return apiClient.testConnection({
         capability,
         ...body,
-        configId: shouldUseSavedCapabilityConfig ? config?.id : undefined,
+        configId: savedConfigIdForTest,
       });
     },
     onMutate: () => setTestResult(null),
@@ -988,6 +989,28 @@ function ConfigPanel({
       });
     },
   });
+
+  const handleSave = () => {
+    const error = getValidationError();
+    if (error) {
+      setValidationError(error);
+      setParamsExpanded(true);
+      return;
+    }
+    setValidationError(null);
+    saveMutation.mutate();
+  };
+
+  const handleTest = () => {
+    const error = getValidationError();
+    if (error) {
+      setValidationError(error);
+      setParamsExpanded(true);
+      return;
+    }
+    setValidationError(null);
+    testMutation.mutate();
+  };
 
   return (
     <article className={`${PANEL_CLASS} relative min-w-0`} aria-label="模型配置">
@@ -1070,22 +1093,32 @@ function ConfigPanel({
               {!paramsQuery.isLoading && paramItems.length === 0 ? <p className="text-[11px] leading-normal text-[var(--premium-muted)]">无可选参数</p> : null}
               {paramItems.length > 0 ? (
                 <div className={`${FORM_GRID_CLASS} sm:grid-cols-2`}>
-                  {paramItems.map((param) => (
-                    <label key={param.key} className={`${FORM_FIELD_CLASS} settings-param-field`}>
-                      <span>
-                        {splitParenLabel(param.label).map((part) => <span key={part} className="mr-1">{part}</span>)}
-                      </span>
-                      <input
-                        className={FIELD_CLASS}
-                        value={extra[param.key] ?? ""}
-                        placeholder={param.key}
-                        onChange={(event) => {
-                          setExtra((previous) => ({ ...previous, [param.key]: event.target.value }));
-                          clearFeedback();
-                        }}
-                      />
-                    </label>
-                  ))}
+                  {paramItems.map((param) => {
+                    const isRequiredDimension = requiresVectorDimension && isVectorDimensionParam(param);
+                    return (
+                      <label key={param.key} className={`${FORM_FIELD_CLASS} settings-param-field`}>
+                        <span>
+                          {splitParenLabel(param.label).map((part) => <span key={part} className="mr-1">{part}</span>)}
+                          {isRequiredDimension ? <span className="text-rose-600 dark:text-rose-300" aria-hidden="true">*</span> : null}
+                        </span>
+                        <input
+                          className={FIELD_CLASS}
+                          value={extra[param.key] ?? ""}
+                          placeholder={param.key}
+                          type={isRequiredDimension ? "number" : "text"}
+                          min={isRequiredDimension ? 1 : undefined}
+                          step={isRequiredDimension ? 1 : undefined}
+                          required={isRequiredDimension}
+                          aria-required={isRequiredDimension || undefined}
+                          aria-invalid={isRequiredDimension && Boolean(validationError) ? true : undefined}
+                          onChange={(event) => {
+                            setExtra((previous) => ({ ...previous, [param.key]: event.target.value }));
+                            clearFeedback();
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>
@@ -1093,6 +1126,12 @@ function ConfigPanel({
         </div>
       </div>
 
+      {validationError ? (
+        <div className="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-[11px] font-black leading-[1.55] text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+          <AlertCircle size={16} />
+          {validationError}
+        </div>
+      ) : null}
       {deleteNotice ? <div className="mt-4"><PendingNotice message={deleteNotice} /></div> : null}
       {saveMutation.error ? (
         <div className="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-[11px] font-black leading-[1.55] text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
@@ -1108,7 +1147,7 @@ function ConfigPanel({
       ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <button type="button" disabled={!canSave || saveMutation.isPending || deleteMutation.isPending} onClick={() => saveMutation.mutate()} className={BUTTON_PRIMARY_CLASS}>
+        <button type="button" disabled={!canSave || saveMutation.isPending || deleteMutation.isPending} onClick={handleSave} className={BUTTON_PRIMARY_CLASS}>
           {saveMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
           <span className={ACTION_BUTTON_LABEL_CLASS}>{saveMutation.isPending ? "保存中..." : "保存"}</span>
         </button>
@@ -1116,7 +1155,7 @@ function ConfigPanel({
           {deleteMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
           <span className={ACTION_BUTTON_LABEL_CLASS}>{deleteMutation.isPending ? "删除中..." : "删除"}</span>
         </button>
-        <button type="button" disabled={!canTest || testMutation.isPending || deleteMutation.isPending} onClick={() => testMutation.mutate()} className={BUTTON_SECONDARY_CLASS}>
+        <button type="button" disabled={!canTest || testMutation.isPending || deleteMutation.isPending} onClick={handleTest} className={BUTTON_SECONDARY_CLASS}>
           {testMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
           <span className={ACTION_BUTTON_LABEL_CLASS}>{testMutation.isPending ? "测试中..." : "测试连接"}</span>
         </button>

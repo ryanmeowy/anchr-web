@@ -8,7 +8,6 @@ import {
   Database,
   Download,
   Folder,
-  Info,
   Link2,
   Loader2,
   RefreshCw,
@@ -16,9 +15,13 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { PremiumRail } from "@/components/app/premium-rail";
+import {
+  PremiumConfigurationGate,
+  PremiumConfigurationLoading,
+  PremiumConfigurationShell,
+  usePremiumModelConfiguration,
+} from "@/components/app/premium-configuration-gate";
 import { FileTypeIcon, normalizeExtension } from "@/components/shared/file-type-icon";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatFileSize, formatNumber, statusText } from "@/lib/format";
@@ -91,17 +94,7 @@ export function ImportsPremiumPage() {
     refetchOnWindowFocus: false,
   });
 
-  const embeddingConfigQuery = useQuery({
-    queryKey: ["settings", "embedding"],
-    queryFn: () => apiClient.getCapabilityConfig("EMBEDDING"),
-    refetchOnWindowFocus: false,
-  });
-
-  const multiEmbeddingConfigQuery = useQuery({
-    queryKey: ["settings", "multi-embedding"],
-    queryFn: () => apiClient.getCapabilityConfig("MULTI_EMBEDDING"),
-    refetchOnWindowFocus: false,
-  });
+  const modelConfiguration = usePremiumModelConfiguration({ requireGeneration: false });
 
   const selectedKbId = kbId || kbsQuery.data?.items?.[0]?.id || "";
   const selectedKb = useMemo(
@@ -156,12 +149,9 @@ export function ImportsPremiumPage() {
 
   const configsLoading =
     storageConfigQuery.isLoading ||
-    embeddingConfigQuery.isLoading ||
-    multiEmbeddingConfigQuery.isLoading;
+    modelConfiguration.isLoading;
   const hasStorage = storageConfigQuery.data != null;
-  const hasEmbedding =
-    (embeddingConfigQuery.data?.length ?? 0) > 0 ||
-    (multiEmbeddingConfigQuery.data?.length ?? 0) > 0;
+  const hasEmbedding = !modelConfiguration.missing.embedding;
   const missingConfigs = !hasStorage || !hasEmbedding ? { storage: !hasStorage, embedding: !hasEmbedding } : null;
   const currentTask = activeTaskId ? currentTaskQuery.data : undefined;
   const selectedFilesSize = files.reduce((total, file) => total + file.size, 0);
@@ -273,27 +263,33 @@ export function ImportsPremiumPage() {
 
   if (configsLoading) {
     return (
-      <ImportsPremiumShell theme={theme} onThemeChange={setTheme}>
-        <StateCard
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumConfigurationLoading
           theme={theme}
-          icon={<Loader2 size={24} className="animate-spin" />}
           title="正在检查导入配置"
           description="稍等片刻，系统正在确认对象存储与向量模型状态。"
         />
-      </ImportsPremiumShell>
+      </PremiumConfigurationShell>
     );
   }
 
   if (missingConfigs) {
     return (
-      <ImportsPremiumShell theme={theme} onThemeChange={setTheme}>
-        <ConfigurationGate missingConfigs={missingConfigs} theme={theme} />
-      </ImportsPremiumShell>
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumConfigurationGate
+          theme={theme}
+          description="上传文件前需要配置对象存储和 Embedding 模型。"
+          statuses={[
+            { label: "对象存储", missing: missingConfigs.storage },
+            { label: "Embedding 模型", missing: missingConfigs.embedding },
+          ]}
+        />
+      </PremiumConfigurationShell>
     );
   }
 
   return (
-    <ImportsPremiumShell theme={theme} onThemeChange={setTheme}>
+    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
       <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
         <header
           className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5"
@@ -553,98 +549,7 @@ export function ImportsPremiumPage() {
           </aside>
         </main>
       </div>
-    </ImportsPremiumShell>
-  );
-}
-
-function ImportsPremiumShell({
-  theme,
-  onThemeChange,
-  children,
-}: {
-  theme: ThemeMode;
-  onThemeChange: (theme: ThemeMode) => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className="premium-theme ask-premium-page imports-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] tracking-normal text-[#111315]" data-theme={theme} data-premium-theme={theme} style={{ fontFamily: IMPORTS_FONT_STACK }}>
-      <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
-      <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,var(--premium-glow-primary),transparent_28rem),radial-gradient(circle_at_14%_92%,var(--premium-glow-secondary),transparent_30rem)]" />
-      <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:min-h-[calc(100vh-48px)] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
-          <PremiumRail theme={theme} onThemeChange={onThemeChange} />
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StateCard({
-  theme,
-  icon,
-  title,
-  description,
-}: {
-  theme: ThemeMode;
-  icon: ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
-      <div className="premium-surface grid w-full max-w-[420px] place-items-center rounded-[8px] p-6 text-center">
-        <div className="mb-4 grid size-12 place-items-center rounded-[8px] bg-[#111315] text-white dark:bg-white dark:text-[#111315]">
-          {icon}
-        </div>
-        <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">{title}</h1>
-        <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">{description}</p>
-      </div>
-    </div>
-  );
-}
-
-function ConfigurationGate({
-  missingConfigs,
-  theme,
-}: {
-  missingConfigs: { storage: boolean; embedding: boolean };
-  theme: ThemeMode;
-}) {
-  return (
-    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
-      <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
-        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
-          <Info size={24} />
-        </div>
-        <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">需要先完成配置</h1>
-        <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">上传文件前需要配置对象存储和 Embedding 模型。</p>
-        <div className="mx-auto mt-4 grid max-w-[280px] gap-2 text-left text-sm font-bold text-[var(--premium-ink-soft)]">
-          <ConfigStateRow label="对象存储" missing={missingConfigs.storage} />
-          <ConfigStateRow label="Embedding 模型" missing={missingConfigs.embedding} />
-        </div>
-        <Link href="/settings" className={`${BUTTON_PRIMARY_CLASS} mt-5 justify-center`}>
-          <span className="text-white dark:text-[#111315]">前往设置</span>
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function statePageBackgroundClass(theme: ThemeMode) {
-  return theme === "dark"
-    ? "bg-[#070908]"
-    : "bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)]";
-}
-
-function ConfigStateRow({ label, missing }: { label: string; missing: boolean }) {
-  return (
-    <div className="flex items-center justify-between rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-3 py-2">
-      <span>{label}</span>
-      <span className={missing ? "text-rose-600 dark:text-rose-300" : "text-emerald-700 dark:text-emerald-300"}>
-        {missing ? "未配置" : "已就绪"}
-      </span>
-    </div>
+    </PremiumConfigurationShell>
   );
 }
 
@@ -1247,9 +1152,6 @@ function stageText(stage: string) {
 function stageStatusText(status: string) {
   return status === "RUNNING" ? "处理中" : statusText(status);
 }
-
-const IMPORTS_FONT_STACK =
-  '"Sora", "Outfit", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
 
 const APP_FONT_STACK =
   'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';

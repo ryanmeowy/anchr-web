@@ -37,7 +37,8 @@ import type {
   UploadIngestionItem,
 } from "./types";
 
-const TOKEN_KEY = "anchr.accessToken";
+export const ACCESS_TOKEN_STORAGE_KEY = "anchr.accessToken";
+const TOKEN_KEY = ACCESS_TOKEN_STORAGE_KEY;
 const DEFAULT_GUEST_ACCESS_TOKEN = "xIu-ZTIfGSjRcWZpw23Le0c7SwAv1sjI";
 export const ACCESS_TOKEN_CHANGED_EVENT = "anchr:access-token-changed";
 

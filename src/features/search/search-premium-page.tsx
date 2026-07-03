@@ -29,6 +29,12 @@ import {
   type ReactNode,
   type UIEvent,
 } from "react";
+import {
+  PremiumConfigurationGate,
+  PremiumConfigurationLoading,
+  PremiumConfigurationShell,
+  usePremiumModelConfiguration,
+} from "@/components/app/premium-configuration-gate";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
@@ -175,6 +181,7 @@ export function SearchPremiumPage() {
     queryFn: apiClient.ingestionCapabilities,
     refetchOnWindowFocus: false,
   });
+  const modelConfiguration = usePremiumModelConfiguration();
 
   const elasticsearchHealthQuery = useQuery({
     queryKey: ["health", "elasticsearch"],
@@ -492,6 +499,33 @@ export function SearchPremiumPage() {
     }
     setSelectedKbIds(ids);
   };
+
+  if (modelConfiguration.isLoading) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumConfigurationLoading
+          theme={theme}
+          title="正在检查模型配置"
+          description="稍等片刻，系统正在确认向量模型与生成模型状态。"
+        />
+      </PremiumConfigurationShell>
+    );
+  }
+
+  if (modelConfiguration.missing.embedding || modelConfiguration.missing.generation) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumConfigurationGate
+          theme={theme}
+          description="使用搜索功能需要配置 Embedding 模型和 Generation 模型。"
+          statuses={[
+            { label: "Embedding 模型", missing: modelConfiguration.missing.embedding },
+            { label: "Generation 模型", missing: modelConfiguration.missing.generation },
+          ]}
+        />
+      </PremiumConfigurationShell>
+    );
+  }
 
   return (
     <div
