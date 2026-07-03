@@ -68,7 +68,7 @@ import type {
 
 const DEFAULT_SEARCH_LIMIT = 10;
 const MIN_SEARCH_LIMIT = 1;
-const MAX_SEARCH_LIMIT = 200;
+const MAX_SEARCH_LIMIT = 10;
 const RECENT_SEARCH_PAGE_SIZE = 8;
 
 const SOURCE_TYPE_LABEL: Record<string, string> = {
@@ -1425,7 +1425,7 @@ function FilterPanel({
               style={{ colorScheme: "dark" }}
               aria-label="召回数量"
             />
-            <span>有效值 1-200</span>
+            <span>有效值 1-10</span>
           </div>
         </FilterBlock>
 
