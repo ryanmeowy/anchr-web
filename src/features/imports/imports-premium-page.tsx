@@ -537,7 +537,6 @@ export function ImportsPremiumPage() {
                   <DedupeStrategyPicker
                     options={dedupeOptions}
                     value={effectiveDedupeStrategy}
-                    defaultValue={defaultDedupeStrategy}
                     isLoading={capabilitiesQuery.isLoading}
                     onSelect={setDedupeStrategy}
                   />
@@ -816,13 +815,11 @@ function KnowledgeBasePicker({
 function DedupeStrategyPicker({
   options,
   value,
-  defaultValue,
   isLoading,
   onSelect,
 }: {
   options: string[];
   value: string;
-  defaultValue: string;
   isLoading: boolean;
   onSelect: (value: string) => void;
 }) {
@@ -853,7 +850,7 @@ function DedupeStrategyPicker({
             role="radio"
             aria-checked={selected}
           >
-            <span className="max-w-full truncate">{dedupeDisplayName(item, defaultValue)}</span>
+            <span className="max-w-full truncate">{dedupeDisplayName(item)}</span>
           </button>
         );
       })}
@@ -1223,7 +1220,7 @@ function supportedFormatDisplayName(fileType: string) {
   return map[fileType] ?? fileType;
 }
 
-function dedupeDisplayName(strategy: string, defaultStrategy: string) {
+function dedupeDisplayName(strategy: string) {
   const map: Record<string, string> = {
     SKIP: "跳过",
     OVERWRITE: "覆盖",

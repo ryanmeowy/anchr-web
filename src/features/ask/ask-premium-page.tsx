@@ -51,6 +51,7 @@ type ChatMessage = {
   turnId?: string;
   citations?: ConversationCitation[];
   assetScope?: string[];
+  answerMode?: ConversationAnswerMode | string;
   pending?: boolean;
   error?: string;
 };
@@ -520,6 +521,7 @@ export function AskPremiumPage() {
         content: "",
         sessionId: targetSessionId,
         assetScope: requestAssetScope ? [requestAssetScope.assetId] : [],
+        answerMode: selectedAnswerMode,
         pending: true,
       };
       const requestId = makeMessageId("stream");
@@ -555,6 +557,7 @@ export function AskPremiumPage() {
             updateAssistantMessage(targetSessionId, assistantMessage.id, (message) => ({
               ...message,
               pending: true,
+              answerMode: event.answerMode ?? message.answerMode,
               content: message.content || traceText(event.stage),
             }));
           },
@@ -600,6 +603,7 @@ export function AskPremiumPage() {
               pending: false,
               turnId: event.turnId,
               assetScope: event.assetScope ?? message.assetScope,
+              answerMode: event.answerMode ?? message.answerMode,
               content: stripTraceText(message.content) || "未生成回答。",
             }));
             setConversations((previous) => previous.map((item) => (
@@ -1506,11 +1510,20 @@ function PremiumChatBubble({
       </div>
       <div className="ask-premium-assistant-content min-w-0 flex-1 py-1">
         <div className="mb-2 flex items-center justify-between gap-4">
-          <strong className="text-[13px]">Anchr Answer</strong>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <strong className="text-[13px]">Anchr Answer</strong>
+            {message.answerMode ? (
+              <span
+                className="inline-flex min-h-6 items-center rounded-full border border-blue-500/15 bg-blue-500/10 px-2.5 text-[10px] font-black text-blue-700 dark:text-blue-200"
+                title={`回答模式：${message.answerMode}`}
+              >
+                {answerModeDisplayName(message.answerMode)}
+              </span>
+            ) : null}
+          </div>
           {message.pending ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#bbff66]/25 px-2.5 py-1 text-[11px] font-black text-[#4e7b13]">
-              <span className="size-1.5 animate-pulse rounded-full bg-[#4e7b13]" />
-              流式回答中
+            <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#bbff66]/25" aria-label="流式回答中" title="流式回答中">
+              <span className="size-1.5 animate-pulse rounded-full bg-[#4e7b13]" aria-hidden="true" />
             </span>
           ) : null}
         </div>
@@ -1581,10 +1594,18 @@ function turnsToMessages(turns: ConversationTurn[]) {
       turnId: turn.turnId,
       citations: turn.citations ?? [],
       assetScope: turn.assetScope ?? [],
+      answerMode: turn.answerMode,
     });
 
     return messages;
   });
+}
+
+function answerModeDisplayName(answerMode: string) {
+  const normalizedMode = answerMode.toUpperCase();
+  const option = ANSWER_MODES.find((item) => item.value === normalizedMode);
+
+  return option ? `${option.label} · ${option.value}` : answerMode;
 }
 
 function mergeConversations(primary: ConversationSession[], secondary: ConversationSession[]) {

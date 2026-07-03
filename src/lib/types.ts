@@ -106,24 +106,6 @@ export type ElasticsearchHealth = {
   error?: string | null;
 };
 
-export type DocumentAsset = {
-  id: string;
-  kbId: string;
-  fileName: string;
-  title?: string;
-  fileType?: string;
-  mimeType?: string;
-  sizeBytes?: number;
-  sourceUrl?: string;
-  parseStatus: string;
-  indexStatus: string;
-  segmentCount: number;
-  errorCode?: string;
-  errorMessage?: string;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
 export type RecentQuestion = {
   turnId: string;
   sessionId?: string | null;
@@ -168,18 +150,6 @@ export type RecentSearch = {
 
 export type ConversationAnswerMode = "STRICT" | "SUMMARY" | "EXPLORE";
 
-export type RecentDocument = {
-  taskId: string;
-  kbId: string;
-  knowledgeBaseName?: string | null;
-  status: string;
-  totalCount: number;
-  successCount: number;
-  failureCount: number;
-  runningCount: number;
-  importedAt?: string;
-};
-
 export type RecentQuestionList = {
   items: RecentQuestion[];
   nextCursor?: string | null;
@@ -193,34 +163,6 @@ export type RecentCitationList = {
 export type RecentSearchList = {
   items: RecentSearch[];
   nextCursor?: string | null;
-};
-
-export type RecentDocumentList = {
-  items: RecentDocument[];
-  nextCursor?: string | null;
-};
-
-export type HomeSummary = {
-  favoriteKbs?: Array<{
-    kbId: string;
-    name: string;
-    documentCount: number;
-    segmentCount: number;
-    updatedAt?: string;
-  }>;
-  recentQuestions?: RecentQuestion[];
-  recentCitations?: RecentCitation[];
-  recentIngestionTasks?: IngestionTaskSummary[];
-  helpLinks?: Array<{
-    title: string;
-    url: string;
-  }>;
-  warnings?: string[];
-  state?: {
-    loading: boolean;
-    empty: boolean;
-    error: boolean;
-  };
 };
 
 export type SupportedFormat = {

@@ -9,13 +9,10 @@ import type {
   CapabilityParams,
   ConversationAnswerMode,
   ConversationCitation,
-  ConversationMessage,
   ConversationMessageList,
   ConversationSession,
   ConversationSessionList,
-  DocumentAsset,
   ElasticsearchHealth,
-  HomeSummary,
   IngestionCapability,
   IngestionTaskList,
   IngestionTask,
@@ -29,7 +26,6 @@ import type {
   PreviewRequest,
   PreviewSegment,
   RecentCitationList,
-  RecentDocumentList,
   RecentQuestionList,
   RecentSearchList,
   SearchRequest,
@@ -242,18 +238,8 @@ export const apiClient = {
     request<RecentCitationList>(`/api/v1/activity/recent-citations?${activityQuery(limit, cursor)}`),
   recentSearch: (limit = 10, cursor?: string | null) =>
     request<RecentSearchList>(`/api/v1/activity/recent-search?${activityQuery(limit, cursor)}`),
-  recentDocument: (limit = 10, cursor?: string | null) =>
-    request<RecentDocumentList>(`/api/v1/activity/recent-document?${activityQuery(limit, cursor)}`),
   listKnowledgeBases: (page = 1, size = 20) =>
     request<PagedList<KnowledgeBase>>("/api/v1/kbs/search", { method: "POST", body: { page, size, status: "0" } }),
-  searchKnowledgeBases: async (query: string, limit = 50) => {
-    const result = await request<KnowledgeBaseListResponse>("/api/v1/kbs/search", {
-      method: "POST",
-      body: { keyword: query, page: 1, size: limit, status: "0" },
-    });
-
-    return result.items;
-  },
   queryKnowledgeBases: (body: KnowledgeBaseQueryRequest) =>
     request<KnowledgeBaseListResponse>("/api/v1/kbs/search", { method: "POST", body }),
   getKnowledgeBaseStats: (kbIds: string[]) =>
@@ -268,10 +254,6 @@ export const apiClient = {
     request<KnowledgeBase>(`/api/v1/kbs/${encodeURIComponent(kbId)}`, { method: "PATCH", body }),
   archiveKnowledgeBase: (kbId: string) =>
     request<null>(`/api/v1/kbs/${encodeURIComponent(kbId)}`, { method: "DELETE" }),
-  listDocuments: (kbId: string, page = 1, size = 20) =>
-    request<PagedList<DocumentAsset>>(
-      `/api/v1/kbs/${encodeURIComponent(kbId)}/documents?page=${page}&size=${size}`,
-    ),
   ingestionCapabilities: () =>
     request<IngestionCapability>("/api/v1/ingestion/capabilities"),
   listIngestionTasks: (kbId: string, size = 10) =>
@@ -321,8 +303,6 @@ export const apiClient = {
     request<SearchPage>("/api/v1/search/kb", { method: "POST", body }),
   listConversations: (limit = 50, cursor?: string | null) =>
     request<ConversationSessionList>(`/api/conversations?${conversationListQuery(limit, cursor)}`),
-  getConversation: (sessionId: string) =>
-    request<ConversationSession>(`/api/conversations/${encodeURIComponent(sessionId)}`),
   createConversation: (body: { title?: string | null; kbIds?: string[] }) =>
     request<ConversationSession>("/api/conversations", {
       method: "POST",
@@ -336,11 +316,6 @@ export const apiClient = {
   deleteConversation: (sessionId: string) =>
     request<null>(`/api/conversations/${encodeURIComponent(sessionId)}`, {
       method: "DELETE",
-    }),
-  sendMessage: (sessionId: string, body: ConversationMessageRequest) =>
-    request<ConversationMessage>(`/api/conversations/${encodeURIComponent(sessionId)}/messages`, {
-      method: "POST",
-      body,
     }),
   sendMessageStream: async (
     sessionId: string,
@@ -405,10 +380,6 @@ export const apiClient = {
       method: "POST",
       body,
     }),
-  previewNeighbors: (segmentId: string) =>
-    request<{ items?: PreviewSegment["surroundingChunks"] }>(
-      `/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}/neighbors?before=2&after=2`,
-    ),
   // ── settings: capability config ──────────────────────────────────────
 
   getCapabilityConfig: (capability: string) =>
