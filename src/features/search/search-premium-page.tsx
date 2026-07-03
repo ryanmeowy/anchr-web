@@ -1461,6 +1461,11 @@ function KnowledgeBasePicker({
   onClose: () => void;
   onChange: (ids: string[]) => void;
 }) {
+  const handleChange = (ids: string[]) => {
+    onChange(ids);
+    onClose();
+  };
+
   return (
     <div
       className="search-premium-kb-picker relative"
@@ -1492,7 +1497,7 @@ function KnowledgeBasePicker({
                 label="全部知识库"
                 selected={selectedKbIds.length === 0}
                 icon={<Database size={13} />}
-                onClick={() => onChange([])}
+                onClick={() => handleChange([])}
               />
               {items.map((item) => (
                 <PickerOption
@@ -1500,7 +1505,7 @@ function KnowledgeBasePicker({
                   label={item.name}
                   selected={selectedKbIds.includes(item.id)}
                   icon={<Folder size={13} />}
-                  onClick={() => onChange(toggleSelection(selectedKbIds, item.id))}
+                  onClick={() => handleChange(toggleSelection(selectedKbIds, item.id))}
                 />
               ))}
             </>
