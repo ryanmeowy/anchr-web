@@ -1425,7 +1425,7 @@ function FilterPanel({
               style={{ colorScheme: "dark" }}
               aria-label="召回数量"
             />
-            <span>有效值 1-10</span>
+            <span>有效值 {MIN_SEARCH_LIMIT}-{MAX_SEARCH_LIMIT}</span>
           </div>
         </FilterBlock>
 
