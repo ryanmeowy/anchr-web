@@ -30,6 +30,7 @@ import type {
   RecentSearchList,
   SearchRequest,
   SearchPage,
+  SegmentIndexStatus,
   StorageConfig,
   StorageConfigUpdateRequest,
   StorageConnectionTestResult,
@@ -391,11 +392,17 @@ export const apiClient = {
     request<CapabilityConfig>(`/api/v1/settings/${encodeURIComponent(capability)}`, { method: "POST", body }),
   updateCapabilityConfig: (capability: string, id: number, body: CapabilityConfigUpdateRequest) =>
     request<CapabilityConfig>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}`, { method: "PATCH", body }),
-  selectCapabilityConfig: (capability: string, id: number) =>
-    request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}/select`, { method: "PUT" }),
-  reindexCapability: () =>
-    request<null>("/api/v1/ingestion/reindex", { method: "POST" }),
-  deleteCapabilityConfig: (capability: string, id: number) =>
+ selectCapabilityConfig: (capability: string, id: number) =>
+   request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}/select`, { method: "PUT" }),
+  getIndexStatus: () =>
+    request<SegmentIndexStatus>("/api/v1/index/status"),
+  retryIndexCreate: () =>
+    request<boolean>("/api/v1/index/retry", { method: "POST" }),
+  prepareIndexRebuild: () =>
+    request<string>("/api/v1/index/rebuild/prepare", { method: "POST" }),
+  confirmIndexRebuild: (taskId: string) =>
+    request<boolean>("/api/v1/index/rebuild/confirm", { method: "POST", body: { taskId } }),
+ deleteCapabilityConfig: (capability: string, id: number) =>
     request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}`, { method: "DELETE" }),
   getCapabilityParams: (capability: string) =>
     request<CapabilityParams>(`/api/v1/settings/${encodeURIComponent(capability)}/params`),

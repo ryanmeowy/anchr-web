@@ -29,6 +29,13 @@ import {
   type WheelEvent,
 } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
+import {
+  PremiumConfigurationLoading,
+  PremiumConfigurationShell,
+  PremiumIndexGate,
+  PremiumSystemConfigurationGate,
+  usePremiumSystemConfiguration,
+} from "@/components/app/premium-configuration-gate";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatNumber, statusText } from "@/lib/format";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
@@ -132,11 +139,13 @@ export function LibraryPremiumPage() {
   });
 
   const questionsQuery = useInfiniteQuery({
-    queryKey: ["activity", "recent-questions", RECENT_LIMIT],
-    queryFn: ({ pageParam }) => apiClient.recentQuestions(RECENT_LIMIT, pageParam),
+    queryKey: ["activity", "recent-questions", 5],
+    queryFn: ({ pageParam }) => apiClient.recentQuestions(5, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
+
+  const systemConfig = usePremiumSystemConfiguration();
 
   const items = useMemo(() => kbsQuery.data?.items ?? [], [kbsQuery.data?.items]);
   const recentCitations = useMemo(
@@ -315,16 +324,37 @@ export function LibraryPremiumPage() {
     });
   };
 
+  if (systemConfig.isLoading) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumConfigurationLoading
+          theme={theme}
+          title="正在检查系统配置"
+          description="稍等片刻，系统正在确认各项能力配置状态。"
+        />
+      </PremiumConfigurationShell>
+    );
+  }
+
+  if (systemConfig.missingAny) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumSystemConfigurationGate theme={theme} />
+      </PremiumConfigurationShell>
+    );
+  }
+
+  if (!systemConfig.indexReady && systemConfig.indexStatus) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumIndexGate theme={theme} indexStatus={systemConfig.indexStatus} />
+      </PremiumConfigurationShell>
+    );
+  }
+
   return (
-    <div className="premium-theme ask-premium-page library-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>
-      <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(17,19,21,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(17,19,21,0.055)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
-      <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,rgba(187,255,102,0.34),transparent_28rem),radial-gradient(circle_at_14%_92%,rgba(49,88,255,0.15),transparent_30rem)]" />
-
-      <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:min-h-[calc(100vh-48px)] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
-          <PremiumRail theme={theme} onThemeChange={setTheme} />
-
-          <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
+    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+      <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
             <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
                 LIBRARY
@@ -580,9 +610,7 @@ export function LibraryPremiumPage() {
               </aside>
             </main>
           </div>
-        </div>
-      </div>
-    </div>
+    </PremiumConfigurationShell>
   );
 }
 

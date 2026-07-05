@@ -30,11 +30,23 @@ import type {
   CapabilityConfigUpdateRequest,
   CapabilityConnectionTestResult,
   CapabilityParams,
+  SegmentIndexStatus,
   StorageConnectionTestResult,
   StorageConfigUpdateRequest,
 } from "@/lib/types";
 
 type CapabilityName = "GENERATION" | "EMBEDDING" | "RERANK" | "MULTI_EMBEDDING";
+
+type RebuildDialogPhase = "CONFIRM_SWITCH" | "CONFIRM_REBUILD" | "ERROR";
+type RebuildDialogState = {
+  phase: RebuildDialogPhase;
+  capability: CapabilityName;
+  id: number;
+  taskId?: string;
+  actualDim?: number;
+  expectedDim?: number;
+  error?: string;
+} | null;
 
 type CapabilityOption = {
   value: CapabilityName;
@@ -247,7 +259,7 @@ export function SettingsPremiumPage() {
   const [selectedType, setSelectedType] = useState<CapabilityName>("GENERATION");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [isAdding, setIsAdding] = useState(false);
-  const [pendingEnable, setPendingEnable] = useState<{ capability: CapabilityName; id: number } | null>(null);
+  const [rebuildDialog, setRebuildDialog] = useState<RebuildDialogState>(null);
   const [enablingTarget, setEnablingTarget] = useState<{ capability: CapabilityName; id: number } | null>(null);
   const [enableError, setEnableError] = useState<{ capability: CapabilityName; message: string } | null>(null);
 
@@ -403,8 +415,29 @@ export function SettingsPremiumPage() {
     },
   });
 
-  const reindexMutation = useMutation({
-    mutationFn: () => apiClient.reindexCapability(),
+  const indexStatusQuery = useQuery({
+    queryKey: ["index", "status"],
+    queryFn: () => apiClient.getIndexStatus(),
+    refetchInterval: (query) => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
+      const status = query.state.data?.status;
+      if (status === "INITIALIZING" || status === "REBUILDING") return 2000;
+      if (status === "NOT_READY") return 5000;
+      return 30000;
+    },
+  });
+
+  const prepareRebuildMutation = useMutation({
+    mutationFn: () => apiClient.prepareIndexRebuild(),
+  });
+
+  const confirmRebuildMutation = useMutation({
+    mutationFn: (taskId: string) => apiClient.confirmIndexRebuild(taskId),
+  });
+
+  const retryIndexMutation = useMutation({
+    mutationFn: () => apiClient.retryIndexCreate(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["index", "status"] }),
   });
 
   const hasEnabledEmbeddingConfig = useMemo(
@@ -416,27 +449,61 @@ export function SettingsPremiumPage() {
 
   const handleEnable = useCallback((capability: CapabilityName, id: number) => {
     if (embeddingSwitchAffects(capability) && hasEnabledEmbeddingConfig) {
-      setPendingEnable({ capability, id });
+      setRebuildDialog({ phase: "CONFIRM_SWITCH", capability, id });
       return;
     }
     enableMutation.mutate({ capability, id });
   }, [enableMutation, hasEnabledEmbeddingConfig]);
 
-  const confirmEnable = useCallback(() => {
-    if (!pendingEnable) return;
-    const { capability, id } = pendingEnable;
-    setPendingEnable(null);
+  const confirmSwitch = useCallback(() => {
+    if (!rebuildDialog) return;
+    const { capability, id } = rebuildDialog;
     enableMutation.mutate(
       { capability, id },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
           if (embeddingSwitchAffects(capability)) {
-            reindexMutation.mutate();
+            try {
+              const taskId = await prepareRebuildMutation.mutateAsync();
+              if (taskId) {
+                const status = indexStatusQuery.data;
+                setRebuildDialog({
+                  phase: "CONFIRM_REBUILD",
+                  capability,
+                  id,
+                  taskId,
+                  actualDim: status?.actualDim ?? undefined,
+                  expectedDim: status?.expectedDim ?? undefined,
+                });
+              } else {
+                setRebuildDialog(null);
+              }
+            } catch (error) {
+              setRebuildDialog({ phase: "ERROR", capability, id, error: getErrorMessage(error, "准备重建失败") });
+            }
+          } else {
+            setRebuildDialog(null);
           }
+        },
+        onError: (error) => {
+          setRebuildDialog({ phase: "ERROR", capability, id, error: getErrorMessage(error, "启用失败") });
         },
       },
     );
-  }, [enableMutation, pendingEnable, reindexMutation]);
+  }, [rebuildDialog, enableMutation, prepareRebuildMutation, indexStatusQuery.data]);
+
+  const confirmRebuild = useCallback(() => {
+    if (!rebuildDialog?.taskId) return;
+    confirmRebuildMutation.mutate(rebuildDialog.taskId, {
+      onSuccess: () => {
+        setRebuildDialog(null);
+        queryClient.invalidateQueries({ queryKey: ["index", "status"] });
+      },
+      onError: (error) => {
+        setRebuildDialog({ ...rebuildDialog, phase: "ERROR", error: getErrorMessage(error, "确认重建失败") });
+      },
+    });
+  }, [rebuildDialog, confirmRebuildMutation, queryClient]);
 
   const enabledConfigsByCapability = useMemo(
     () => ({
@@ -522,6 +589,24 @@ export function SettingsPremiumPage() {
                     <RuntimeStatusPanel
                       enabledConfigs={enabledConfigsByCapability}
                       configsByCapability={configsByCapability}
+                      indexStatus={indexStatusQuery.data}
+                      onRetryIndex={() => retryIndexMutation.mutate()}
+                      onPrepareRebuild={() => {
+                        prepareRebuildMutation.mutate(undefined, {
+                          onSuccess: (taskId) => {
+                            if (taskId && indexStatusQuery.data) {
+                              setRebuildDialog({
+                                phase: "CONFIRM_REBUILD",
+                                capability: "EMBEDDING",
+                                id: 0,
+                                taskId,
+                                actualDim: indexStatusQuery.data.actualDim ?? undefined,
+                                expectedDim: indexStatusQuery.data.expectedDim ?? undefined,
+                              });
+                            }
+                          },
+                        });
+                      }}
                       storageConfigured={isGuest
                         ? Boolean(storageStatusQuery.data?.enabled)
                         : Boolean(storageStatusQuery.data?.endpoint && storageStatusQuery.data?.bucket)}
@@ -543,34 +628,60 @@ export function SettingsPremiumPage() {
         </div>
       </div>
 
-      {hasOwnerAccess && pendingEnable != null ? (
+      {hasOwnerAccess && rebuildDialog != null ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm">
           <div className="w-full max-w-[440px] rounded-[8px] border border-[var(--premium-line)] bg-[rgba(255,253,245,0.92)] p-4 shadow-[var(--premium-menu-shadow)] backdrop-blur-xl dark:bg-[var(--premium-elevated)]">
             <div className="flex items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-3">
                 <span className="settings-dialog-icon grid size-10 shrink-0 place-items-center rounded-[8px] bg-[var(--premium-ink)] text-white shadow-[0_14px_32px_rgba(17,19,21,0.16)]">
-                  <AlertTriangle size={19} />
+                  {rebuildDialog.phase === "ERROR" ? <AlertCircle size={19} /> : <AlertTriangle size={19} />}
                 </span>
                 <div className="min-w-0">
-                  <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">确认切换 Embedding 模型</h2>
-                  <p className="mt-1 text-xs font-black text-[var(--premium-muted)]">VECTOR INDEX REBUILD</p>
+                  <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">
+                    {rebuildDialog.phase === "CONFIRM_SWITCH" ? "确认切换 Embedding 模型"
+                     : rebuildDialog.phase === "CONFIRM_REBUILD" ? "确认重建向量索引"
+                     : "操作失败"}
+                  </h2>
+                  <p className="mt-1 text-xs font-black text-[var(--premium-muted)]">
+                    {rebuildDialog.phase === "CONFIRM_SWITCH" ? "VECTOR INDEX REBUILD"
+                     : rebuildDialog.phase === "CONFIRM_REBUILD" ? "DIMENSION MIGRATION"
+                     : "ERROR"}
+                  </p>
                 </div>
               </div>
-              <button type="button" onClick={() => setPendingEnable(null)} className="grid size-8 shrink-0 place-items-center rounded-[8px] text-[var(--premium-muted)] hover:bg-white/70 dark:hover:bg-[var(--premium-panel-muted)]" aria-label="关闭">
+              <button type="button" onClick={() => setRebuildDialog(null)} className="grid size-8 shrink-0 place-items-center rounded-[8px] text-[var(--premium-muted)] hover:bg-white/70 dark:hover:bg-[var(--premium-panel-muted)]" aria-label="关闭">
                 <X size={18} />
               </button>
             </div>
             <div className="mt-4 rounded-[8px] border border-[rgba(49,88,255,0.16)] bg-[rgba(49,88,255,0.08)] p-3 text-[11px] font-black leading-[1.55] text-[var(--premium-ink-soft)]">
-              <p>
-                切换 Embedding 或 Multi Embedding 模型将触发向量重建流程，期间检索结果可能短暂不可用。
-              </p>
+              {rebuildDialog.phase === "CONFIRM_SWITCH" ? (
+                <p>切换 Embedding 或 Multi Embedding 模型将触发向量重建流程，期间检索结果可能短暂不可用。</p>
+              ) : rebuildDialog.phase === "CONFIRM_REBUILD" ? (
+                <p>向量维度从 {rebuildDialog.actualDim} 变更为 {rebuildDialog.expectedDim}，系统将迁移存量文档向量，期间检索功能暂不可用。</p>
+              ) : (
+                <p>{rebuildDialog.error ?? "发生未知错误"}</p>
+              )}
             </div>
             <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button type="button" onClick={() => setPendingEnable(null)} className={`${BUTTON_SECONDARY_CLASS} flex-1`}>
+              <button type="button" onClick={() => setRebuildDialog(null)} className={`${BUTTON_SECONDARY_CLASS} flex-1`}>
                 取消
               </button>
-              <button type="button" onClick={confirmEnable} className={`${BUTTON_PRIMARY_CLASS} flex-1`}>
-                确定切换
+              <button
+                type="button"
+                disabled={enableMutation.isPending || prepareRebuildMutation.isPending || confirmRebuildMutation.isPending}
+              onClick={() => {
+                if (rebuildDialog.phase === "CONFIRM_SWITCH") confirmSwitch();
+                else if (rebuildDialog.phase === "CONFIRM_REBUILD") confirmRebuild();
+                else setRebuildDialog(null);
+              }}
+                className={`${BUTTON_PRIMARY_CLASS} flex-1`}
+              >
+                {enableMutation.isPending || prepareRebuildMutation.isPending || confirmRebuildMutation.isPending ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : null}
+                {rebuildDialog.phase === "CONFIRM_SWITCH" ? "确定切换"
+                 : rebuildDialog.phase === "CONFIRM_REBUILD" ? "确认重建"
+                 : "关闭"}
               </button>
             </div>
           </div>
@@ -1177,11 +1288,17 @@ function ConfigPanel({
 function RuntimeStatusPanel({
   enabledConfigs,
   configsByCapability,
+  indexStatus,
+  onRetryIndex,
+  onPrepareRebuild,
   storageConfigured,
   storageLoading,
 }: {
   enabledConfigs: Record<CapabilityName, CapabilityConfig | null>;
   configsByCapability: Record<CapabilityName, CapabilityConfig[]>;
+  indexStatus?: SegmentIndexStatus;
+  onRetryIndex: () => void;
+  onPrepareRebuild: () => void;
   storageConfigured: boolean;
   storageLoading: boolean;
 }) {
@@ -1237,6 +1354,50 @@ function RuntimeStatusPanel({
                 </div>
               );
             })}
+         </div>
+       </div>
+
+        <div className="settings-status-card grid gap-2 rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
+          <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
+            <span>索引状态</span>
+            <strong className={
+              !indexStatus ? "text-[var(--premium-muted)]"
+              : indexStatus.status === "READY" && indexStatus.actualDim != null && indexStatus.actualDim === indexStatus.expectedDim ? "text-[#426b09]"
+              : indexStatus.status === "REBUILDING" || indexStatus.status === "INITIALIZING" ? "text-[var(--premium-blue)]"
+              : "text-rose-600 dark:text-rose-300"
+            }>
+              {!indexStatus ? "检查中"
+              : indexStatus.status === "READY" && indexStatus.actualDim != null && indexStatus.actualDim === indexStatus.expectedDim ? "已就绪"
+              : indexStatus.status === "INITIALIZING" ? "初始化中"
+              : indexStatus.status === "REBUILDING" ? "重建中"
+              : indexStatus.status === "READY" && indexStatus.actualDim != null && indexStatus.actualDim !== indexStatus.expectedDim ? "维度不匹配"
+              : "初始化失败"}
+            </strong>
+          </div>
+          {indexStatus?.status === "REBUILDING" && indexStatus.rebuildProgress ? (
+            <div className="flex items-center gap-2">
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-black/10 dark:bg-[#343a36]" aria-hidden="true">
+                <span
+                  className="block h-full rounded-full bg-[linear-gradient(90deg,var(--premium-blue),var(--premium-accent))] shadow-[0_0_18px_rgba(49,88,255,0.28)]"
+                  style={{ width: `${indexStatus.rebuildProgress.total > 0 ? Math.round((indexStatus.rebuildProgress.migrated / indexStatus.rebuildProgress.total) * 100) : 0}%` }}
+                />
+              </div>
+              <span className="text-[10px] font-black text-[var(--premium-muted)]">
+                {indexStatus.rebuildProgress.migrated}/{indexStatus.rebuildProgress.total}
+              </span>
+            </div>
+          ) : null}
+          <div className="flex items-center gap-2">
+            {indexStatus?.status === "NOT_READY" && indexStatus.lastError ? (
+              <button type="button" onClick={onRetryIndex} className={BUTTON_SECONDARY_CLASS}>
+                <span className={ACTION_BUTTON_LABEL_CLASS}>重试</span>
+              </button>
+            ) : null}
+            {indexStatus?.status === "READY" && indexStatus.actualDim != null && indexStatus.expectedDim != null && indexStatus.actualDim !== indexStatus.expectedDim ? (
+              <button type="button" onClick={onPrepareRebuild} className={BUTTON_SECONDARY_CLASS}>
+                <span className={ACTION_BUTTON_LABEL_CLASS}>重建</span>
+              </button>
+            ) : null}
           </div>
         </div>
 

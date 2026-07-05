@@ -16,10 +16,11 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  PremiumConfigurationGate,
   PremiumConfigurationLoading,
   PremiumConfigurationShell,
-  usePremiumModelConfiguration,
+  PremiumIndexGate,
+  PremiumSystemConfigurationGate,
+  usePremiumSystemConfiguration,
 } from "@/components/app/premium-configuration-gate";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
@@ -145,11 +146,12 @@ export function AskPremiumPage() {
     queryFn: () => apiClient.listKnowledgeBases(1, 50),
   });
 
+  const systemConfig = usePremiumSystemConfiguration();
+
   const generationQuery = useQuery({
     queryKey: ["settings", "generation", "all"],
     queryFn: () => apiClient.getAllCapabilityConfigs("generation"),
   });
-  const modelConfiguration = usePremiumModelConfiguration();
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -782,29 +784,30 @@ export function AskPremiumPage() {
     setSelectedKbIdsValue([...selectedKbIds, kbId]);
   };
 
-  if (modelConfiguration.isLoading) {
+  if (systemConfig.isLoading) {
     return (
       <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
         <PremiumConfigurationLoading
           theme={theme}
-          title="正在检查模型配置"
-          description="稍等片刻，系统正在确认向量模型与生成模型状态。"
+          title="正在检查系统配置"
+          description="稍等片刻，系统正在确认各项能力配置状态。"
         />
       </PremiumConfigurationShell>
     );
   }
 
-  if (modelConfiguration.missing.embedding || modelConfiguration.missing.generation) {
+  if (systemConfig.missingAny) {
     return (
       <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumConfigurationGate
-          theme={theme}
-          description="使用对话功能需要配置 Embedding 模型和 Generation 模型。"
-          statuses={[
-            { label: "Embedding 模型", missing: modelConfiguration.missing.embedding },
-            { label: "Generation 模型", missing: modelConfiguration.missing.generation },
-          ]}
-        />
+        <PremiumSystemConfigurationGate theme={theme} />
+      </PremiumConfigurationShell>
+    );
+  }
+
+  if (!systemConfig.indexReady && systemConfig.indexStatus) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumIndexGate theme={theme} indexStatus={systemConfig.indexStatus} />
       </PremiumConfigurationShell>
     );
   }

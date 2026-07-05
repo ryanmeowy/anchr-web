@@ -636,3 +636,23 @@ export type ConversationMessage = {
   suggestedQuestions?: string[];
   createdAt?: number;
 };
+export type SegmentIndexStatus = {
+  status: "NOT_READY" | "INITIALIZING" | "READY" | "REBUILDING";
+  indexExists: boolean;
+  actualDim?: number | null;
+  actualModel?: string | null;
+  expectedDim?: number | null;
+  expectedModel?: string | null;
+  pendingRebuild?: {
+    taskId: string;
+    expectedDim: number;
+    reason: string;
+    createdAt: string;
+  } | null;
+  rebuildProgress?: {
+    migrated: number;
+    total: number;
+    phase: "MIGRATING" | "SWITCHING_ALIAS" | "COMPLETED";
+  } | null;
+  lastError?: string | null;
+};

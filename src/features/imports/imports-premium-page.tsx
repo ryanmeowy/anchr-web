@@ -17,10 +17,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
-  PremiumConfigurationGate,
   PremiumConfigurationLoading,
   PremiumConfigurationShell,
-  usePremiumModelConfiguration,
+  PremiumIndexGate,
+  PremiumSystemConfigurationGate,
+  usePremiumSystemConfiguration,
 } from "@/components/app/premium-configuration-gate";
 import { FileTypeIcon, normalizeExtension } from "@/components/shared/file-type-icon";
 import { apiClient } from "@/lib/api-client";
@@ -88,13 +89,7 @@ export function ImportsPremiumPage() {
     refetchOnWindowFocus: false,
   });
 
-  const storageConfigQuery = useQuery({
-    queryKey: ["settings", "storage"],
-    queryFn: apiClient.getStorageConfig,
-    refetchOnWindowFocus: false,
-  });
-
-  const modelConfiguration = usePremiumModelConfiguration({ requireGeneration: false });
+  const systemConfig = usePremiumSystemConfiguration();
 
   const selectedKbId = kbId || kbsQuery.data?.items?.[0]?.id || "";
   const selectedKb = useMemo(
@@ -147,12 +142,7 @@ export function ImportsPremiumPage() {
     refetchOnReconnect: false,
   });
 
-  const configsLoading =
-    storageConfigQuery.isLoading ||
-    modelConfiguration.isLoading;
-  const hasStorage = storageConfigQuery.data != null;
-  const hasEmbedding = !modelConfiguration.missing.embedding;
-  const missingConfigs = !hasStorage || !hasEmbedding ? { storage: !hasStorage, embedding: !hasEmbedding } : null;
+
   const currentTask = activeTaskId ? currentTaskQuery.data : undefined;
   const selectedFilesSize = files.reduce((total, file) => total + file.size, 0);
 
@@ -161,10 +151,15 @@ export function ImportsPremiumPage() {
       const trimmedUrl = sourceUrl.trim();
       const displayName = urlTitle.trim() || buildDisplayNameFromUrl(trimmedUrl);
 
+      const urlFileType = inferFileType(displayName || trimmedUrl, undefined, supportedFormats);
+      if (urlFileType === null) {
+        throw new Error("URL 指向的文件格式不支持，请确认链接指向支持的文件类型。");
+      }
+
       return apiClient.createUrlIngestionTask(selectedKbId, {
         sourceUrl: trimmedUrl,
         fileName: displayName,
-        fileType: inferFileType(displayName || trimmedUrl, undefined, supportedFormats),
+        fileType: urlFileType,
         dedupeStrategy: effectiveDedupeStrategy,
       });
     },
@@ -261,29 +256,30 @@ export function ImportsPremiumPage() {
     createUrlMutation.mutate();
   }
 
-  if (configsLoading) {
+  if (systemConfig.isLoading) {
     return (
       <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
         <PremiumConfigurationLoading
           theme={theme}
-          title="正在检查导入配置"
-          description="稍等片刻，系统正在确认对象存储与向量模型状态。"
+          title="正在检查系统配置"
+          description="稍等片刻，系统正在确认各项能力配置状态。"
         />
       </PremiumConfigurationShell>
     );
   }
 
-  if (missingConfigs) {
+  if (systemConfig.missingAny) {
     return (
       <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumConfigurationGate
-          theme={theme}
-          description="上传文件前需要配置对象存储和 Embedding 模型。"
-          statuses={[
-            { label: "对象存储", missing: missingConfigs.storage },
-            { label: "Embedding 模型", missing: missingConfigs.embedding },
-          ]}
-        />
+        <PremiumSystemConfigurationGate theme={theme} />
+      </PremiumConfigurationShell>
+    );
+  }
+
+  if (!systemConfig.indexReady && systemConfig.indexStatus) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumIndexGate theme={theme} indexStatus={systemConfig.indexStatus} />
       </PremiumConfigurationShell>
     );
   }
@@ -558,11 +554,11 @@ function PendingFileCard({ file, supportedFormats }: { file: File; supportedForm
 
   return (
     <article className="grid min-h-[58px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] border border-black/10 bg-white/55 p-2 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-muted)]">
-      <FileTypeIcon fileName={file.name} sourceType={fileType} className="size-9" />
+      <FileTypeIcon fileName={file.name} sourceType={fileType ?? undefined} className="size-9" />
       <div className="min-w-0">
         <strong className="block truncate text-[13px] text-[var(--premium-ink)]">{file.name}</strong>
         <span className="mt-1 block truncate text-xs text-[var(--premium-muted)]">
-          {formatFileSize(file.size)} · {formatLabel(fileType)}
+          {formatFileSize(file.size)} · {fileType ? formatLabel(fileType) : "格式不支持"}
         </span>
       </div>
       <StatusBadge status="PENDING" />

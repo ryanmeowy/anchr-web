@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { apiClient } from "@/lib/api-client";
 import type { PremiumThemeMode } from "@/lib/premium-theme";
+import type { SegmentIndexStatus } from "@/lib/types";
 import { PremiumRail } from "./premium-rail";
 
 const PREMIUM_CONFIGURATION_FONT_STACK =
@@ -40,6 +41,18 @@ export function usePremiumModelConfiguration({ requireGeneration = true }: { req
     refetchOnWindowFocus: false,
   });
 
+  const indexStatusQuery = useQuery({
+    queryKey: ["index", "status"],
+    queryFn: () => apiClient.getIndexStatus(),
+    refetchInterval: (query) => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
+      const status = query.state.data?.status;
+      if (status === "INITIALIZING" || status === "REBUILDING") return 2000;
+      if (status === "NOT_READY") return 5000;
+      return 30000;
+    },
+  });
+
   const hasEmbedding =
     (embeddingQuery.isSuccess && (embeddingQuery.data?.length ?? 0) > 0) ||
     (multiEmbeddingQuery.isSuccess && (multiEmbeddingQuery.data?.length ?? 0) > 0);
@@ -47,18 +60,90 @@ export function usePremiumModelConfiguration({ requireGeneration = true }: { req
     !requireGeneration ||
     (generationQuery.isSuccess && (generationQuery.data?.length ?? 0) > 0);
 
+  const indexStatus = indexStatusQuery.data;
+  const indexReady = indexStatus?.status === "READY";
+
   return {
     isLoading:
       embeddingQuery.isPending ||
       embeddingQuery.isFetching ||
       multiEmbeddingQuery.isPending ||
       multiEmbeddingQuery.isFetching ||
-      (requireGeneration && (generationQuery.isPending || generationQuery.isFetching)),
+      (requireGeneration && (generationQuery.isPending || generationQuery.isFetching)) ||
+      indexStatusQuery.isPending,
     missing: {
       embedding: !hasEmbedding,
       generation: !hasGeneration,
     },
+    indexReady,
+    indexStatus,
   };
+}
+
+export function usePremiumSystemConfiguration() {
+  const storageQuery = useQuery({
+    queryKey: ["settings", "storage"],
+    queryFn: () => apiClient.getStorageConfig(),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+  const rerankQuery = useQuery({
+    queryKey: ["settings", "rerank"],
+    queryFn: () => apiClient.getCapabilityConfig("RERANK"),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+  const embeddingQuery = useQuery({
+    queryKey: ["settings", "embedding"],
+    queryFn: () => apiClient.getCapabilityConfig("EMBEDDING"),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+  const multiEmbeddingQuery = useQuery({
+    queryKey: ["settings", "multi-embedding"],
+    queryFn: () => apiClient.getCapabilityConfig("MULTI_EMBEDDING"),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+  const generationQuery = useQuery({
+    queryKey: ["settings", "generation"],
+    queryFn: () => apiClient.getCapabilityConfig("GENERATION"),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+  const indexStatusQuery = useQuery({
+    queryKey: ["index", "status"],
+    queryFn: () => apiClient.getIndexStatus(),
+    refetchInterval: (query) => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
+      const status = query.state.data?.status;
+      if (status === "INITIALIZING" || status === "REBUILDING") return 2000;
+      if (status === "NOT_READY") return 5000;
+      return 30000;
+    },
+  });
+
+  const isLoading =
+    storageQuery.isPending ||
+    rerankQuery.isPending ||
+    embeddingQuery.isPending ||
+    multiEmbeddingQuery.isPending ||
+    generationQuery.isPending ||
+    indexStatusQuery.isPending;
+
+  const hasStorage = storageQuery.isSuccess && storageQuery.data != null;
+  const hasRerank = rerankQuery.isSuccess && (rerankQuery.data?.length ?? 0) > 0;
+  const hasEmbedding =
+    (embeddingQuery.isSuccess && (embeddingQuery.data?.length ?? 0) > 0) ||
+    (multiEmbeddingQuery.isSuccess && (multiEmbeddingQuery.data?.length ?? 0) > 0);
+  const hasGeneration = generationQuery.isSuccess && (generationQuery.data?.length ?? 0) > 0;
+
+  const missingAny = !hasStorage || !hasRerank || !hasEmbedding || !hasGeneration;
+
+  const indexStatus = indexStatusQuery.data;
+  const indexReady = indexStatus?.status === "READY";
+
+  return { isLoading, missingAny, indexReady, indexStatus };
 }
 
 export function PremiumConfigurationShell({
@@ -130,6 +215,72 @@ export function PremiumConfigurationGate({
             <PremiumConfigurationStatusRow key={status.label} {...status} />
           ))}
         </div>
+        <Link href="/settings" className={`${SETTINGS_BUTTON_CLASS} mt-5 justify-center`}>
+          <span className="text-white dark:text-[#111315]">前往设置</span>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export function PremiumSystemConfigurationGate({ theme }: { theme: PremiumThemeMode }) {
+  return (
+    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
+      <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
+        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
+          <Info size={24} />
+        </div>
+        <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">需要先完成配置</h1>
+        <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">前往设置页完成系统能力配置，完成后即可正常使用。</p>
+        <Link href="/settings" className={`${SETTINGS_BUTTON_CLASS} mt-5 justify-center`}>
+          <span className="text-white dark:text-[#111315]">前往设置</span>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export function PremiumIndexGate({
+  theme,
+  indexStatus,
+}: {
+  theme: PremiumThemeMode;
+  indexStatus: SegmentIndexStatus;
+}) {
+  const isRebuilding = indexStatus.status === "REBUILDING";
+  const isInitializing = indexStatus.status === "INITIALIZING";
+  const isFailed = indexStatus.status === "NOT_READY" && Boolean(indexStatus.lastError);
+
+  const title = isRebuilding ? "索引重建中" : isInitializing ? "索引初始化中" : isFailed ? "索引初始化失败" : "索引未就绪";
+  const description = isRebuilding
+    ? "系统正在迁移存量文档向量，请稍候。"
+    : isInitializing
+      ? "系统正在创建搜索索引，请稍候。"
+      : isFailed
+        ? `索引初始化失败。请在设置页重试。`
+        : "索引尚未就绪。";
+
+  return (
+    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
+      <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
+        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
+          <Info size={24} />
+        </div>
+        <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">{title}</h1>
+        <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">{description}</p>
+        {isRebuilding && indexStatus.rebuildProgress ? (
+          <div className="mt-4">
+            <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-[#343a36]" aria-hidden="true">
+              <span
+                className="block h-full rounded-full bg-[linear-gradient(90deg,var(--premium-blue),var(--premium-accent))] shadow-[0_0_18px_rgba(49,88,255,0.28)]"
+                style={{ width: `${indexStatus.rebuildProgress.total > 0 ? Math.round((indexStatus.rebuildProgress.migrated / indexStatus.rebuildProgress.total) * 100) : 0}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-[var(--premium-muted)]">
+              {indexStatus.rebuildProgress.migrated} / {indexStatus.rebuildProgress.total}
+            </p>
+          </div>
+        ) : null}
         <Link href="/settings" className={`${SETTINGS_BUTTON_CLASS} mt-5 justify-center`}>
           <span className="text-white dark:text-[#111315]">前往设置</span>
         </Link>
