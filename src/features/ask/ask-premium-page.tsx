@@ -15,13 +15,6 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  PremiumConfigurationLoading,
-  PremiumConfigurationShell,
-  PremiumIndexGate,
-  PremiumSystemConfigurationGate,
-  usePremiumSystemConfiguration,
-} from "@/components/app/premium-configuration-gate";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
@@ -145,8 +138,6 @@ export function AskPremiumPage() {
     queryKey: ["kbs"],
     queryFn: () => apiClient.listKnowledgeBases(1, 50),
   });
-
-  const systemConfig = usePremiumSystemConfiguration();
 
   const generationQuery = useQuery({
     queryKey: ["settings", "generation", "all"],
@@ -783,34 +774,6 @@ export function AskPremiumPage() {
     }
     setSelectedKbIdsValue([...selectedKbIds, kbId]);
   };
-
-  if (systemConfig.isLoading) {
-    return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumConfigurationLoading
-          theme={theme}
-          title="正在检查系统配置"
-          description="稍等片刻，系统正在确认各项能力配置状态。"
-        />
-      </PremiumConfigurationShell>
-    );
-  }
-
-  if (systemConfig.missingAny) {
-    return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumSystemConfigurationGate theme={theme} />
-      </PremiumConfigurationShell>
-    );
-  }
-
-  if (!systemConfig.indexReady && systemConfig.indexStatus) {
-    return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumIndexGate theme={theme} indexStatus={systemConfig.indexStatus} />
-      </PremiumConfigurationShell>
-    );
-  }
 
   return (
     <div className="premium-theme ask-premium-page min-h-screen overflow-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>

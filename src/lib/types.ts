@@ -639,10 +639,14 @@ export type ConversationMessage = {
 export type SegmentIndexStatus = {
   status: "NOT_READY" | "INITIALIZING" | "READY" | "REBUILDING";
   indexExists: boolean;
+  readable: boolean;
+  writable: boolean;
   actualDim?: number | null;
   actualModel?: string | null;
+  actualProfileFingerprint?: string | null;
   expectedDim?: number | null;
   expectedModel?: string | null;
+  expectedProfileFingerprint?: string | null;
   pendingRebuild?: {
     taskId: string;
     expectedDim: number;
@@ -652,7 +656,7 @@ export type SegmentIndexStatus = {
   rebuildProgress?: {
     migrated: number;
     total: number;
-    phase: "MIGRATING" | "SWITCHING_ALIAS" | "COMPLETED";
+    phase: "MIGRATING" | "SWITCHING_ALIAS" | "COMPLETED" | "FAILED";
   } | null;
   lastError?: string | null;
 };

@@ -1088,6 +1088,10 @@ a {
   color: var(--premium-accent);
 }
 
+.settings-premium-page[data-premium-theme="dark"] .settings-status-card > div:first-child strong[data-status="error"] {
+  color: #fda4af;
+}
+
 .settings-premium-page[data-premium-theme="dark"] .settings-status-row {
   border: 1px solid transparent;
 }

@@ -28,14 +28,7 @@ import {
   type UIEvent,
   type WheelEvent,
 } from "react";
-import { PremiumRail } from "@/components/app/premium-rail";
-import {
-  PremiumConfigurationLoading,
-  PremiumConfigurationShell,
-  PremiumIndexGate,
-  PremiumSystemConfigurationGate,
-  usePremiumSystemConfiguration,
-} from "@/components/app/premium-configuration-gate";
+import { PremiumConfigurationShell } from "@/components/app/premium-configuration-gate";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatNumber, statusText } from "@/lib/format";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
@@ -144,8 +137,6 @@ export function LibraryPremiumPage() {
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
-
-  const systemConfig = usePremiumSystemConfiguration();
 
   const items = useMemo(() => kbsQuery.data?.items ?? [], [kbsQuery.data?.items]);
   const recentCitations = useMemo(
@@ -323,34 +314,6 @@ export function LibraryPremiumPage() {
       description: newDescription.trim(),
     });
   };
-
-  if (systemConfig.isLoading) {
-    return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumConfigurationLoading
-          theme={theme}
-          title="正在检查系统配置"
-          description="稍等片刻，系统正在确认各项能力配置状态。"
-        />
-      </PremiumConfigurationShell>
-    );
-  }
-
-  if (systemConfig.missingAny) {
-    return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumSystemConfigurationGate theme={theme} />
-      </PremiumConfigurationShell>
-    );
-  }
-
-  if (!systemConfig.indexReady && systemConfig.indexStatus) {
-    return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumIndexGate theme={theme} indexStatus={systemConfig.indexStatus} />
-      </PremiumConfigurationShell>
-    );
-  }
 
   return (
     <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>

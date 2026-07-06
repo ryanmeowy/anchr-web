@@ -399,7 +399,7 @@ export const apiClient = {
   retryIndexCreate: () =>
     request<boolean>("/api/v1/index/retry", { method: "POST" }),
   prepareIndexRebuild: () =>
-    request<string>("/api/v1/index/rebuild/prepare", { method: "POST" }),
+    request<string | null>("/api/v1/index/rebuild/prepare", { method: "POST" }),
   confirmIndexRebuild: (taskId: string) =>
     request<boolean>("/api/v1/index/rebuild/confirm", { method: "POST", body: { taskId } }),
  deleteCapabilityConfig: (capability: string, id: number) =>

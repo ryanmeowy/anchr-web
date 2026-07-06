@@ -3,9 +3,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { Info, Loader2 } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { apiClient } from "@/lib/api-client";
-import type { PremiumThemeMode } from "@/lib/premium-theme";
+import {
+  applyPremiumTheme,
+  getInitialPremiumTheme,
+  type PremiumThemeMode,
+} from "@/lib/premium-theme";
+import {
+  getIndexCompatibilityIssue,
+  hasIndexRebuildFailed,
+  isIndexFullyOperational,
+} from "@/lib/index-status";
 import type { SegmentIndexStatus } from "@/lib/types";
 import { PremiumRail } from "./premium-rail";
 
@@ -24,26 +33,27 @@ export function usePremiumModelConfiguration({ requireGeneration = true }: { req
   const embeddingQuery = useQuery({
     queryKey: ["settings", "embedding"],
     queryFn: () => apiClient.getCapabilityConfig("EMBEDDING"),
-    refetchOnMount: "always",
+    retry: false,
     refetchOnWindowFocus: false,
   });
   const multiEmbeddingQuery = useQuery({
     queryKey: ["settings", "multi-embedding"],
     queryFn: () => apiClient.getCapabilityConfig("MULTI_EMBEDDING"),
-    refetchOnMount: "always",
+    retry: false,
     refetchOnWindowFocus: false,
   });
   const generationQuery = useQuery({
     queryKey: ["settings", "generation"],
     queryFn: () => apiClient.getCapabilityConfig("GENERATION"),
     enabled: requireGeneration,
-    refetchOnMount: "always",
+    retry: false,
     refetchOnWindowFocus: false,
   });
 
   const indexStatusQuery = useQuery({
     queryKey: ["index", "status"],
     queryFn: () => apiClient.getIndexStatus(),
+    retry: false,
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
       const status = query.state.data?.status;
@@ -61,7 +71,7 @@ export function usePremiumModelConfiguration({ requireGeneration = true }: { req
     (generationQuery.isSuccess && (generationQuery.data?.length ?? 0) > 0);
 
   const indexStatus = indexStatusQuery.data;
-  const indexReady = indexStatus?.status === "READY";
+  const indexReady = isIndexFullyOperational(indexStatus);
 
   return {
     isLoading:
@@ -77,6 +87,8 @@ export function usePremiumModelConfiguration({ requireGeneration = true }: { req
     },
     indexReady,
     indexStatus,
+    indexStatusError: indexStatusQuery.isError,
+    refetchIndexStatus: indexStatusQuery.refetch,
   };
 }
 
@@ -84,36 +96,37 @@ export function usePremiumSystemConfiguration() {
   const storageQuery = useQuery({
     queryKey: ["settings", "storage"],
     queryFn: () => apiClient.getStorageConfig(),
-    refetchOnMount: "always",
+    retry: false,
     refetchOnWindowFocus: false,
   });
   const rerankQuery = useQuery({
     queryKey: ["settings", "rerank"],
     queryFn: () => apiClient.getCapabilityConfig("RERANK"),
-    refetchOnMount: "always",
+    retry: false,
     refetchOnWindowFocus: false,
   });
   const embeddingQuery = useQuery({
     queryKey: ["settings", "embedding"],
     queryFn: () => apiClient.getCapabilityConfig("EMBEDDING"),
-    refetchOnMount: "always",
+    retry: false,
     refetchOnWindowFocus: false,
   });
   const multiEmbeddingQuery = useQuery({
     queryKey: ["settings", "multi-embedding"],
     queryFn: () => apiClient.getCapabilityConfig("MULTI_EMBEDDING"),
-    refetchOnMount: "always",
+    retry: false,
     refetchOnWindowFocus: false,
   });
   const generationQuery = useQuery({
     queryKey: ["settings", "generation"],
     queryFn: () => apiClient.getCapabilityConfig("GENERATION"),
-    refetchOnMount: "always",
+    retry: false,
     refetchOnWindowFocus: false,
   });
   const indexStatusQuery = useQuery({
     queryKey: ["index", "status"],
     queryFn: () => apiClient.getIndexStatus(),
+    retry: false,
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
       const status = query.state.data?.status;
@@ -141,9 +154,76 @@ export function usePremiumSystemConfiguration() {
   const missingAny = !hasStorage || !hasRerank || !hasEmbedding || !hasGeneration;
 
   const indexStatus = indexStatusQuery.data;
-  const indexReady = indexStatus?.status === "READY";
+  const indexReady = isIndexFullyOperational(indexStatus);
 
-  return { isLoading, missingAny, indexReady, indexStatus };
+  return {
+    isLoading,
+    missingAny,
+    indexReady,
+    indexStatus,
+    indexStatusError: indexStatusQuery.isError,
+    refetchIndexStatus: indexStatusQuery.refetch,
+  };
+}
+
+/**
+ * Keeps protected page components unmounted until the prerequisite checks pass.
+ * This is intentionally a component boundary rather than a visual overlay: hooks
+ * in the protected page cannot start business requests while access is blocked.
+ */
+export function PremiumSystemConfigurationBoundary({ children }: { children: ReactNode }) {
+  const [theme, setTheme] = useState<PremiumThemeMode>("light");
+  const systemConfig = usePremiumSystemConfiguration();
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const nextTheme = getInitialPremiumTheme();
+      setTheme(nextTheme);
+      applyPremiumTheme(nextTheme);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  if (systemConfig.isLoading) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumConfigurationLoading
+          theme={theme}
+          title="正在检查系统配置"
+          description="稍等片刻，系统正在确认各项能力配置状态。"
+        />
+      </PremiumConfigurationShell>
+    );
+  }
+
+  if (systemConfig.indexStatusError || !systemConfig.indexStatus) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumIndexStatusError
+          theme={theme}
+          onRetry={() => void systemConfig.refetchIndexStatus()}
+        />
+      </PremiumConfigurationShell>
+    );
+  }
+
+  if (systemConfig.missingAny) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumSystemConfigurationGate theme={theme} />
+      </PremiumConfigurationShell>
+    );
+  }
+
+  if (!systemConfig.indexReady && systemConfig.indexStatus) {
+    return (
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+        <PremiumIndexGate theme={theme} indexStatus={systemConfig.indexStatus} />
+      </PremiumConfigurationShell>
+    );
+  }
+
+  return children;
 }
 
 export function PremiumConfigurationShell({
@@ -231,7 +311,7 @@ export function PremiumSystemConfigurationGate({ theme }: { theme: PremiumThemeM
           <Info size={24} />
         </div>
         <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">需要先完成配置</h1>
-        <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">前往设置页完成系统能力配置，完成后即可正常使用。</p>
+        <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">前往设置页完成模型和对象存储配置，完成后即可正常使用。</p>
         <Link href="/settings" className={`${SETTINGS_BUTTON_CLASS} mt-5 justify-center`}>
           <span className="text-white dark:text-[#111315]">前往设置</span>
         </Link>
@@ -250,15 +330,37 @@ export function PremiumIndexGate({
   const isRebuilding = indexStatus.status === "REBUILDING";
   const isInitializing = indexStatus.status === "INITIALIZING";
   const isFailed = indexStatus.status === "NOT_READY" && Boolean(indexStatus.lastError);
+  const isRebuildFailed = hasIndexRebuildFailed(indexStatus);
+  const needsRebuild =
+    indexStatus.status === "READY" &&
+    Boolean(indexStatus.pendingRebuild || getIndexCompatibilityIssue(indexStatus));
 
-  const title = isRebuilding ? "索引重建中" : isInitializing ? "索引初始化中" : isFailed ? "索引初始化失败" : "索引未就绪";
+  const title = isRebuilding
+    ? "索引重建中"
+    : isInitializing
+      ? "索引初始化中"
+      : isFailed
+        ? "索引初始化失败"
+        : isRebuildFailed
+          ? "索引重建失败"
+          : needsRebuild
+            ? "索引等待重建"
+            : indexStatus.status === "READY"
+              ? "索引暂不可用"
+              : "索引未就绪";
   const description = isRebuilding
     ? "系统正在迁移存量文档向量，请稍候。"
     : isInitializing
       ? "系统正在创建搜索索引，请稍候。"
       : isFailed
         ? `索引初始化失败。请在设置页重试。`
-        : "索引尚未就绪。";
+        : isRebuildFailed
+          ? "最近一次索引重建失败，请前往设置页重试。"
+          : needsRebuild
+            ? "检测到待确认的索引重建任务，请前往设置页确认。"
+            : indexStatus.status === "READY"
+              ? "索引当前不可读写，请前往设置页检查。"
+              : "索引尚未就绪。";
 
   return (
     <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
@@ -284,6 +386,31 @@ export function PremiumIndexGate({
         <Link href="/settings" className={`${SETTINGS_BUTTON_CLASS} mt-5 justify-center`}>
           <span className="text-white dark:text-[#111315]">前往设置</span>
         </Link>
+      </div>
+    </div>
+  );
+}
+
+function PremiumIndexStatusError({
+  theme,
+  onRetry,
+}: {
+  theme: PremiumThemeMode;
+  onRetry: () => void;
+}) {
+  return (
+    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
+      <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
+        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
+          <Info size={24} />
+        </div>
+        <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">索引状态未知</h1>
+        <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">
+          暂时无法读取索引状态。为避免业务请求失败，页面已暂停加载。
+        </p>
+        <button type="button" onClick={onRetry} className={`${SETTINGS_BUTTON_CLASS} mt-5`}>
+          重新检查
+        </button>
       </div>
     </div>
   );

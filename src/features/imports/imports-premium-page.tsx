@@ -17,11 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
-  PremiumConfigurationLoading,
   PremiumConfigurationShell,
-  PremiumIndexGate,
-  PremiumSystemConfigurationGate,
-  usePremiumSystemConfiguration,
 } from "@/components/app/premium-configuration-gate";
 import { FileTypeIcon, normalizeExtension } from "@/components/shared/file-type-icon";
 import { apiClient } from "@/lib/api-client";
@@ -88,8 +84,6 @@ export function ImportsPremiumPage() {
     queryFn: apiClient.ingestionCapabilities,
     refetchOnWindowFocus: false,
   });
-
-  const systemConfig = usePremiumSystemConfiguration();
 
   const selectedKbId = kbId || kbsQuery.data?.items?.[0]?.id || "";
   const selectedKb = useMemo(
@@ -254,34 +248,6 @@ export function ImportsPremiumPage() {
 
   function handleUrlSubmit() {
     createUrlMutation.mutate();
-  }
-
-  if (systemConfig.isLoading) {
-    return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumConfigurationLoading
-          theme={theme}
-          title="正在检查系统配置"
-          description="稍等片刻，系统正在确认各项能力配置状态。"
-        />
-      </PremiumConfigurationShell>
-    );
-  }
-
-  if (systemConfig.missingAny) {
-    return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumSystemConfigurationGate theme={theme} />
-      </PremiumConfigurationShell>
-    );
-  }
-
-  if (!systemConfig.indexReady && systemConfig.indexStatus) {
-    return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
-        <PremiumIndexGate theme={theme} indexStatus={systemConfig.indexStatus} />
-      </PremiumConfigurationShell>
-    );
   }
 
   return (
