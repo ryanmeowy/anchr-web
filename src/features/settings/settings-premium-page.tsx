@@ -41,6 +41,12 @@ import type {
 
 type CapabilityName = "GENERATION" | "EMBEDDING" | "RERANK" | "MULTI_EMBEDDING";
 
+type CapabilitySelection = {
+  type: CapabilityName;
+  configId: number | null;
+  mode: "select" | "add";
+};
+
 type RebuildDialogState =
   | {
       phase: "CONFIRM_SWITCH";
@@ -270,9 +276,11 @@ export function SettingsPremiumPage() {
   const hasOwnerAccess = Boolean(configuredAccessToken);
   const [theme, setTheme] = useState<PremiumThemeMode>("light");
   const [themeHydrated, setThemeHydrated] = useState(false);
-  const [selectedType, setSelectedType] = useState<CapabilityName>("GENERATION");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
+  const [selection, setSelection] = useState<CapabilitySelection>({
+    type: "GENERATION",
+    configId: null,
+    mode: "select",
+  });
   const [rebuildDialog, setRebuildDialog] = useState<RebuildDialogState>(null);
   const [enablingTarget, setEnablingTarget] = useState<{ capability: CapabilityName; id: number } | null>(null);
   const [enableError, setEnableError] = useState<{ capability: CapabilityName; message: string } | null>(null);
@@ -355,36 +363,21 @@ export function SettingsPremiumPage() {
     [embeddingQuery.data, generationQuery.data, multiEmbeddingQuery.data, rerankQuery.data],
   );
 
+  const selectedType = selection.type;
+  const selectedId = selection.configId;
   const configs = configsByCapability[selectedType];
   const selectedConfigsLoaded =
     selectedType === "GENERATION" ? generationQuery.isSuccess
     : selectedType === "EMBEDDING" ? embeddingQuery.isSuccess
     : selectedType === "RERANK" ? rerankQuery.isSuccess
     : multiEmbeddingQuery.isSuccess;
+  const isAdding =
+    selection.mode === "add" ||
+    (selectedConfigsLoaded && configs.length === 0);
   const selectedConfig = useMemo(() => {
     if (isAdding) return null;
-    return configs.find((config) => config.id === selectedId) ?? null;
+    return configs.find((config) => config.id === selectedId) ?? preferredConfig(configs);
   }, [configs, isAdding, selectedId]);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      if (configs.length === 0) {
-        if (!selectedConfigsLoaded) return;
-        setSelectedId(null);
-        setIsAdding(true);
-        return;
-      }
-      if (isAdding) return;
-      setSelectedId((currentSelectedId) => {
-        if (currentSelectedId != null && configs.some((config) => config.id === currentSelectedId)) {
-          return currentSelectedId;
-        }
-        return preferredConfig(configs)?.id ?? null;
-      });
-      setIsAdding(false);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [configs, isAdding, selectedConfigsLoaded]);
 
   const refreshCapabilityConfigs = useCallback(async (capability: CapabilityName) => {
     const affectedCapabilities = affectedCapabilitiesFor(capability);
@@ -590,21 +583,16 @@ export function SettingsPremiumPage() {
                   isAdding={isAdding}
                   allowAdd={hasOwnerAccess}
                   onTypeChange={(type) => {
-                    setSelectedType(type);
-                    setSelectedId(null);
-                    setIsAdding(false);
+                    setSelection({ type, configId: null, mode: "select" });
                   }}
-                  onSelect={(id) => {
-                    setSelectedId(id);
-                    setIsAdding(false);
+                  onSelect={(type, id) => {
+                    setSelection({ type, configId: id, mode: "select" });
                   }}
                   onEnable={handleEnable}
                   enablingTarget={enablingTarget}
                   enableError={enableError}
                   onAdd={(type) => {
-                    setSelectedType(type);
-                    setSelectedId(null);
-                    setIsAdding(true);
+                    setSelection({ type, configId: null, mode: "add" });
                   }}
                 />
 
@@ -618,12 +606,18 @@ export function SettingsPremiumPage() {
                       restricted={!hasOwnerAccess}
                       restrictedMessage={configuredAccessToken == null ? "正在检查访问权限" : "访客状态无法查看"}
                       onSaved={(savedConfig) => {
-                        setSelectedId(savedConfig.id);
-                        setIsAdding(false);
+                        setSelection({
+                          type: selectedType,
+                          configId: savedConfig.id,
+                          mode: "select",
+                        });
                       }}
                       onDeleted={() => {
-                        setSelectedId(null);
-                        setIsAdding(false);
+                        setSelection({
+                          type: selectedType,
+                          configId: null,
+                          mode: "select",
+                        });
                       }}
                     />
                     <RuntimeStatusPanel
@@ -759,7 +753,7 @@ function CapabilitySelector({
   isAdding: boolean;
   allowAdd: boolean;
   onTypeChange: (type: CapabilityName) => void;
-  onSelect: (id: number) => void;
+  onSelect: (type: CapabilityName, id: number) => void;
   onEnable: (capability: CapabilityName, id: number) => void;
   enablingTarget: { capability: CapabilityName; id: number } | null;
   enableError: { capability: CapabilityName; message: string } | null;
@@ -789,18 +783,24 @@ function CapabilitySelector({
             <article
               key={option.value}
               className={[
-                "grid min-h-0 content-between gap-2 rounded-[8px] border p-[10px] text-left transition hover:translate-x-[3px]",
+                "grid min-h-0 cursor-pointer content-between gap-2 rounded-[8px] border p-[10px] text-left transition hover:translate-x-[3px]",
                 active
                   ? "border-[rgba(49,88,255,0.34)] bg-white/70"
                   : "border-[rgba(16,18,20,0.1)] bg-white/50 hover:border-[rgba(49,88,255,0.34)] hover:bg-white/70 dark:bg-[var(--premium-panel-muted)]",
               ].join(" ")}
+              data-capability={option.value}
+              onClick={(event) => {
+                const target = event.target as HTMLElement;
+                if (target.closest(".settings-config-menu")) return;
+                if (selectedConfig) {
+                  onSelect(option.value, selectedConfig.id);
+                } else {
+                  onTypeChange(option.value);
+                }
+              }}
             >
               <button
                 type="button"
-                onClick={() => {
-                  onTypeChange(option.value);
-                  if (selectedConfig) onSelect(selectedConfig.id);
-                }}
                 className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-left"
                 aria-pressed={active}
               >
@@ -830,8 +830,7 @@ function CapabilitySelector({
                     }
                     const id = Number(value);
                     if (Number.isFinite(id)) {
-                      onTypeChange(option.value);
-                      onSelect(id);
+                      onSelect(option.value, id);
                     }
                   }}
                 />
@@ -846,9 +845,8 @@ function CapabilitySelector({
                 disabled={!selectedConfig || !canEnable || isCapabilityEnabling}
                 data-enable-state={isSelectedConfigEnabling ? "loading" : canEnable ? "available" : selectedConfig ? "current" : "empty"}
                 onClick={() => {
-                  onTypeChange(option.value);
                   if (selectedConfig) {
-                    onSelect(selectedConfig.id);
+                    onSelect(option.value, selectedConfig.id);
                     onEnable(option.value, selectedConfig.id);
                   }
                 }}
