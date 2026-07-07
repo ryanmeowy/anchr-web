@@ -334,6 +334,18 @@ export function PremiumIndexGate({
   const needsRebuild =
     indexStatus.status === "READY" &&
     Boolean(indexStatus.pendingRebuild || getIndexCompatibilityIssue(indexStatus));
+  const rebuildPhaseLabel =
+    indexStatus.rebuildProgress?.phase === "PREPARING"
+      ? "准备重建中"
+      : indexStatus.rebuildProgress?.phase === "MIGRATING"
+        ? "迁移数据中"
+        : indexStatus.rebuildProgress?.phase === "SWITCHING_ALIAS"
+          ? "切换索引中"
+          : indexStatus.rebuildProgress?.phase === "COMPLETED"
+            ? "重建完成"
+            : indexStatus.rebuildProgress?.phase === "FAILED"
+              ? "重建失败"
+              : null;
 
   const title = isRebuilding
     ? "索引重建中"
@@ -379,6 +391,7 @@ export function PremiumIndexGate({
               />
             </div>
             <p className="mt-2 text-xs text-[var(--premium-muted)]">
+              {rebuildPhaseLabel ? `${rebuildPhaseLabel} · ` : ""}
               {indexStatus.rebuildProgress.migrated} / {indexStatus.rebuildProgress.total}
             </p>
           </div>

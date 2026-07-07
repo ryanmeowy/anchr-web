@@ -656,7 +656,7 @@ export type SegmentIndexStatus = {
   rebuildProgress?: {
     migrated: number;
     total: number;
-    phase: "MIGRATING" | "SWITCHING_ALIAS" | "COMPLETED" | "FAILED";
+    phase: "PREPARING" | "MIGRATING" | "SWITCHING_ALIAS" | "COMPLETED" | "FAILED";
   } | null;
   lastError?: string | null;
 };

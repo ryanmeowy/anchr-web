@@ -75,6 +75,12 @@ type CapabilityOption = {
   icon: ComponentType<{ size?: number; className?: string }>;
 };
 
+type CapabilityConfigSaveVariables = {
+  body: CapabilityConfigUpdateRequest;
+  previousConfig: CapabilityConfig | null;
+  creating: boolean;
+};
+
 const EMPTY_PARAMS: CapabilityParams["params"] = [];
 const ADD_CONFIG_VALUE = "__add_config__";
 const FIELD_CLASS = "settings-field premium-focusable";
@@ -169,6 +175,39 @@ function toExtraConfig(extra: Record<string, string>, params: CapabilityParams["
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+function normalizeProfileText(value: unknown) {
+  return typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
+}
+
+function normalizeProfileBaseUrl(value: unknown) {
+  let normalized = normalizeProfileText(value);
+  while (normalized.endsWith("/")) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+}
+
+function profileDimensionValue(
+  extraConfig: Record<string, unknown> | null | undefined,
+  params: CapabilityParams["params"],
+) {
+  if (!extraConfig) return "";
+  const dimensionKey = params.find(isVectorDimensionParam)?.key ?? "dimensions";
+  return normalizeProfileText(extraConfig[dimensionKey]);
+}
+
+function embeddingProfileInputChanged(
+  capability: CapabilityName,
+  currentConfig: CapabilityConfig | null,
+  nextConfig: CapabilityConfigUpdateRequest,
+  params: CapabilityParams["params"],
+) {
+  if (!embeddingSwitchAffects(capability) || !currentConfig) return false;
+  return normalizeProfileBaseUrl(currentConfig.baseUrl) !== normalizeProfileBaseUrl(nextConfig.baseUrl)
+    || normalizeProfileText(currentConfig.modelName) !== normalizeProfileText(nextConfig.modelName)
+    || profileDimensionValue(currentConfig.extraConfig, params) !== profileDimensionValue(nextConfig.extraConfig, params);
+}
+
 function splitParenLabel(label: string) {
   const match = label.match(/^(.*?)(\s*[(（].*[)）])$/);
   return match ? [match[1].trim(), match[2].trim()] : [label];
@@ -224,15 +263,17 @@ function ResultPill({ result }: { result: CapabilityConnectionTestResult | Stora
   );
 }
 
-function DeleteConfirmDialog({
+function ConfirmDialog({
   title,
   description,
+  confirmLabel = "确认",
   pending,
   onCancel,
   onConfirm,
 }: {
   title: string;
   description: string;
+  confirmLabel?: string;
   pending: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -260,7 +301,7 @@ function DeleteConfirmDialog({
           </button>
           <button type="button" onClick={onConfirm} disabled={pending} className={`${BUTTON_PRIMARY_CLASS} flex-1`}>
             {pending ? <Loader2 size={16} className="animate-spin" /> : null}
-            删除
+            {confirmLabel}
           </button>
         </div>
       </div>
@@ -455,11 +496,11 @@ export function SettingsPremiumPage() {
         queryFn: () => apiClient.getIndexStatus(),
       });
       if (refreshed.pendingRebuild?.taskId !== taskId) {
-        throw new Error("重建任务已失效，请刷新索引状态后重新发起。");
+        throw new Error("重建任务已被新的配置变更替换，请重新确认最新任务。");
       }
       const confirmed = await apiClient.confirmIndexRebuild(taskId);
       if (!confirmed) {
-        throw new Error("重建任务已失效，请刷新索引状态后重新发起。");
+        throw new Error("重建任务已被新的配置变更替换，请重新确认最新任务。");
       }
       return confirmed;
     },
@@ -498,7 +539,7 @@ export function SettingsPremiumPage() {
     });
   }, []);
 
-  const prepareRebuild = useCallback(async () => {
+  const prepareRebuild = useCallback(async ({ manual = false }: { manual?: boolean } = {}) => {
     try {
       const taskId = await prepareRebuildMutation.mutateAsync();
       const refreshed = await indexStatusQuery.refetch();
@@ -506,9 +547,13 @@ export function SettingsPremiumPage() {
         showRebuildConfirmation(taskId, refreshed.data ?? indexStatusQuery.data);
         return;
       }
+      if (!manual) {
+        setRebuildDialog(null);
+        return;
+      }
       setRebuildDialog({
         phase: "ERROR",
-        error: "当前无法创建重建任务：索引可能尚未就绪，或当前模型配置无需重建。",
+        error: "当前无需重建，或索引状态暂不满足重建条件。",
       });
     } catch (error) {
       setRebuildDialog({
@@ -625,6 +670,7 @@ export function SettingsPremiumPage() {
                           mode: "select",
                         });
                       }}
+                      onActiveEmbeddingUpdated={() => void prepareRebuild()}
                       onDeleted={() => {
                         setSelection({
                           type: selectedType,
@@ -641,7 +687,7 @@ export function SettingsPremiumPage() {
                       indexStatusError={indexStatusQuery.isError}
                       onRefreshIndex={() => void indexStatusQuery.refetch()}
                       onRetryIndex={() => retryIndexMutation.mutate()}
-                      onPrepareRebuild={() => void prepareRebuild()}
+                      onPrepareRebuild={() => void prepareRebuild({ manual: true })}
                       onConfirmPendingRebuild={(taskId) =>
                         showRebuildConfirmation(taskId, indexStatusQuery.data)}
                       storageConfigured={isGuest
@@ -676,7 +722,7 @@ export function SettingsPremiumPage() {
                 <div className="min-w-0">
                   <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">
                     {rebuildDialog.phase === "CONFIRM_SWITCH" ? "确认切换 Embedding 模型"
-                     : rebuildDialog.phase === "CONFIRM_REBUILD" ? "确认重建向量索引"
+                     : rebuildDialog.phase === "CONFIRM_REBUILD" ? "确认重建索引"
                      : "操作失败"}
                   </h2>
                   <p className="mt-1 text-xs font-black text-[var(--premium-muted)]">
@@ -692,7 +738,7 @@ export function SettingsPremiumPage() {
             </div>
             <div className="mt-4 rounded-[8px] border border-[rgba(49,88,255,0.16)] bg-[rgba(49,88,255,0.08)] p-3 text-[11px] font-black leading-[1.55] text-[var(--premium-ink-soft)]">
               {rebuildDialog.phase === "CONFIRM_SWITCH" ? (
-                <p>切换 Embedding 或 Multi Embedding 模型将触发向量重建流程，期间检索结果可能短暂不可用。</p>
+                <p>切换 Embedding 或 Multi Embedding 模型将触发向量重建流程，期间系统不可用。</p>
               ) : rebuildDialog.phase === "CONFIRM_REBUILD" ? (
                 <p>
                   {rebuildDialog.reason ??
@@ -983,6 +1029,7 @@ function ConfigPanel({
   restricted,
   restrictedMessage,
   onSaved,
+  onActiveEmbeddingUpdated,
   onDeleted,
 }: {
   capability: CapabilityName;
@@ -991,6 +1038,7 @@ function ConfigPanel({
   restricted: boolean;
   restrictedMessage: string;
   onSaved: (savedConfig: CapabilityConfig) => void;
+  onActiveEmbeddingUpdated: () => void;
   onDeleted: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -1005,6 +1053,8 @@ function ConfigPanel({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [pendingProfileUpdateSave, setPendingProfileUpdateSave] =
+    useState<CapabilityConfigSaveVariables | null>(null);
 
   const paramsQuery = useQuery({
     queryKey: paramsQueryKey(capability),
@@ -1032,6 +1082,7 @@ function ConfigPanel({
         setValidationError(null);
         setDeleteNotice(null);
         setDeleteConfirmOpen(false);
+        setPendingProfileUpdateSave(null);
         return;
       }
       setBaseUrl(config.baseUrl ?? "");
@@ -1042,6 +1093,7 @@ function ConfigPanel({
       setValidationError(null);
       setDeleteNotice(null);
       setDeleteConfirmOpen(false);
+      setPendingProfileUpdateSave(null);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [capability, config, isNew, paramItems]);
@@ -1075,22 +1127,30 @@ function ConfigPanel({
   const canSave = baseUrl.trim().length > 0;
   const canTest = canSave && (apiKey.trim().length > 0 || savedConfigIdForTest != null);
 
+  const saveRequiresRebuild = useCallback((variables: CapabilityConfigSaveVariables) =>
+    !variables.creating
+      && Boolean(variables.previousConfig?.enabled)
+      && embeddingProfileInputChanged(capability, variables.previousConfig, variables.body, paramItems),
+  [capability, paramItems]);
+
   const saveMutation = useMutation({
-    mutationFn: () => {
-      const body: CapabilityConfigUpdateRequest = { ...currentCapabilityConfig };
-      if (apiKey.trim()) body.apiKey = apiKey.trim();
-      if (isNew || !config) {
+    mutationFn: ({ body, previousConfig, creating }: CapabilityConfigSaveVariables) => {
+      if (creating || !previousConfig) {
         return apiClient.createCapabilityConfig(capability, body);
       }
-      return apiClient.updateCapabilityConfig(capability, config.id, body);
+      return apiClient.updateCapabilityConfig(capability, previousConfig.id, body);
     },
-    onSuccess: async (savedConfig) => {
+    onSuccess: async (savedConfig, variables) => {
+      const shouldPrepareRebuild = saveRequiresRebuild(variables);
       setApiKey("");
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
       await queryClient.invalidateQueries({ queryKey: capabilityQueryKey(capability) });
       await queryClient.refetchQueries({ queryKey: capabilityQueryKey(capability), type: "active" });
       onSaved(savedConfig);
+      if (shouldPrepareRebuild) {
+        onActiveEmbeddingUpdated();
+      }
     },
   });
 
@@ -1156,7 +1216,25 @@ function ConfigPanel({
       return;
     }
     setValidationError(null);
-    saveMutation.mutate();
+    const body: CapabilityConfigUpdateRequest = { ...currentCapabilityConfig };
+    if (apiKey.trim()) body.apiKey = apiKey.trim();
+    const variables: CapabilityConfigSaveVariables = {
+      body,
+      previousConfig: config,
+      creating: isNew || !config,
+    };
+    if (saveRequiresRebuild(variables)) {
+      setPendingProfileUpdateSave(variables);
+      return;
+    }
+    saveMutation.mutate(variables);
+  };
+
+  const handleConfirmProfileUpdate = () => {
+    if (!pendingProfileUpdateSave) return;
+    const variables = pendingProfileUpdateSave;
+    setPendingProfileUpdateSave(null);
+    saveMutation.mutate(variables);
   };
 
   const handleTest = () => {
@@ -1318,10 +1396,21 @@ function ConfigPanel({
           <span className={ACTION_BUTTON_LABEL_CLASS}>{testMutation.isPending ? "测试中..." : "测试连接"}</span>
         </button>
       </div>
+      {pendingProfileUpdateSave ? (
+        <ConfirmDialog
+          title="确认更新向量模型配置？"
+          description="本次更新会修改当前启用的 Embedding 配置，保存后需要重建索引；重建期间系统不可用。确认提交更新吗？"
+          confirmLabel="确认更新"
+          pending={saveMutation.isPending}
+          onCancel={() => setPendingProfileUpdateSave(null)}
+          onConfirm={handleConfirmProfileUpdate}
+        />
+      ) : null}
       {deleteConfirmOpen ? (
-        <DeleteConfirmDialog
+        <ConfirmDialog
           title="删除配置？"
           description="删除后将从列表移除。"
+          confirmLabel="删除"
           pending={deleteMutation.isPending}
           onCancel={() => setDeleteConfirmOpen(false)}
           onConfirm={handleDelete}
@@ -1394,7 +1483,9 @@ function RuntimeStatusPanel({
     Boolean(compatibilityIssue) ||
     indexUnavailable;
   const rebuildPhaseLabel =
-    indexStatus?.rebuildProgress?.phase === "MIGRATING"
+    indexStatus?.rebuildProgress?.phase === "PREPARING"
+      ? "准备重建中"
+      : indexStatus?.rebuildProgress?.phase === "MIGRATING"
       ? "迁移数据中"
       : indexStatus?.rebuildProgress?.phase === "SWITCHING_ALIAS"
         ? "切换索引中"
@@ -1779,9 +1870,10 @@ function StoragePanel({
         </button>
       </div>
       {deleteConfirmOpen ? (
-        <DeleteConfirmDialog
+        <ConfirmDialog
           title="删除存储配置？"
           description="删除后当前配置将失效。"
+          confirmLabel="删除"
           pending={deleteMutation.isPending}
           onCancel={() => setDeleteConfirmOpen(false)}
           onConfirm={handleDelete}
