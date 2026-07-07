@@ -449,7 +449,20 @@ export function SettingsPremiumPage() {
   });
 
   const confirmRebuildMutation = useMutation({
-    mutationFn: (taskId: string) => apiClient.confirmIndexRebuild(taskId),
+    mutationFn: async (taskId: string) => {
+      const refreshed = await queryClient.fetchQuery({
+        queryKey: ["index", "status"],
+        queryFn: () => apiClient.getIndexStatus(),
+      });
+      if (refreshed.pendingRebuild?.taskId !== taskId) {
+        throw new Error("重建任务已失效，请刷新索引状态后重新发起。");
+      }
+      const confirmed = await apiClient.confirmIndexRebuild(taskId);
+      if (!confirmed) {
+        throw new Error("重建任务已失效，请刷新索引状态后重新发起。");
+      }
+      return confirmed;
+    },
   });
 
   const retryIndexMutation = useMutation({
