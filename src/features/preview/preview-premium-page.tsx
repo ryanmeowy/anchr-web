@@ -810,7 +810,15 @@ function CitationSidebar({
                     {targetPage ? `第 ${targetPage} 页` : canJump ? "跳转" : "无法定位"}
                   </span>
                 </span>
-                <p className="m-0 line-clamp-3 min-w-0 text-xs leading-[1.6] text-[var(--premium-muted)] [overflow-wrap:anywhere]">
+                <p
+                  className="m-0 line-clamp-3 min-w-0 text-xs leading-[1.6] text-[var(--premium-muted)] [overflow-wrap:anywhere]"
+                  style={{
+                    display: "-webkit-box",
+                    WebkitBoxOrient: "vertical",
+                    WebkitLineClamp: 3,
+                    overflow: "hidden",
+                  }}
+                >
                   {stripEmTags(chunk.content ?? chunk.snippet ?? "")}
                 </p>
               </button>
