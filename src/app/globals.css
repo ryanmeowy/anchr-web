@@ -1092,6 +1092,10 @@ a {
   color: #fda4af;
 }
 
+.settings-premium-page[data-premium-theme="dark"] .settings-status-card > div:first-child strong[data-status="muted"] {
+  color: var(--premium-muted);
+}
+
 .settings-premium-page[data-premium-theme="dark"] .settings-status-row {
   border: 1px solid transparent;
 }

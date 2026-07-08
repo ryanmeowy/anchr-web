@@ -1613,7 +1613,7 @@ function RuntimeStatusPanel({
         <div className="settings-status-card rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
           <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
             <span>存储配置状态</span>
-            <strong className="text-[#426b09]">{storageLoading ? "检查中" : storageConfigured ? "已配置" : "未配置"}</strong>
+            <strong className={storageConfigured || storageLoading ? "text-[#426b09]" : "text-[var(--premium-muted)]"} data-status={storageConfigured || storageLoading ? undefined : "muted"}>{storageLoading ? "检查中" : storageConfigured ? "已配置" : "未配置"}</strong>
           </div>
         </div>
 
