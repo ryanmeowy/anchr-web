@@ -46,7 +46,7 @@ type PdfDocumentProxy = Awaited<ReturnType<typeof pdfjsLib.getDocument>["promise
 type PdfPageProxy = Awaited<ReturnType<PdfDocumentProxy["getPage"]>>;
 type PdfPageSize = { width: number; height: number; widthPt: number; heightPt: number };
 type PdfRenderTask = ReturnType<PdfPageProxy["render"]>;
-type PdfFitMode = "frame" | "manual";
+type PdfFitMode = "auto" | "width" | "manual";
 type PreviewSurroundingChunk = NonNullable<PreviewSegment["surroundingChunks"]>[number];
 type PreviewOverflow = { horizontal: boolean; vertical: boolean };
 type TransientBBoxHighlight = {
@@ -55,9 +55,10 @@ type TransientBBoxHighlight = {
 };
 
 const DEFAULT_PDF_SCALE = 1.23;
+const MIN_AUTO_PDF_SCALE = 0.25;
 const MIN_PDF_SCALE = 0.55;
 const MAX_PDF_SCALE = 2.2;
-const PREVIEW_OVERFLOW_TOLERANCE = 12;
+const PREVIEW_OVERFLOW_TOLERANCE = 2;
 const CONTEXT_HIGHLIGHT_DURATION_MS = 2400;
 
 export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
@@ -282,7 +283,7 @@ function PreviewContent({
   const [sidebarHeight, setSidebarHeight] = useState<number | null>(null);
   const [pdfPage, setPdfPage] = useState(item.anchor?.pageNo ?? 1);
   const [pdfScale, setPdfScale] = useState(DEFAULT_PDF_SCALE);
-  const [pdfFitMode, setPdfFitMode] = useState<PdfFitMode>("manual");
+  const [pdfFitMode, setPdfFitMode] = useState<PdfFitMode>("auto");
   const [activeChunkSegmentId, setActiveChunkSegmentId] = useState(item.segmentId);
   const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
   const [pdfPageSize, setPdfPageSize] = useState<PdfPageSize | null>(null);
@@ -302,16 +303,17 @@ function PreviewContent({
     return Array.from({ length: total }, (_, index) => index + 1);
   }, [item.anchor?.pageNo, pdfPage, pdfPageCount, previewType]);
 
-  const getPdfFrameScale = useCallback(() => {
-    if (!pdfPageSize || !previewFrameSize.width || !previewFrameSize.height) {
+  const getPdfWidthScale = useCallback(() => {
+    if (!pdfPageSize || !previewFrameSize.width) {
       return DEFAULT_PDF_SCALE;
     }
 
-    return clampScale(Math.max(
-      previewFrameSize.width / pdfPageSize.widthPt,
-      previewFrameSize.height / pdfPageSize.heightPt,
-    ));
-  }, [pdfPageSize, previewFrameSize.height, previewFrameSize.width]);
+    return clampScale(previewFrameSize.width / pdfPageSize.widthPt, MIN_AUTO_PDF_SCALE);
+  }, [pdfPageSize, previewFrameSize.width]);
+
+  const getPdfAutoScale = useCallback(() => {
+    return Math.min(DEFAULT_PDF_SCALE, getPdfWidthScale());
+  }, [getPdfWidthScale]);
 
   useEffect(() => {
     const scroller = previewScrollerRef.current;
@@ -407,22 +409,22 @@ function PreviewContent({
   }, []);
 
   useEffect(() => {
-    if (previewType !== "PDF" || pdfFitMode !== "frame") {
+    if (previewType !== "PDF" || pdfFitMode === "manual") {
       return;
     }
 
     const frame = window.requestAnimationFrame(() => {
-      const nextScale = getPdfFrameScale();
+      const nextScale = pdfFitMode === "width" ? getPdfWidthScale() : getPdfAutoScale();
       setPdfScale((scale) => (Math.abs(scale - nextScale) < 0.01 ? scale : nextScale));
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [getPdfFrameScale, pdfFitMode, previewType]);
+  }, [getPdfAutoScale, getPdfWidthScale, pdfFitMode, previewType]);
 
-  const fitPdfToFrame = useCallback(() => {
-    setPdfFitMode("frame");
-    setPdfScale(getPdfFrameScale());
-  }, [getPdfFrameScale]);
+  const fitPdfToWidth = useCallback(() => {
+    setPdfFitMode("width");
+    setPdfScale(getPdfWidthScale());
+  }, [getPdfWidthScale]);
 
   const toggleFullscreen = useCallback(() => {
     const shell = previewShellRef.current;
@@ -585,10 +587,10 @@ function PreviewContent({
             <button
               type="button"
               disabled={previewType !== "PDF"}
-              onClick={fitPdfToFrame}
+              onClick={fitPdfToWidth}
               className="inline-flex min-h-[38px] items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-[13px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
-              铺满
+              适宽
             </button>
             <ToolButton label="刷新预览地址" onClick={onRefresh} disabled={isRefreshing}>
               {isRefreshing ? <Loader2 className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
@@ -602,7 +604,7 @@ function PreviewContent({
         <div
           ref={previewScrollerRef}
           className={[
-            "min-h-0 p-8 max-[860px]:px-3.5 max-[860px]:py-[18px]",
+            "min-h-0 min-w-0 p-8 max-[860px]:px-3.5 max-[860px]:py-[18px]",
             previewOverflow.horizontal ? "overflow-x-auto" : "overflow-x-hidden",
             previewOverflow.vertical ? "overflow-y-auto" : "overflow-y-hidden",
           ].join(" ")}
@@ -708,16 +710,16 @@ function CitationSidebar({
   return (
     <aside
       aria-label="引用上下文"
-      className="preview-premium-sidebar min-h-0 overflow-hidden border-l border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-4 max-[1240px]:col-span-2 max-[1240px]:border-l-0 max-[1240px]:border-t"
+      className="preview-premium-sidebar min-h-0 min-w-0 overflow-hidden border-l border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-4 max-[1240px]:col-span-2 max-[1240px]:border-l-0 max-[1240px]:border-t"
     >
-      <div ref={contentRef} className="grid content-start gap-3.5 max-[1240px]:grid-cols-2 max-[860px]:grid-cols-1">
+      <div ref={contentRef} className="grid min-w-0 content-start gap-3.5 max-[1240px]:grid-cols-2 max-[860px]:grid-cols-1">
       <SidePanel>
         <PanelLabel label="WHY THIS CITATION" value={`#${citationIndex}`} />
-        <div className="mt-3.5 rounded-[8px] border border-amber-500/35 bg-amber-400/10 p-3.5 text-[13px] leading-[1.7] text-[var(--premium-ink-soft)]">
-          <b className="text-[var(--premium-ink)]">
+        <div className="mt-3.5 min-w-0 rounded-[8px] border border-amber-500/35 bg-amber-400/10 p-3.5 text-[13px] leading-[1.7] text-[var(--premium-ink-soft)] [overflow-wrap:anywhere]">
+          <b className="text-[var(--premium-ink)] [overflow-wrap:anywhere]">
             {reason}
           </b>
-          <p className="mt-2">
+          <p className="mt-2 [overflow-wrap:anywhere]">
             {context?.question
               ? `来自你的问题：“${context.question}”`
               : from === "search"
@@ -791,7 +793,7 @@ function CitationSidebar({
                 onClick={() => onChunkSelect(chunk)}
                 aria-current={isActive ? "location" : undefined}
                 className={[
-                  "w-full rounded-[8px] border p-3 text-left transition focus-visible:ring-2 focus-visible:ring-[var(--premium-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--premium-panel-muted)]",
+                  "w-full min-w-0 rounded-[8px] border p-3 text-left transition focus-visible:ring-2 focus-visible:ring-[var(--premium-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--premium-panel-muted)]",
                   canJump ? "hover:-translate-x-[3px]" : "cursor-not-allowed opacity-55",
                   isActive && !isCurrent
                     ? "border-[var(--premium-blue)] bg-[var(--premium-blue-soft)]"
@@ -800,15 +802,15 @@ function CitationSidebar({
                     : "border-[var(--premium-line)] bg-[var(--premium-panel-muted)] hover:bg-amber-400/10",
                 ].join(" ")}
               >
-                <span className="mb-1.5 flex items-center justify-between gap-3">
-                  <strong className="text-[13px] text-[var(--premium-ink)]">
+                <span className="mb-1.5 flex min-w-0 items-center justify-between gap-3">
+                  <strong className="min-w-0 text-[13px] text-[var(--premium-ink)] [overflow-wrap:anywhere]">
                     {relationLabel(chunk.relation)}
                   </strong>
-                  <span className="text-[10px] font-black text-[var(--premium-muted)]">
+                  <span className="shrink-0 text-[10px] font-black text-[var(--premium-muted)]">
                     {targetPage ? `第 ${targetPage} 页` : canJump ? "跳转" : "无法定位"}
                   </span>
                 </span>
-                <p className="m-0 line-clamp-3 text-xs leading-[1.6] text-[var(--premium-muted)]">
+                <p className="m-0 line-clamp-3 min-w-0 text-xs leading-[1.6] text-[var(--premium-muted)] [overflow-wrap:anywhere]">
                   {stripEmTags(chunk.content ?? chunk.snippet ?? "")}
                 </p>
               </button>
@@ -859,7 +861,7 @@ function CitationSidebar({
 
 function SidePanel({ children }: { children: ReactNode }) {
   return (
-    <section className={`${styles.reveal} preview-premium-side-panel rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] p-4 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl`}>
+    <section className={`${styles.reveal} preview-premium-side-panel min-w-0 overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] p-4 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl`}>
       {children}
     </section>
   );
@@ -868,12 +870,12 @@ function SidePanel({ children }: { children: ReactNode }) {
 function PanelLabel({ label, value, dark = false }: { label: string; value: string; dark?: boolean }) {
   return (
     <p className={[
-      "m-0 flex items-center justify-between gap-3 text-xs font-black",
+      "m-0 flex min-w-0 items-center justify-between gap-3 text-xs font-black",
       dark ? "text-white/65" : "text-[var(--premium-muted)]",
     ].join(" ")}
     >
-      {label}
-      <span>{value}</span>
+      <span className="min-w-0 truncate">{label}</span>
+      <span className="shrink-0">{value}</span>
     </p>
   );
 }
@@ -1383,7 +1385,7 @@ function ToolButton({
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-2.5 text-[13px] text-[var(--premium-muted)] max-[500px]:grid-cols-1">
+    <div className="grid min-w-0 grid-cols-[96px_minmax(0,1fr)] gap-2.5 text-[13px] text-[var(--premium-muted)] max-[500px]:grid-cols-1">
       <span>{label}</span>
       <strong className="truncate text-[var(--premium-ink)]">{value}</strong>
     </div>
@@ -1442,8 +1444,8 @@ function formatCitationPosition(citationIndex: number, item?: PreviewSegment) {
   return `段落 ${citationIndex}${title}`;
 }
 
-function clampScale(scale: number) {
-  return Math.min(MAX_PDF_SCALE, Math.max(MIN_PDF_SCALE, Number(scale.toFixed(2))));
+function clampScale(scale: number, minScale = MIN_PDF_SCALE) {
+  return Math.min(MAX_PDF_SCALE, Math.max(minScale, Number(scale.toFixed(2))));
 }
 
 function isPdfRenderingCancelled(error: unknown) {
