@@ -1,0 +1,100 @@
+.reveal {
+  animation: previewPremiumReveal 760ms cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.pulse {
+  animation: previewPremiumPulse 2.4s cubic-bezier(0.19, 1, 0.22, 1) infinite;
+}
+
+.highlight {
+  animation: previewPremiumGlow 2.6s cubic-bezier(0.19, 1, 0.22, 1) infinite alternate;
+}
+
+.contextHighlight {
+  animation: previewContextHighlight 2.4s cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.meterFill {
+  animation: previewPremiumGrow 1000ms cubic-bezier(0.19, 1, 0.22, 1) 260ms both;
+}
+
+@keyframes previewPremiumReveal {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes previewPremiumPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.42);
+  }
+}
+
+@keyframes previewPremiumGlow {
+  from {
+    box-shadow:
+      0 0 0 5px rgba(255, 176, 32, 0.09),
+      0 16px 42px rgba(255, 176, 32, 0.1);
+  }
+
+  to {
+    box-shadow:
+      0 0 0 9px rgba(255, 176, 32, 0.15),
+      0 24px 58px rgba(255, 176, 32, 0.16);
+  }
+}
+
+@keyframes previewContextHighlight {
+  0% {
+    opacity: 0;
+    box-shadow: 0 0 0 3px rgba(36, 89, 255, 0.08);
+    transform: scale(0.985);
+  }
+
+  18%,
+  72% {
+    opacity: 1;
+    box-shadow:
+      0 0 0 8px rgba(36, 89, 255, 0.14),
+      0 20px 52px rgba(36, 89, 255, 0.2);
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    box-shadow: 0 0 0 12px rgba(36, 89, 255, 0);
+    transform: scale(1.01);
+  }
+}
+
+@keyframes previewPremiumGrow {
+  from {
+    width: 18%;
+  }
+
+  to {
+    width: 91%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .pulse,
+  .highlight,
+  .contextHighlight,
+  .meterFill {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
+}

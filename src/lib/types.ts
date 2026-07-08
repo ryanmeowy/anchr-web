@@ -84,22 +84,26 @@ export type KnowledgeBaseHealth = {
   sourceTypes: KnowledgeBaseHealthSourceType[];
 };
 
-export type DocumentAsset = {
-  id: string;
-  kbId: string;
-  fileName: string;
-  title?: string;
-  fileType?: string;
-  mimeType?: string;
-  sizeBytes?: number;
-  sourceUrl?: string;
-  parseStatus: string;
-  indexStatus: string;
-  segmentCount: number;
-  errorCode?: string;
-  errorMessage?: string;
-  createdAt?: string;
-  updatedAt?: string;
+export type ElasticsearchHealthIndices = {
+  count: number;
+  docsCount: number;
+  storeSizeBytes: number;
+};
+
+export type ElasticsearchHealth = {
+  connected: boolean;
+  status?: "green" | "yellow" | "red" | string | null;
+  clusterName?: string | null;
+  nodeCount?: number;
+  dataNodeCount?: number;
+  activeShards?: number;
+  activePrimaryShards?: number;
+  unassignedShards?: number;
+  initializingShards?: number;
+  relocatingShards?: number;
+  indices?: ElasticsearchHealthIndices | null;
+  version?: string | null;
+  error?: string | null;
 };
 
 export type RecentQuestion = {
@@ -112,14 +116,21 @@ export type RecentQuestion = {
 };
 
 export type RecentCitation = {
+  recordId?: string;
   segmentId: string;
   assetId?: string | null;
   kbId?: string | null;
+  kbName?: string | null;
   fileName?: string | null;
   title?: string | null;
   snippet?: string | null;
   citationReason?: string | null;
   openedAt?: string;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  sessionId?: string | null;
+  citationIndex?: string | null;
+  question?: string | null;
 };
 
 export type RecentSearch = {
@@ -139,18 +150,6 @@ export type RecentSearch = {
 
 export type ConversationAnswerMode = "STRICT" | "SUMMARY" | "EXPLORE";
 
-export type RecentDocument = {
-  taskId: string;
-  kbId: string;
-  knowledgeBaseName?: string | null;
-  status: string;
-  totalCount: number;
-  successCount: number;
-  failureCount: number;
-  runningCount: number;
-  importedAt?: string;
-};
-
 export type RecentQuestionList = {
   items: RecentQuestion[];
   nextCursor?: string | null;
@@ -164,34 +163,6 @@ export type RecentCitationList = {
 export type RecentSearchList = {
   items: RecentSearch[];
   nextCursor?: string | null;
-};
-
-export type RecentDocumentList = {
-  items: RecentDocument[];
-  nextCursor?: string | null;
-};
-
-export type HomeSummary = {
-  favoriteKbs?: Array<{
-    kbId: string;
-    name: string;
-    documentCount: number;
-    segmentCount: number;
-    updatedAt?: string;
-  }>;
-  recentQuestions?: RecentQuestion[];
-  recentCitations?: RecentCitation[];
-  recentIngestionTasks?: IngestionTaskSummary[];
-  helpLinks?: Array<{
-    title: string;
-    url: string;
-  }>;
-  warnings?: string[];
-  state?: {
-    loading: boolean;
-    empty: boolean;
-    error: boolean;
-  };
 };
 
 export type SupportedFormat = {
@@ -274,17 +245,18 @@ export type UploadIngestionItem = {
 
 export type SearchAssetType = string;
 export type SearchHitType = "TEXT_CHUNK" | "IMAGE_OCR_BLOCK";
+export type SearchResultType = "TEXT" | "IMAGE" | "MIXED";
 export type SearchStrategy = "KB_RRF" | "KB_RRF_RERANK";
 export type SearchAnswerMode = "STRICT";
 
 export type SearchRequest = {
   query: string;
-  topK?: number;
   limit?: number;
   strategy?: SearchStrategy;
   kbIds?: string[];
+  assetIdList?: string[];
   assetTypes?: SearchAssetType[];
-  hitType?: SearchHitType[];
+  hitTypes?: SearchHitType[];
   dateRange?: {
     from?: number;
     to?: number;
@@ -308,7 +280,7 @@ export type SearchResult = {
   score?: number;
   thumbnail?: string;
   ocrSummary?: string;
-  resultType?: SearchHitType;
+  resultType?: SearchResultType;
   explain?: {
     strategyEffective?: string;
     hitSources?: string[];
@@ -317,6 +289,24 @@ export type SearchResult = {
       ocr?: boolean;
       tag?: boolean;
       vector?: boolean;
+    };
+    matchedBy?: {
+      vector?: boolean;
+      title?: boolean;
+      content?: boolean;
+      ocr?: boolean;
+    };
+    textSignals?: {
+      semantic?: boolean;
+      keyword?: boolean;
+      pageHit?: boolean;
+      chunkHit?: boolean;
+    };
+    imageSignals?: {
+      vector?: boolean;
+      ocr?: boolean;
+      caption?: boolean;
+      tag?: boolean;
     };
   };
   anchor?: {
@@ -342,7 +332,48 @@ export type SearchAnswer = {
     fileName?: string;
     pageNo?: number;
     snippet?: string;
+    why?: {
+      score?: number | null;
+      hitSources?: string[];
+      matchedBy?: {
+        vector?: boolean;
+        title?: boolean;
+        content?: boolean;
+        ocr?: boolean;
+      } | null;
+      matchSummary?: string | null;
+    } | null;
   }>;
+};
+
+export type SearchInsight = {
+  pipeline?: {
+    keywordCandidates?: number;
+    vectorCandidates?: number;
+    fusedRetained?: number;
+    rerankAdopted?: number;
+  } | null;
+  relevanceDistribution?: {
+    high?: number;
+    medium?: number;
+    low?: number;
+  } | null;
+  risk?: {
+    lowRelevanceCount?: number;
+  } | null;
+  hitSourceDistribution?: {
+    vectorCount?: number;
+    contentCount?: number;
+    ocrCount?: number;
+    tagCount?: number;
+    titleCount?: number;
+  } | null;
+  queryIntent?: {
+    intent?: string | null;
+    category?: string | null;
+    fallback?: boolean;
+  } | null;
+  latencyMs?: number | null;
 };
 
 export type SearchPage = {
@@ -354,8 +385,39 @@ export type SearchPage = {
       value: SearchAssetType;
       count: number;
     }>;
+    assetTypes?: Array<{
+      value: SearchAssetType;
+      count: number;
+    }>;
+    hitTypes?: Array<{
+      value: SearchHitType;
+      count: number;
+    }>;
   } | null;
   answer?: SearchAnswer | null;
+  rewrittenKeywords?: string[] | null;
+  suggestedQuestions?: string[] | null;
+  insight?: SearchInsight | null;
+};
+
+export type PreviewCitationInfo = {
+  segmentId?: string;
+  citationIndex?: string;
+  reason?: string;
+  why?: {
+    score?: string;
+    hitSources?: string[];
+    matchSummary?: string;
+  };
+};
+
+export type PreviewRequest = {
+  recordId?: string;
+  sourceType?: "ASK" | "SEARCH";
+  sourceId?: string;
+  sessionId?: string;
+  question?: string;
+  citationInfo?: PreviewCitationInfo;
 };
 
 export type PreviewSegment = {
@@ -389,6 +451,7 @@ export type PreviewSegment = {
     pageNo?: number;
     chunkOrder?: number;
     relation?: string;
+    bbox?: PreviewBBoxRecord[] | null;
   }>;
   citationContext?: {
     sourceQuestion?: string;
@@ -416,10 +479,10 @@ export type PreviewBBoxRecord = {
 
 export type CapabilityConfig = {
   id: number;
-  baseUrl: string;
-  modelName?: string;
-  extraConfig?: Record<string, unknown>;
-  apiKeyMasked: string;
+  baseUrl?: string | null;
+  modelName?: string | null;
+  extraConfig?: Record<string, unknown> | null;
+  apiKeyMasked?: string | null;
   enabled: boolean;
 };
 
@@ -492,6 +555,11 @@ export type ConversationCitation = {
   hitType?: string;
   assetId?: string;
   segmentId?: string;
+  why?: {
+    score?: number | null;
+    hitSources?: string[];
+    matchSummary?: string | null;
+  } | null;
 };
 
 export type ConversationSession = {
@@ -501,6 +569,7 @@ export type ConversationSession = {
   status?: string;
   lastMessagePreview?: string | null;
   kbScope?: string[];
+  assetScope?: string[];
   createdAt?: number;
   updatedAt?: number;
   expiresAt?: number;
@@ -518,6 +587,7 @@ export type ConversationTurn = {
   rewrittenQuery?: string;
   answer?: string;
   kbScope?: string[];
+  assetScope?: string[];
   answerMode?: string;
   citations?: ConversationCitation[];
   resultCards?: Array<{
@@ -559,9 +629,34 @@ export type ConversationMessage = {
   rewrittenQuery?: string;
   answer?: string;
   kbScope?: string[];
+  assetScope?: string[];
   answerMode?: string;
   retrievalStage?: string;
   citations?: ConversationCitation[];
   suggestedQuestions?: string[];
   createdAt?: number;
+};
+export type SegmentIndexStatus = {
+  status: "NOT_READY" | "INITIALIZING" | "READY" | "REBUILDING";
+  indexExists: boolean;
+  readable: boolean;
+  writable: boolean;
+  actualDim?: number | null;
+  actualModel?: string | null;
+  actualProfileFingerprint?: string | null;
+  expectedDim?: number | null;
+  expectedModel?: string | null;
+  expectedProfileFingerprint?: string | null;
+  pendingRebuild?: {
+    taskId: string;
+    expectedDim: number;
+    reason: string;
+    createdAt: string;
+  } | null;
+  rebuildProgress?: {
+    migrated: number;
+    total: number;
+    phase: "PREPARING" | "MIGRATING" | "SWITCHING_ALIAS" | "COMPLETED" | "FAILED";
+  } | null;
+  lastError?: string | null;
 };

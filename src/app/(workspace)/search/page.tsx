@@ -1,5 +1,10 @@
-import { SearchPage } from "@/features/search/search-page";
+import { PremiumSystemConfigurationBoundary } from "@/components/app/premium-configuration-gate";
+import { SearchPremiumPage } from "@/features/search/search-premium-page";
 
 export default function Page() {
-  return <SearchPage />;
+  return (
+    <PremiumSystemConfigurationBoundary>
+      <SearchPremiumPage />
+    </PremiumSystemConfigurationBoundary>
+  );
 }

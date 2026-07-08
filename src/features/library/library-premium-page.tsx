@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   ArrowRight,
@@ -17,11 +17,22 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useDeferredValue, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { PremiumRail } from "@/components/app/premium-rail";
+import { useRouter } from "next/navigation";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type UIEvent,
+  type WheelEvent,
+} from "react";
+import { PremiumConfigurationShell } from "@/components/app/premium-configuration-gate";
 import { apiClient } from "@/lib/api-client";
 import { formatDateTime, formatNumber, statusText } from "@/lib/format";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
+import { saveRecentCitationPreviewNavigation } from "@/lib/preview-context";
 import type { KnowledgeBase, KnowledgeBaseHealth, KnowledgeBaseStats, RecentCitation, RecentQuestion } from "@/lib/types";
 
 type ViewMode = "grid" | "list";
@@ -113,17 +124,29 @@ export function LibraryPremiumPage() {
     refetchOnWindowFocus: false,
   });
 
-  const citationsQuery = useQuery({
+  const citationsQuery = useInfiniteQuery({
     queryKey: ["activity", "recent-citations", RECENT_LIMIT],
-    queryFn: () => apiClient.recentCitations(RECENT_LIMIT),
+    queryFn: ({ pageParam }) => apiClient.recentCitations(RECENT_LIMIT, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
-  const questionsQuery = useQuery({
-    queryKey: ["activity", "recent-questions", RECENT_LIMIT],
-    queryFn: () => apiClient.recentQuestions(RECENT_LIMIT),
+  const questionsQuery = useInfiniteQuery({
+    queryKey: ["activity", "recent-questions", 5],
+    queryFn: ({ pageParam }) => apiClient.recentQuestions(5, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
   const items = useMemo(() => kbsQuery.data?.items ?? [], [kbsQuery.data?.items]);
+  const recentCitations = useMemo(
+    () => citationsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [citationsQuery.data?.pages],
+  );
+  const recentQuestions = useMemo(
+    () => questionsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [questionsQuery.data?.pages],
+  );
   const activeStatsKbIds = useMemo(
     () => items.filter(isActiveKnowledgeBase).map((item) => item.id),
     [items],
@@ -293,20 +316,13 @@ export function LibraryPremiumPage() {
   };
 
   return (
-    <div className="premium-theme ask-premium-page library-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>
-      <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(17,19,21,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(17,19,21,0.055)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
-      <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,rgba(187,255,102,0.34),transparent_28rem),radial-gradient(circle_at_14%_92%,rgba(49,88,255,0.15),transparent_30rem)]" />
-
-      <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:min-h-[calc(100vh-48px)] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
-          <PremiumRail theme={theme} onThemeChange={setTheme} />
-
-          <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
+    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+      <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
             <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
                 LIBRARY
               </div>
-              <section className="relative z-10 flex min-w-0 flex-col justify-between gap-2">
+              <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
                   <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
                     <span className="size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
@@ -529,16 +545,22 @@ export function LibraryPremiumPage() {
                 </div>
               </section>
 
-              <aside className="grid gap-2 overflow-visible lg:min-w-0" aria-label="活动洞察">
+              <aside className="grid content-start gap-3 overflow-visible lg:h-full lg:min-h-0 lg:min-w-0 lg:grid-rows-[320px_320px_minmax(184px,auto)]" aria-label="活动洞察">
                 <RecentCitationPanel
-                  items={citationsQuery.data?.items ?? []}
+                  items={recentCitations}
                   isLoading={citationsQuery.isLoading}
                   isError={citationsQuery.isError}
+                  hasNextPage={Boolean(citationsQuery.hasNextPage)}
+                  isFetchingNextPage={citationsQuery.isFetchingNextPage}
+                  onLoadMore={() => void citationsQuery.fetchNextPage()}
                 />
                 <RecentQuestionPanel
-                  items={questionsQuery.data?.items ?? []}
+                  items={recentQuestions}
                   isLoading={questionsQuery.isLoading}
                   isError={questionsQuery.isError}
+                  hasNextPage={Boolean(questionsQuery.hasNextPage)}
+                  isFetchingNextPage={questionsQuery.isFetchingNextPage}
+                  onLoadMore={() => void questionsQuery.fetchNextPage()}
                 />
                 <div className="min-h-[184px]">
                   <HealthPanel
@@ -551,9 +573,7 @@ export function LibraryPremiumPage() {
               </aside>
             </main>
           </div>
-        </div>
-      </div>
-    </div>
+    </PremiumConfigurationShell>
   );
 }
 
@@ -1193,42 +1213,117 @@ function KnowledgeBasePagination({
   );
 }
 
-function RecentCitationPanel({ items, isLoading, isError }: { items: RecentCitation[]; isLoading: boolean; isError: boolean }) {
+function RecentCitationPanel({
+  items,
+  isLoading,
+  isError,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+}: {
+  items: RecentCitation[];
+  isLoading: boolean;
+  isError: boolean;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
+}) {
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 28) onLoadMore();
+  };
+
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (!hasNextPage || isFetchingNextPage || event.deltaY <= 0) return;
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 28) onLoadMore();
+  };
+
   return (
-    <section className="rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近引用">
-      <PanelLabel label="RECENT CITATIONS" value="OPENED" dark />
-      <div className="mt-2.5 grid gap-2">
+    <section className="flex h-[320px] min-h-0 flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近引用">
+      <PanelLabel label="RECENT CITATIONS" value={String(items.length)} dark />
+      <div
+        className="mt-2.5 grid min-h-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
+        onScroll={handleScroll}
+        onWheel={handleWheel}
+      >
         {isLoading ? <DarkState label="加载最近引用" /> : null}
         {isError ? <DarkState label="最近引用暂不可用" /> : null}
         {!isLoading && !isError && items.length === 0 ? <DarkState label="暂无最近引用" /> : null}
-        {!isLoading && !isError ? items.slice(0, RECENT_LIMIT).map((item, index) => <CitationItem key={`${item.segmentId}-${item.openedAt ?? index}`} item={item} index={index} />) : null}
+        {items.map((item, index) => <CitationItem key={`${item.segmentId}-${item.openedAt ?? index}-${index}`} item={item} index={index} />)}
+        {isFetchingNextPage ? <DarkState label="加载更多" /> : null}
       </div>
     </section>
   );
 }
 
 function CitationItem({ item, index }: { item: RecentCitation; index: number }) {
+  const router = useRouter();
+
   return (
-    <Link href={`/preview/${encodeURIComponent(item.segmentId)}`} className="grid gap-1.5 rounded-[8px] border border-white/10 bg-white/10 p-2.5 transition hover:-translate-x-0.5 hover:bg-white/[0.14]">
+    <button
+      type="button"
+      onClick={() => router.push(saveRecentCitationPreviewNavigation(item, index))}
+      className="grid w-full gap-1.5 rounded-[8px] border border-white/10 bg-white/10 p-2.5 text-left transition hover:-translate-x-0.5 hover:bg-white/[0.14]"
+    >
       <div className="flex flex-wrap gap-1">
         <span className="rounded-full bg-[rgba(187,255,102,0.16)] px-2 py-0.5 text-[10px] font-black text-[var(--premium-accent)]">{fileExtension(item.fileName)}</span>
         <span className="rounded-full bg-[rgba(187,255,102,0.16)] px-2 py-0.5 text-[10px] font-black text-[var(--premium-accent)]">#{index + 1}</span>
       </div>
-      <strong className="break-words text-xs">{item.title || item.fileName || "引用片段"}</strong>
-      <p className="line-clamp-1 text-[11px] leading-4 text-white/70">{item.snippet || item.citationReason || "暂无引用摘要。"}</p>
-    </Link>
+      <strong className="line-clamp-1 break-words text-xs">{item.fileName || "未命名文件"}</strong>
+      <div className="flex min-w-0 items-center gap-2 text-[11px] leading-4">
+        <span className="max-w-[42%] shrink-0 truncate text-white/70">{item.kbName || "未知知识库"}</span>
+        <span aria-hidden="true" className="shrink-0 text-white/35">|</span>
+        <p className="min-w-0 flex-1 truncate text-white/85">{item.question || "未记录问题"}</p>
+      </div>
+      <time className="text-[10px] leading-4 text-white/55" dateTime={item.openedAt}>
+        {formatDateTime(item.openedAt)}
+      </time>
+    </button>
   );
 }
 
-function RecentQuestionPanel({ items, isLoading, isError }: { items: RecentQuestion[]; isLoading: boolean; isError: boolean }) {
+function RecentQuestionPanel({
+  items,
+  isLoading,
+  isError,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+}: {
+  items: RecentQuestion[];
+  isLoading: boolean;
+  isError: boolean;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
+}) {
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 28) onLoadMore();
+  };
+
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (!hasNextPage || isFetchingNextPage || event.deltaY <= 0) return;
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 28) onLoadMore();
+  };
+
   return (
-    <section className="flex min-h-[152px] flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近问过">
+    <section className="flex h-[320px] min-h-0 flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近问过">
       <PanelLabel label="RECENT QUESTIONS" value={String(items.length)} dark />
-      <div className="mt-2.5 grid gap-2">
+      <div
+        className="mt-2.5 grid min-h-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
+        onScroll={handleScroll}
+        onWheel={handleWheel}
+      >
         {isLoading ? <DarkState label="加载最近提问" /> : null}
         {isError ? <DarkState label="最近提问暂不可用" /> : null}
         {!isLoading && !isError && items.length === 0 ? <DarkState label="暂无最近提问" /> : null}
-        {!isLoading && !isError ? items.slice(0, RECENT_LIMIT).map((item) => <QuestionItem key={item.turnId} item={item} />) : null}
+        {items.map((item, index) => <QuestionItem key={`${item.turnId}-${index}`} item={item} />)}
+        {isFetchingNextPage ? <DarkState label="加载更多" /> : null}
       </div>
     </section>
   );
@@ -1264,21 +1359,21 @@ function HealthPanel({
   const sourceTypes = health?.sourceTypes ?? [];
 
   return (
-    <section className="flex h-full flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] p-3 text-[var(--premium-ink)] shadow-[var(--premium-tight-shadow)]" aria-label="知识库健康度">
-      <PanelLabel label="LIBRARY HEALTH" value={health?.status ?? selectedKb?.status ?? "READY"} />
+    <section className="flex h-full flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="知识库健康度">
+      <PanelLabel label="LIBRARY HEALTH" value={health?.status ?? selectedKb?.status ?? "READY"} dark />
       <div className="mt-2.5 grid min-h-0 flex-1 gap-2.5">
-        {!selectedKb ? <InlineState label="选择知识库查看健康度" fill /> : null}
-        {selectedKb && isLoading ? <InlineState label="加载健康状态" fill /> : null}
-        {selectedKb && isError ? <InlineState label="健康状态暂不可用" fill /> : null}
+        {!selectedKb ? <DarkState label="选择知识库查看健康度" /> : null}
+        {selectedKb && isLoading ? <DarkState label="加载健康状态" /> : null}
+        {selectedKb && isError ? <DarkState label="健康状态暂不可用" /> : null}
         {selectedKb && !isLoading && !isError ? (
           <>
             <div className="flex items-end justify-between gap-3">
               <strong className="text-[clamp(34px,4.6vw,58px)] font-black leading-[0.88]">{score}%</strong>
-              <span className="max-w-[140px] text-[11px] leading-4 text-[var(--premium-muted)]">
+              <span className="max-w-[140px] text-[11px] leading-4 text-white/70">
                 {health?.kbName ?? selectedKb.name} 的索引、片段与导入状态综合评分。
               </span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/10" aria-label={`健康度 ${score}%`}>
+            <div className="h-2 overflow-hidden rounded-full bg-white/10" aria-label={`健康度 ${score}%`}>
               <span className="block h-full rounded-full bg-[linear-gradient(90deg,var(--premium-blue),var(--premium-accent))] transition-[width] duration-500" style={{ width: `${score}%` }} />
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -1297,8 +1392,8 @@ function HealthPanel({
 
 function HealthMetric({ value, label }: { value: string; label: string }) {
   return (
-    <span className="min-h-12 rounded-[8px] border border-[var(--premium-line)] bg-white/55 p-2 text-[10px] text-[var(--premium-muted)] dark:bg-white/5">
-      <b className="mb-0.5 block break-words text-sm text-[var(--premium-ink)]">{value}</b>
+    <span className="min-h-12 rounded-[8px] border border-white/10 bg-white/10 p-2 text-[10px] text-white/60">
+      <b className="mb-0.5 block break-words text-sm text-white">{value}</b>
       {label}
     </span>
   );

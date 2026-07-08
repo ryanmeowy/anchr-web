@@ -16,8 +16,18 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
+import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
+import { TransientNotice } from "@/components/shared/transient-notice";
 import { ErrorBlock } from "@/components/ui/query-state";
 import { ApiError, apiClient } from "@/lib/api-client";
+import {
+  consumeAssetScopeHandoff,
+  readAskAssetScope,
+  readAssetNameCache,
+  rememberAssetScopes,
+  saveAskAssetScope,
+  type AssetScope,
+} from "@/lib/asset-scope";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import {
   clearPreviewRestoreState,
@@ -40,6 +50,8 @@ type ChatMessage = {
   sessionId: string;
   turnId?: string;
   citations?: ConversationCitation[];
+  assetScope?: string[];
+  answerMode?: ConversationAnswerMode | string;
   pending?: boolean;
   error?: string;
 };
@@ -110,6 +122,9 @@ export function AskPremiumPage() {
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([]);
+  const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
+  const [assetNameCache, setAssetNameCache] = useState<Record<string, string>>({});
+  const [scopeNotice, setScopeNotice] = useState<string | null>(null);
   const streamRef = useRef<{ requestId: string; sessionId: string } | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
@@ -133,6 +148,7 @@ export function AskPremiumPage() {
     const frame = window.requestAnimationFrame(() => {
       setTheme(getInitialPremiumTheme());
       setThemeHydrated(true);
+      setAssetNameCache(readAssetNameCache());
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -189,6 +205,13 @@ export function AskPremiumPage() {
   const citationCount = activeMessages.reduce((total, message) => total + (message.citations?.length ?? 0), 0);
   const canSubmit = Boolean(query.trim()) && !streamingSessionId && (Boolean(activeSessionId) || selectedKbIds.length > 0);
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setActiveAssetScope(activeSessionId ? readAskAssetScope(activeSessionId) : null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSessionId]);
+
   const addTraceEvent = useCallback((event: Omit<TraceEvent, "id" | "at">) => {
     setTraceEvents((previous) => [
       ...previous.slice(-11),
@@ -201,12 +224,22 @@ export function AskPremiumPage() {
   }, []);
 
   useEffect(() => {
+    const handoff = consumeAssetScopeHandoff("ask");
     const restored = readPreviewRestoreState<AskPremiumReturnState>("ask");
-    if (!restored?.context.returnState) return;
+    if (!restored?.context.returnState) {
+      if (handoff?.sessionId) {
+        window.requestAnimationFrame(() => {
+          setActiveSessionId(handoff.sessionId ?? "");
+          setActiveAssetScope(handoff.scope);
+        });
+      }
+      return;
+    }
 
     const state = restored.context.returnState;
     window.requestAnimationFrame(() => {
-      setActiveSessionId(state.activeSessionId);
+      setActiveSessionId(handoff?.sessionId ?? state.activeSessionId);
+      if (handoff) setActiveAssetScope(handoff.scope);
       setQuery(state.query);
       setSelectedKbIdsValue(state.selectedKbIdsValue);
       setSelectedAnswerMode(state.selectedAnswerMode ?? "STRICT");
@@ -292,12 +325,15 @@ export function AskPremiumPage() {
   }, [composerMenu]);
 
   useEffect(() => {
-    updateComposerMenuPosition();
-    if (!composerMenu) return undefined;
+    const frame = window.requestAnimationFrame(updateComposerMenuPosition);
+    if (!composerMenu) {
+      return () => window.cancelAnimationFrame(frame);
+    }
 
     window.addEventListener("resize", updateComposerMenuPosition);
     window.addEventListener("scroll", updateComposerMenuPosition, true);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updateComposerMenuPosition);
       window.removeEventListener("scroll", updateComposerMenuPosition, true);
     };
@@ -314,6 +350,15 @@ export function AskPremiumPage() {
       try {
         const data = await apiClient.listConversationMessages(activeSessionId, HISTORY_LIMIT);
         if (!cancelled) {
+          const nextNameCache = rememberAssetScopes(
+            (data.turns ?? []).flatMap((turn) => (
+              (turn.citations ?? []).map((citation) => ({
+                assetId: citation.assetId,
+                fileName: citation.fileName,
+              }))
+            )),
+          );
+          setAssetNameCache(nextNameCache);
           setMessagesBySession((previous) => ({
             ...previous,
             [activeSessionId]: turnsToMessages(data.turns ?? []),
@@ -397,6 +442,8 @@ export function AskPremiumPage() {
 
     const contextKey = savePreviewNavigation<AskPremiumReturnState>({
       source: "ask",
+      sourceId: message.turnId,
+      sessionId: message.sessionId,
       question,
       answer: stripTraceText(message.content),
       citations: normalizeConversationCitations(message.citations),
@@ -435,6 +482,8 @@ export function AskPremiumPage() {
   const sendMessage = async (rawText: string, options: { clearComposer?: boolean } = {}) => {
     const text = rawText.trim();
     if (!text || streamingSessionId || (!activeSessionId && selectedKbIds.length === 0)) return;
+    const requestAssetScope = activeAssetScope;
+    const effectiveKbIds = requestAssetScope?.kbId ? [requestAssetScope.kbId] : selectedKbIds;
 
     if (options.clearComposer) {
       setQuery("");
@@ -471,6 +520,8 @@ export function AskPremiumPage() {
         role: "assistant",
         content: "",
         sessionId: targetSessionId,
+        assetScope: requestAssetScope ? [requestAssetScope.assetId] : [],
+        answerMode: selectedAnswerMode,
         pending: true,
       };
       const requestId = makeMessageId("stream");
@@ -491,7 +542,8 @@ export function AskPremiumPage() {
         targetSessionId,
         {
           query: text,
-          kbIds: selectedKbIds.length > 0 ? selectedKbIds : undefined,
+          kbIds: effectiveKbIds.length > 0 ? effectiveKbIds : undefined,
+          assetIdList: requestAssetScope ? [requestAssetScope.assetId] : [],
           answerMode: selectedAnswerMode,
         },
         {
@@ -505,6 +557,7 @@ export function AskPremiumPage() {
             updateAssistantMessage(targetSessionId, assistantMessage.id, (message) => ({
               ...message,
               pending: true,
+              answerMode: event.answerMode ?? message.answerMode,
               content: message.content || traceText(event.stage),
             }));
           },
@@ -523,6 +576,11 @@ export function AskPremiumPage() {
           },
           onCitations: (citations) => {
             if (!isCurrentStream()) return;
+            const nextNameCache = rememberAssetScopes(citations.map((citation) => ({
+              assetId: citation.assetId,
+              fileName: citation.fileName,
+            })));
+            setAssetNameCache(nextNameCache);
             addTraceEvent({
               type: "citations",
               label: "citations",
@@ -544,6 +602,8 @@ export function AskPremiumPage() {
               ...message,
               pending: false,
               turnId: event.turnId,
+              assetScope: event.assetScope ?? message.assetScope,
+              answerMode: event.answerMode ?? message.answerMode,
               content: stripTraceText(message.content) || "未生成回答。",
             }));
             setConversations((previous) => previous.map((item) => (
@@ -693,8 +753,21 @@ export function AskPremiumPage() {
   };
 
   const allKbsSelected = kbOptions.length > 0 && selectedKbIds.length === kbOptions.length;
-  const toggleAllKbs = () => setSelectedKbIdsValue(allKbsSelected ? [] : kbOptions.map((item) => item.id));
+  const clearActiveAssetScope = () => {
+    if (activeSessionId) saveAskAssetScope(activeSessionId, null);
+    setActiveAssetScope(null);
+  };
+  const prepareKbScopeChange = () => {
+    if (!activeAssetScope) return;
+    clearActiveAssetScope();
+    setScopeNotice("已关闭“仅此资料”范围，并切换知识库");
+  };
+  const toggleAllKbs = () => {
+    prepareKbScopeChange();
+    setSelectedKbIdsValue(allKbsSelected ? [] : kbOptions.map((item) => item.id));
+  };
   const toggleKb = (kbId: string) => {
+    prepareKbScopeChange();
     if (selectedKbIds.includes(kbId)) {
       setSelectedKbIdsValue(selectedKbIds.filter((item) => item !== kbId));
       return;
@@ -706,6 +779,9 @@ export function AskPremiumPage() {
     <div className="premium-theme ask-premium-page min-h-screen overflow-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>
       <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(17,19,21,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(17,19,21,0.055)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
       <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,rgba(187,255,102,0.34),transparent_28rem),radial-gradient(circle_at_14%_92%,rgba(49,88,255,0.15),transparent_30rem)]" />
+      {scopeNotice ? (
+        <TransientNotice message={scopeNotice} onDismiss={() => setScopeNotice(null)} />
+      ) : null}
 
       <div className="relative min-h-screen p-0 lg:p-6">
         <div className="ask-premium-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[72px_300px_minmax(0,1fr)_350px] lg:grid-rows-none lg:rounded-[8px]">
@@ -766,15 +842,18 @@ export function AskPremiumPage() {
           </aside>
 
           <main className="ask-premium-main flex min-h-0 min-w-0 flex-col bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)]">
-            <header className="ask-premium-hero grid min-h-[112px] items-center gap-3 border-b border-black/10 px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:px-5">
-              <div className="min-w-0">
+            <header className="ask-premium-hero relative grid min-h-[112px] items-center gap-3 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:px-5">
+              <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05]">
+                ASK
+              </div>
+              <div className="relative z-10 min-w-0">
                 <p className="ask-premium-kicker mb-1.5 inline-flex items-center gap-2 text-[10px] font-black text-blue-700">
                   <span className="size-1.5 rounded-full bg-[#bbff66] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
                   ASK / {selectedAnswerMode} ANSWER MODE
                 </p>
                 <h1 className="max-w-[720px] text-[clamp(28px,3.2vw,42px)] font-black leading-none">Anchor Your Answer</h1>
               </div>
-              <div className="ask-premium-scope-chip inline-flex h-10 max-w-full items-center gap-2.5 rounded-full border border-black/10 bg-white/80 px-3.5 text-xs font-bold text-slate-700 shadow-[0_10px_24px_rgba(17,19,21,0.07)]">
+              <div className="ask-premium-scope-chip relative z-10 inline-flex h-10 max-w-full items-center gap-2.5 rounded-full border border-black/10 bg-white/80 px-3.5 text-xs font-bold text-slate-700 shadow-[0_10px_24px_rgba(17,19,21,0.07)]">
                 <Database size={15} />
                 <span className="truncate">{selectedKbLabel} · {selectedAnswerModeLabel}</span>
               </div>
@@ -784,7 +863,6 @@ export function AskPremiumPage() {
               <div className="mx-auto flex min-h-0 w-full max-w-[980px] flex-1 flex-col gap-4">
                 <section ref={messageScrollRef} className="min-h-0 flex-1 overflow-auto pr-1">
                   <div className="relative grid gap-4">
-                    <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute right-0 top-10 text-[clamp(86px,14vw,190px)] font-black leading-none text-black/[0.035]">ASK</div>
                     {messageError ? (
                       <ErrorBlock message={messageError} />
                     ) : isLoadingMessages ? (
@@ -801,6 +879,7 @@ export function AskPremiumPage() {
                           onSubmitUserEdit={(value) => sendMessage(value)}
                           canSubmitUserEdit={!streamingSessionId}
                           highlighted={highlightedTurnId != null && highlightedTurnId === message.turnId}
+                          assetNameCache={assetNameCache}
                         />
                       ))
                     ) : (
@@ -819,6 +898,11 @@ export function AskPremiumPage() {
                   }}
                 >
                   {streamError ? <div className="ask-premium-error rounded-[8px] bg-rose-50 px-3 py-2 text-sm text-rose-700">{streamError}</div> : null}
+                  {activeAssetScope ? (
+                    <div className="flex min-w-0 items-center">
+                      <AssetScopeChip scope={activeAssetScope} onClear={clearActiveAssetScope} />
+                    </div>
+                  ) : null}
                   <label className="flex items-center justify-between text-xs font-black text-slate-500" htmlFor="ask-premium-input">
                     MESSAGE <span>{selectedAnswerMode}</span>
                   </label>
@@ -922,7 +1006,7 @@ export function AskPremiumPage() {
                             key={config.id}
                             selected={config.id === activeGenerationConfig?.id}
                             onClick={() => void handleSelectGenerationConfig(config)}
-                            title={config.modelName || config.baseUrl}
+                            title={config.modelName || config.baseUrl || "未命名模型"}
                             detail={`${config.enabled ? "生效中" : "可切换"} · 全局生效`}
                           />
                         ))
@@ -1267,6 +1351,7 @@ function PremiumChatBubble({
   onSubmitUserEdit,
   canSubmitUserEdit = true,
   highlighted,
+  assetNameCache,
 }: {
   message: ChatMessage;
   question?: string;
@@ -1279,6 +1364,7 @@ function PremiumChatBubble({
   onSubmitUserEdit: (value: string) => void | Promise<void>;
   canSubmitUserEdit?: boolean;
   highlighted?: boolean;
+  assetNameCache: Record<string, string>;
 }) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
@@ -1289,8 +1375,10 @@ function PremiumChatBubble({
 
   useEffect(() => {
     if (!editing) {
-      setDraft(message.content);
+      const frame = window.requestAnimationFrame(() => setDraft(message.content));
+      return () => window.cancelAnimationFrame(frame);
     }
+    return undefined;
   }, [editing, message.content]);
 
   useEffect(() => () => {
@@ -1422,14 +1510,40 @@ function PremiumChatBubble({
       </div>
       <div className="ask-premium-assistant-content min-w-0 flex-1 py-1">
         <div className="mb-2 flex items-center justify-between gap-4">
-          <strong className="text-[13px]">Anchr Answer</strong>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <strong className="text-[13px]">Anchr Answer</strong>
+            {message.answerMode ? (
+              <span
+                className="inline-flex min-h-6 items-center rounded-full border border-blue-500/15 bg-blue-500/10 px-2.5 text-[10px] font-black text-blue-700 dark:text-blue-200"
+                title={`回答模式：${message.answerMode}`}
+              >
+                {answerModeDisplayName(message.answerMode)}
+              </span>
+            ) : null}
+          </div>
           {message.pending ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#bbff66]/25 px-2.5 py-1 text-[11px] font-black text-[#4e7b13]">
-              <span className="size-1.5 animate-pulse rounded-full bg-[#4e7b13]" />
-              流式回答中
+            <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#bbff66]/25" aria-label="流式回答中" title="流式回答中">
+              <span className="size-1.5 animate-pulse rounded-full bg-[#4e7b13]" aria-hidden="true" />
             </span>
           ) : null}
         </div>
+        {message.assetScope?.length ? (
+          <div className="mb-3 flex flex-wrap gap-2" aria-label="本轮资料范围">
+            {message.assetScope.map((assetId) => (
+              <AssetScopeChip
+                key={assetId}
+                compact
+                label="本轮资料"
+                scope={{
+                  assetId,
+                  fileName: assetNameCache[assetId]
+                    ?? message.citations?.find((citation) => citation.assetId === assetId)?.fileName
+                    ?? assetId,
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
         <div className="ask-premium-answer-text whitespace-pre-wrap break-words text-[14px] leading-7 text-slate-700">
           {message.pending && !stripTraceText(message.content) ? "正在生成回答..." : stripTraceText(message.content)}
         </div>
@@ -1479,10 +1593,19 @@ function turnsToMessages(turns: ConversationTurn[]) {
       sessionId: turn.sessionId,
       turnId: turn.turnId,
       citations: turn.citations ?? [],
+      assetScope: turn.assetScope ?? [],
+      answerMode: turn.answerMode,
     });
 
     return messages;
   });
+}
+
+function answerModeDisplayName(answerMode: string) {
+  const normalizedMode = answerMode.toUpperCase();
+  const option = ANSWER_MODES.find((item) => item.value === normalizedMode);
+
+  return option ? `${option.label} · ${option.value}` : answerMode;
 }
 
 function mergeConversations(primary: ConversationSession[], secondary: ConversationSession[]) {

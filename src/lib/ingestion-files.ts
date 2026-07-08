@@ -11,7 +11,7 @@ const FALLBACK_TYPES: Record<string, string> = {
   webp: "IMAGE",
 };
 
-export function inferFileType(input: string, mimeType?: string, formats: SupportedFormat[] = []) {
+export function inferFileType(input: string, mimeType?: string, formats: SupportedFormat[] = []): string | null {
   const extension = extensionOf(input);
   const byExtension = formats.find((format) =>
     format.extensions.some((item) => item.toLowerCase() === extension),
@@ -23,7 +23,7 @@ export function inferFileType(input: string, mimeType?: string, formats: Support
   );
   if (byMime) return byMime.fileType;
 
-  return FALLBACK_TYPES[extension] ?? "URL";
+  return FALLBACK_TYPES[extension] ?? null;
 }
 
 export function buildDisplayNameFromUrl(value: string) {
@@ -57,10 +57,14 @@ export async function uploadFilesToOss(
     await client.put(objectKey, file, {
       headers: { "Content-Type": file.type || "application/octet-stream" },
     });
+    const fileType = inferFileType(file.name, file.type, formats);
+    if (fileType === null) {
+      throw new Error(`${file.name} 格式不支持，请选择支持的文件格式。`);
+    }
     items.push({
       fileName: file.name,
       title: file.name,
-      fileType: inferFileType(file.name, file.type, formats),
+      fileType,
       mimeType: file.type || undefined,
       sizeBytes: file.size,
       objectKey,

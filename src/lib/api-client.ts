@@ -9,12 +9,10 @@ import type {
   CapabilityParams,
   ConversationAnswerMode,
   ConversationCitation,
-  ConversationMessage,
   ConversationMessageList,
   ConversationSession,
   ConversationSessionList,
-  DocumentAsset,
-  HomeSummary,
+  ElasticsearchHealth,
   IngestionCapability,
   IngestionTaskList,
   IngestionTask,
@@ -25,13 +23,14 @@ import type {
   KnowledgeBaseStats,
   KnowledgeBaseUpdateRequest,
   PagedList,
+  PreviewRequest,
   PreviewSegment,
   RecentCitationList,
-  RecentDocumentList,
   RecentQuestionList,
   RecentSearchList,
   SearchRequest,
   SearchPage,
+  SegmentIndexStatus,
   StorageConfig,
   StorageConfigUpdateRequest,
   StorageConnectionTestResult,
@@ -39,7 +38,10 @@ import type {
   UploadIngestionItem,
 } from "./types";
 
-const TOKEN_KEY = "anchr.accessToken";
+export const ACCESS_TOKEN_STORAGE_KEY = "anchr.accessToken";
+const TOKEN_KEY = ACCESS_TOKEN_STORAGE_KEY;
+const DEFAULT_GUEST_ACCESS_TOKEN = "xIu-ZTIfGSjRcWZpw23Le0c7SwAv1sjI";
+export const ACCESS_TOKEN_CHANGED_EVENT = "anchr:access-token-changed";
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
@@ -51,13 +53,14 @@ type StreamMessageCallbacks = {
   onTrace?: (event: { stage?: string; message?: string; answerMode?: ConversationAnswerMode | string }) => void;
   onDelta?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }) => void;
 };
 
 type ConversationMessageRequest = {
   query: string;
   limit?: number;
   kbIds?: string[];
+  assetIdList?: string[];
   answerMode?: ConversationAnswerMode;
   preferredModalities?: Array<"TEXT" | "IMAGE" | "MIXED">;
   debug?: boolean;
@@ -76,20 +79,36 @@ export class ApiError extends Error {
   }
 }
 
-export function getAccessToken() {
+export function getConfiguredAccessToken() {
   if (typeof window === "undefined") {
     return "";
   }
 
-  return window.localStorage.getItem(TOKEN_KEY) ?? "";
+  return window.localStorage.getItem(TOKEN_KEY)?.trim() ?? "";
+}
+
+export function getAccessToken() {
+  return getConfiguredAccessToken() || DEFAULT_GUEST_ACCESS_TOKEN;
 }
 
 export function saveAccessToken(token: string) {
-  window.localStorage.setItem(TOKEN_KEY, token.trim());
+  const normalizedToken = token.trim();
+  if (!normalizedToken) {
+    clearAccessToken();
+    return;
+  }
+  window.localStorage.setItem(TOKEN_KEY, normalizedToken);
+  emitAccessTokenChanged();
 }
 
 export function clearAccessToken() {
   window.localStorage.removeItem(TOKEN_KEY);
+  emitAccessTokenChanged();
+}
+
+function emitAccessTokenChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(ACCESS_TOKEN_CHANGED_EVENT));
 }
 
 async function request<T>(path: string, options: RequestOptions = {}) {
@@ -185,7 +204,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "done") {
-    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
+    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
     return;
   }
 
@@ -221,34 +240,22 @@ export const apiClient = {
     request<RecentCitationList>(`/api/v1/activity/recent-citations?${activityQuery(limit, cursor)}`),
   recentSearch: (limit = 10, cursor?: string | null) =>
     request<RecentSearchList>(`/api/v1/activity/recent-search?${activityQuery(limit, cursor)}`),
-  recentDocument: (limit = 10, cursor?: string | null) =>
-    request<RecentDocumentList>(`/api/v1/activity/recent-document?${activityQuery(limit, cursor)}`),
   listKnowledgeBases: (page = 1, size = 20) =>
     request<PagedList<KnowledgeBase>>("/api/v1/kbs/search", { method: "POST", body: { page, size, status: "0" } }),
-  searchKnowledgeBases: async (query: string, limit = 50) => {
-    const result = await request<KnowledgeBaseListResponse>("/api/v1/kbs/search", {
-      method: "POST",
-      body: { keyword: query, page: 1, size: limit, status: "0" },
-    });
-
-    return result.items;
-  },
   queryKnowledgeBases: (body: KnowledgeBaseQueryRequest) =>
     request<KnowledgeBaseListResponse>("/api/v1/kbs/search", { method: "POST", body }),
   getKnowledgeBaseStats: (kbIds: string[]) =>
     request<KnowledgeBaseStats[]>("/api/v1/kbs/stats", { method: "POST", body: { kbIds } }),
   getKnowledgeBaseHealth: (kbId: string) =>
     request<KnowledgeBaseHealth>(`/api/v1/kbs/${encodeURIComponent(kbId)}/health`),
+  getElasticsearchHealth: () =>
+    request<ElasticsearchHealth>("/api/v1/health/elasticsearch"),
   createKnowledgeBase: (body: { name: string; description?: string }) =>
     request<KnowledgeBase>("/api/v1/kbs", { method: "POST", body }),
   updateKnowledgeBase: (kbId: string, body: KnowledgeBaseUpdateRequest) =>
     request<KnowledgeBase>(`/api/v1/kbs/${encodeURIComponent(kbId)}`, { method: "PATCH", body }),
   archiveKnowledgeBase: (kbId: string) =>
     request<null>(`/api/v1/kbs/${encodeURIComponent(kbId)}`, { method: "DELETE" }),
-  listDocuments: (kbId: string, page = 1, size = 20) =>
-    request<PagedList<DocumentAsset>>(
-      `/api/v1/kbs/${encodeURIComponent(kbId)}/documents?page=${page}&size=${size}`,
-    ),
   ingestionCapabilities: () =>
     request<IngestionCapability>("/api/v1/ingestion/capabilities"),
   listIngestionTasks: (kbId: string, size = 10) =>
@@ -298,8 +305,6 @@ export const apiClient = {
     request<SearchPage>("/api/v1/search/kb", { method: "POST", body }),
   listConversations: (limit = 50, cursor?: string | null) =>
     request<ConversationSessionList>(`/api/conversations?${conversationListQuery(limit, cursor)}`),
-  getConversation: (sessionId: string) =>
-    request<ConversationSession>(`/api/conversations/${encodeURIComponent(sessionId)}`),
   createConversation: (body: { title?: string | null; kbIds?: string[] }) =>
     request<ConversationSession>("/api/conversations", {
       method: "POST",
@@ -313,11 +318,6 @@ export const apiClient = {
   deleteConversation: (sessionId: string) =>
     request<null>(`/api/conversations/${encodeURIComponent(sessionId)}`, {
       method: "DELETE",
-    }),
-  sendMessage: (sessionId: string, body: ConversationMessageRequest) =>
-    request<ConversationMessage>(`/api/conversations/${encodeURIComponent(sessionId)}/messages`, {
-      method: "POST",
-      body,
     }),
   sendMessageStream: async (
     sessionId: string,
@@ -372,16 +372,16 @@ export const apiClient = {
     request<ConversationMessageList>(
       `/api/conversations/${encodeURIComponent(sessionId)}/messages?${conversationMessagesQuery(limit, beforeTurnId)}`,
     ),
-  previewSegment: (segmentId: string) =>
-    request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}`),
-  refreshSegmentPreview: (segmentId: string) =>
+  previewSegment: (segmentId: string, body: PreviewRequest = {}) =>
+    request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}`, {
+      method: "POST",
+      body,
+    }),
+  refreshSegmentPreview: (segmentId: string, body: PreviewRequest = {}) =>
     request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}/refresh`, {
       method: "POST",
+      body,
     }),
-  previewNeighbors: (segmentId: string) =>
-    request<{ items?: PreviewSegment["surroundingChunks"] }>(
-      `/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}/neighbors?before=2&after=2`,
-    ),
   // ── settings: capability config ──────────────────────────────────────
 
   getCapabilityConfig: (capability: string) =>
@@ -392,11 +392,17 @@ export const apiClient = {
     request<CapabilityConfig>(`/api/v1/settings/${encodeURIComponent(capability)}`, { method: "POST", body }),
   updateCapabilityConfig: (capability: string, id: number, body: CapabilityConfigUpdateRequest) =>
     request<CapabilityConfig>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}`, { method: "PATCH", body }),
-  selectCapabilityConfig: (capability: string, id: number) =>
-    request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}/select`, { method: "PUT" }),
-  reindexCapability: () =>
-    request<null>("/api/v1/ingestion/reindex", { method: "POST" }),
-  deleteCapabilityConfig: (capability: string, id: number) =>
+ selectCapabilityConfig: (capability: string, id: number) =>
+   request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}/select`, { method: "PUT" }),
+  getIndexStatus: () =>
+    request<SegmentIndexStatus>("/api/v1/index/status"),
+  retryIndexCreate: () =>
+    request<boolean>("/api/v1/index/retry", { method: "POST" }),
+  prepareIndexRebuild: () =>
+    request<string | null>("/api/v1/index/rebuild/prepare", { method: "POST" }),
+  confirmIndexRebuild: (taskId: string) =>
+    request<boolean>("/api/v1/index/rebuild/confirm", { method: "POST", body: { taskId } }),
+ deleteCapabilityConfig: (capability: string, id: number) =>
     request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}`, { method: "DELETE" }),
   getCapabilityParams: (capability: string) =>
     request<CapabilityParams>(`/api/v1/settings/${encodeURIComponent(capability)}/params`),

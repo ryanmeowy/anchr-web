@@ -1,4 +1,4 @@
-import { PreviewPage } from "@/features/preview/preview-page";
+import { PreviewPremiumPage } from "@/features/preview/preview-premium-page";
 
 export default async function Page({
   params,
@@ -7,5 +7,5 @@ export default async function Page({
 }) {
   const { segmentId } = await params;
 
-  return <PreviewPage segmentId={segmentId} />;
+  return <PreviewPremiumPage segmentId={segmentId} />;
 }

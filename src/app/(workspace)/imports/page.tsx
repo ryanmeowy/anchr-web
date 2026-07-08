@@ -1,5 +1,10 @@
-import { ImportsPage } from "@/features/imports/imports-page";
+import { PremiumSystemConfigurationBoundary } from "@/components/app/premium-configuration-gate";
+import { ImportsPremiumPage } from "@/features/imports/imports-premium-page";
 
 export default function Page() {
-  return <ImportsPage />;
+  return (
+    <PremiumSystemConfigurationBoundary>
+      <ImportsPremiumPage />
+    </PremiumSystemConfigurationBoundary>
+  );
 }
