@@ -1502,7 +1502,6 @@ function RuntimeStatusPanel({
           <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">运行状态</h2>
           <p className="mt-1 text-[11px] leading-normal text-[var(--premium-muted)]">查看当前模型、存储与访问令牌状态</p>
         </div>
-        <span className={SUCCESS_PILL_CLASS}>在线</span>
       </div>
 
       <div className="grid gap-3">
