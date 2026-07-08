@@ -1884,12 +1884,18 @@ function StoragePanel({
   );
 }
 
+function maskToken(t: string): string {
+  if (t.length <= 12) return "******";
+  return t.slice(0, 6) + "******" + t.slice(-6);
+}
+
 function SecurityPanel() {
   const storedToken = useAccessTokenSnapshot();
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const token = tokenDraft ?? storedToken ?? "";
+  const displayToken = tokenDraft !== null ? tokenDraft : storedToken ? maskToken(storedToken) : "";
 
   return (
     <article className={`${PANEL_CLASS} min-w-0`} aria-label="访问令牌">
@@ -1905,7 +1911,7 @@ function SecurityPanel() {
         <span>配置 Token</span>
         <input
           className={FIELD_CLASS}
-          value={token}
+          value={displayToken}
           placeholder="粘贴 X-Access-Token"
           onChange={(event) => {
             setTokenDraft(event.target.value);
@@ -1928,7 +1934,7 @@ function SecurityPanel() {
           onClick={() => {
             try {
               saveAccessToken(token);
-              setTokenDraft(token.trim());
+              setTokenDraft(null);
               setSaveError(null);
               setSaved(true);
               window.setTimeout(() => setSaved(false), 2000);
