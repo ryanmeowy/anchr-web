@@ -79,12 +79,21 @@ export class ApiError extends Error {
   }
 }
 
+function isBuiltinGuestAccessToken(token: string) {
+  return token.trim() === DEFAULT_GUEST_ACCESS_TOKEN;
+}
+
 export function getConfiguredAccessToken() {
   if (typeof window === "undefined") {
     return "";
   }
 
-  return window.localStorage.getItem(TOKEN_KEY)?.trim() ?? "";
+  const storedToken = window.localStorage.getItem(TOKEN_KEY)?.trim() ?? "";
+  if (isBuiltinGuestAccessToken(storedToken)) {
+    return "";
+  }
+
+  return storedToken;
 }
 
 export function getAccessToken() {
@@ -93,7 +102,7 @@ export function getAccessToken() {
 
 export function saveAccessToken(token: string) {
   const normalizedToken = token.trim();
-  if (!normalizedToken) {
+  if (!normalizedToken || isBuiltinGuestAccessToken(normalizedToken)) {
     clearAccessToken();
     return;
   }
