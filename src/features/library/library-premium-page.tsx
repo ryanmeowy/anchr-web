@@ -316,7 +316,7 @@ export function LibraryPremiumPage() {
   };
 
   return (
-    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} scrollContent>
       <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
             <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">

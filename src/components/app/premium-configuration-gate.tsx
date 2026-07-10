@@ -229,10 +229,12 @@ export function PremiumSystemConfigurationBoundary({ children }: { children: Rea
 export function PremiumConfigurationShell({
   theme,
   onThemeChange,
+  scrollContent = false,
   children,
 }: {
   theme: PremiumThemeMode;
   onThemeChange: (theme: PremiumThemeMode) => void;
+  scrollContent?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -245,9 +247,18 @@ export function PremiumConfigurationShell({
       <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
       <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,var(--premium-glow-primary),transparent_28rem),radial-gradient(circle_at_14%_92%,var(--premium-glow-secondary),transparent_30rem)]" />
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:min-h-[calc(100vh-48px)] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
+        <div
+          className={[
+            "ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]",
+            scrollContent ? "lg:h-[calc(100vh-48px)] lg:min-h-0" : "lg:min-h-[calc(100vh-48px)]",
+          ].join(" ")}
+        >
           <PremiumRail theme={theme} onThemeChange={onThemeChange} />
-          {children}
+          {scrollContent ? (
+            <div className="min-h-0 min-w-0 overflow-y-auto overscroll-contain">
+              {children}
+            </div>
+          ) : children}
         </div>
       </div>
     </div>
