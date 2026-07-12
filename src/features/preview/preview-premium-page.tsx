@@ -26,6 +26,7 @@ import {
   type AssetScope,
 } from "@/lib/asset-scope";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
+import { formatDateTime, formatFileSize, statusText } from "@/lib/format";
 import {
   buildPreviewRequest,
   clearPreviewRestoreState,
@@ -34,7 +35,7 @@ import {
   type PreviewNavigationContext,
   type PreviewSource,
 } from "@/lib/preview-context";
-import type { PreviewBBox, PreviewBBoxRecord, PreviewSegment } from "@/lib/types";
+import type { AssetPreview, PreviewBBox, PreviewBBoxRecord, PreviewSegment } from "@/lib/types";
 import styles from "./preview-premium-page.module.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -190,7 +191,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
       />
 
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:scale-[0.96] lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
+        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
 
           <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
@@ -256,6 +257,46 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
   );
 }
 
+export function AssetPreviewContent({
+  asset,
+  onRefresh,
+  isRefreshing,
+}: {
+  asset: AssetPreview;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+}) {
+  const item = useMemo<PreviewSegment>(() => ({
+    segmentId: `asset:${asset.assetId}`,
+    assetId: asset.assetId,
+    kbId: asset.kbId,
+    kbName: asset.kbName ?? undefined,
+    assetType: asset.fileType,
+    fileName: asset.fileName,
+    title: asset.title ?? undefined,
+    previewType: asset.previewType || asset.fileType,
+    previewUrl: asset.previewUrl ?? undefined,
+    thumbnail: asset.thumbnailUrl ?? undefined,
+    expiresAt: asset.expiresAt ?? undefined,
+    surroundingChunks: [],
+  }), [asset]);
+
+  return (
+    <PreviewContent
+      key={`${asset.assetId}-${asset.previewUrl ?? "no-preview"}`}
+      item={item}
+      context={null}
+      citationIndex={1}
+      from="library"
+      onCitationSelect={() => undefined}
+      onContinueWithAsset={() => undefined}
+      onRefresh={onRefresh}
+      isRefreshing={isRefreshing}
+      assetDetails={asset}
+    />
+  );
+}
+
 function PreviewContent({
   item,
   context,
@@ -265,6 +306,7 @@ function PreviewContent({
   onContinueWithAsset,
   onRefresh,
   isRefreshing,
+  assetDetails,
 }: {
   item: PreviewSegment;
   context: PreviewNavigationContext | null;
@@ -274,6 +316,7 @@ function PreviewContent({
   onContinueWithAsset: (item: PreviewSegment) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
+  assetDetails?: AssetPreview;
 }) {
   const previewType = getPreviewType(item);
   const previewShellRef = useRef<HTMLDivElement | null>(null);
@@ -627,24 +670,121 @@ function PreviewContent({
               citationIndex={citationIndex}
               contextHighlight={contextHighlight}
             />
+          ) : assetDetails && item.previewUrl ? (
+            <AssetTextPreview item={item} />
           ) : (
             <TextPreview item={item} citationIndex={citationIndex} />
           )}
         </div>
       </section>
 
-      <CitationSidebar
-        item={item}
-        context={context}
-        citationIndex={citationIndex}
-        from={from}
-        onCitationSelect={onCitationSelect}
-        onContinueWithAsset={onContinueWithAsset}
-        activeChunkSegmentId={activeChunkSegmentId}
-        onChunkSelect={handleChunkSelect}
-        onHeightChange={handleSidebarHeightChange}
-      />
+      {assetDetails ? (
+        <DocumentInfoSidebar asset={assetDetails} onHeightChange={handleSidebarHeightChange} />
+      ) : (
+        <CitationSidebar
+          item={item}
+          context={context}
+          citationIndex={citationIndex}
+          from={from}
+          onCitationSelect={onCitationSelect}
+          onContinueWithAsset={onContinueWithAsset}
+          activeChunkSegmentId={activeChunkSegmentId}
+          onChunkSelect={handleChunkSelect}
+          onHeightChange={handleSidebarHeightChange}
+        />
+      )}
     </div>
+  );
+}
+
+function DocumentInfoSidebar({
+  asset,
+  onHeightChange,
+}: {
+  asset: AssetPreview;
+  onHeightChange: (height: number) => void;
+}) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+
+    const updateHeight = () => onHeightChange(content.scrollHeight + 32);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(content);
+    window.addEventListener("resize", updateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [onHeightChange]);
+
+  return (
+    <aside
+      aria-label="文档信息"
+      className="preview-premium-sidebar min-h-0 min-w-0 overflow-hidden border-l border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-4 max-[1240px]:col-span-2 max-[1240px]:border-l-0 max-[1240px]:border-t"
+    >
+      <div ref={contentRef} className="grid min-w-0 content-start gap-3.5 max-[1240px]:grid-cols-2 max-[860px]:grid-cols-1">
+        <SidePanel>
+          <PanelLabel label="DOCUMENT INFO" value={asset.fileType || asset.previewType || "FILE"} />
+          <div className="mt-3.5 grid gap-2.5">
+            <InfoRow label="文件名称" value={asset.fileName} />
+            <InfoRow label="文档标题" value={asset.title ?? "-"} />
+            <InfoRow label="知识库" value={asset.kbName ?? asset.kbId} />
+            <InfoRow label="文件类型" value={asset.mimeType ?? asset.fileType} />
+            <InfoRow label="文件大小" value={formatFileSize(asset.sizeBytes ?? undefined)} />
+            <InfoRow label="入库时间" value={formatDateTime(asset.createdAt)} />
+          </div>
+        </SidePanel>
+
+        <SidePanel>
+          <PanelLabel label="VERSION" value={`V${asset.versionNo ?? 1}`} />
+          <div className="mt-3.5 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-3.5">
+            <strong className="block text-[clamp(34px,5vw,58px)] font-black leading-none text-[var(--premium-ink)]">
+              V{asset.versionNo ?? 1}
+            </strong>
+            <p className="mt-3 break-all font-mono text-[10px] leading-5 text-[var(--premium-muted)]">
+              ASSET / {asset.assetId}
+            </p>
+          </div>
+        </SidePanel>
+
+        <SidePanel>
+          <PanelLabel label="PROCESSING" value={statusText(asset.indexStatus)} />
+          <div className="mt-3.5 grid gap-2.5">
+            <InfoRow label="解析状态" value={statusText(asset.parseStatus)} />
+            <InfoRow label="索引状态" value={statusText(asset.indexStatus)} />
+            <InfoRow label="片段数量" value={String(asset.segmentCount)} />
+            <InfoRow label="预览方式" value={asset.previewType || "-"} />
+            <InfoRow label="链接到期" value={formatPreviewExpiry(asset.expiresAt)} />
+          </div>
+          {asset.previewUrl ? (
+            <a
+              href={asset.previewUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-[13px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white"
+            >
+              打开原始文件
+              <ExternalLink size={16} />
+            </a>
+          ) : null}
+        </SidePanel>
+
+        <section className={`${styles.reveal} rounded-[8px] border border-white/10 bg-[#101214]/95 p-4 text-white shadow-[var(--premium-tight-shadow)]`}>
+          <PanelLabel label="DOCUMENT LEDGER" value="VERIFIED" dark />
+          <p className="mt-3.5 text-sm font-black leading-6 text-white/90">
+            当前展示的是完整文档预览，不包含引用理由、引用框选或上下文片段。
+          </p>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+            <i className="block h-full w-full rounded-[inherit] bg-gradient-to-r from-blue-500 to-lime-300" />
+          </div>
+        </section>
+      </div>
+    </aside>
   );
 }
 
@@ -1366,6 +1506,50 @@ function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIn
   );
 }
 
+function AssetTextPreview({ item }: { item: PreviewSegment }) {
+  const textQuery = useQuery({
+    queryKey: ["asset-preview", "text", item.assetId, item.previewUrl],
+    queryFn: async () => {
+      if (!item.previewUrl) return "";
+      const response = await fetch(item.previewUrl);
+      if (!response.ok) {
+        throw new Error(`文件内容加载失败（${response.status}）`);
+      }
+      return response.text();
+    },
+    enabled: Boolean(item.previewUrl),
+    refetchOnWindowFocus: false,
+  });
+
+  if (textQuery.isLoading) {
+    return (
+      <div className="mx-auto grid min-h-[520px] w-full max-w-[860px] place-items-center rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.18)]">
+        <Loader2 className="animate-spin text-blue-600" size={26} />
+      </div>
+    );
+  }
+
+  if (textQuery.isError) {
+    return <ErrorBlock message={textQuery.error instanceof Error ? textQuery.error.message : "文件内容加载失败"} />;
+  }
+
+  return (
+    <article className={`${styles.reveal} mx-auto min-h-[820px] w-full max-w-[860px] overflow-hidden rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.18)]`}>
+      <header className="grid grid-cols-[1fr_auto] items-start gap-5 border-b border-black/10 px-[52px] pb-6 pt-12 max-[500px]:grid-cols-1 max-[860px]:px-6">
+        <h2 className="m-0 break-words text-[clamp(30px,4vw,62px)] font-black leading-[0.95] text-[#101214]">
+          {item.title ?? item.fileName ?? "文档"}
+        </h2>
+        <span className="rounded-full bg-blue-600/10 px-3 py-2 text-xs font-black text-blue-800">
+          {getPreviewType(item)}
+        </span>
+      </header>
+      <pre className="m-0 whitespace-pre-wrap break-words px-[52px] pb-[58px] pt-[34px] font-mono text-[14px] leading-[1.85] text-[#303841] max-[860px]:px-6">
+        {textQuery.data || "当前文档为空。"}
+      </pre>
+    </article>
+  );
+}
+
 function ToolButton({
   label,
   disabled,
@@ -1450,6 +1634,12 @@ function relationLabel(relation?: string) {
 function formatCitationPosition(citationIndex: number, item?: PreviewSegment) {
   const title = item?.title ? `（${item.title}）` : "";
   return `段落 ${citationIndex}${title}`;
+}
+
+function formatPreviewExpiry(expiresAt?: number | null) {
+  if (!expiresAt) return "-";
+  const milliseconds = expiresAt < 10_000_000_000 ? expiresAt * 1000 : expiresAt;
+  return formatDateTime(new Date(milliseconds).toISOString());
 }
 
 function clampScale(scale: number, minScale = MIN_PDF_SCALE) {

@@ -17,11 +17,13 @@ import type {
   IngestionTaskList,
   IngestionTask,
   KnowledgeBase,
+  KnowledgeBaseDocumentList,
   KnowledgeBaseHealth,
   KnowledgeBaseListResponse,
   KnowledgeBaseQueryRequest,
   KnowledgeBaseStats,
   KnowledgeBaseUpdateRequest,
+  AssetPreview,
   PagedList,
   PreviewRequest,
   PreviewSegment,
@@ -253,10 +255,30 @@ export const apiClient = {
     request<PagedList<KnowledgeBase>>("/api/v1/kbs/search", { method: "POST", body: { page, size, status: "0" } }),
   queryKnowledgeBases: (body: KnowledgeBaseQueryRequest) =>
     request<KnowledgeBaseListResponse>("/api/v1/kbs/search", { method: "POST", body }),
+  getKnowledgeBase: (kbId: string) =>
+    request<KnowledgeBase>(`/api/v1/kbs/${encodeURIComponent(kbId)}`),
   getKnowledgeBaseStats: (kbIds: string[]) =>
     request<KnowledgeBaseStats[]>("/api/v1/kbs/stats", { method: "POST", body: { kbIds } }),
   getKnowledgeBaseHealth: (kbId: string) =>
     request<KnowledgeBaseHealth>(`/api/v1/kbs/${encodeURIComponent(kbId)}/health`),
+  listKnowledgeBaseDocuments: (
+    kbId: string,
+    query: { page: number; size: number; keyword?: string; fileType?: string },
+  ) => {
+    const params = new URLSearchParams({
+      page: String(query.page),
+      size: String(query.size),
+    });
+    if (query.keyword) params.set("keyword", query.keyword);
+    if (query.fileType) params.set("fileType", query.fileType);
+    return request<KnowledgeBaseDocumentList>(
+      `/api/v1/kbs/${encodeURIComponent(kbId)}/documents?${params.toString()}`,
+    );
+  },
+  previewAsset: (kbId: string, assetId: string) =>
+    request<AssetPreview>(
+      `/api/v1/kbs/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(assetId)}/preview`,
+    ),
   getElasticsearchHealth: () =>
     request<ElasticsearchHealth>("/api/v1/health/elasticsearch"),
   createKnowledgeBase: (body: { name: string; description?: string }) =>

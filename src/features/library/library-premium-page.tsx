@@ -3,17 +3,22 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  ArrowLeft,
   ArrowRight,
   Check,
   CheckCircle2,
+  Clock3,
   ChevronLeft,
   ChevronRight,
   Edit3,
+  Eye,
   Grid3X3,
+  History,
   List,
   Loader2,
   Plus,
   Search,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -22,6 +27,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -29,11 +35,12 @@ import {
   type WheelEvent,
 } from "react";
 import { PremiumConfigurationShell } from "@/components/app/premium-configuration-gate";
+import { FileTypeIcon } from "@/components/shared/file-type-icon";
 import { apiClient } from "@/lib/api-client";
-import { formatDateTime, formatNumber, statusText } from "@/lib/format";
+import { formatDateTime, formatFileSize, formatNumber, statusText } from "@/lib/format";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import { saveRecentCitationPreviewNavigation } from "@/lib/preview-context";
-import type { KnowledgeBase, KnowledgeBaseHealth, KnowledgeBaseStats, RecentCitation, RecentQuestion } from "@/lib/types";
+import type { KnowledgeBase, KnowledgeBaseDocument, KnowledgeBaseHealth, KnowledgeBaseStats, RecentCitation, RecentQuestion } from "@/lib/types";
 
 type ViewMode = "grid" | "list";
 type FilterMode = "all" | "answerable" | "recent" | "archived";
@@ -50,7 +57,8 @@ const filterOptions: Array<{ value: FilterMode; label: string }> = [
   { value: "recent", label: "最近更新" },
 ];
 
-export function LibraryPremiumPage() {
+export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeBaseId: string | null }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [themeHydrated, setThemeHydrated] = useState(false);
@@ -60,6 +68,7 @@ export function LibraryPremiumPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [page, setPage] = useState(1);
   const [selectedKbIdValue, setSelectedKbIdValue] = useState<string | null>(null);
+  const [hoveredKbId, setHoveredKbId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -139,6 +148,17 @@ export function LibraryPremiumPage() {
   });
 
   const items = useMemo(() => kbsQuery.data?.items ?? [], [kbsQuery.data?.items]);
+  const openedKbFromCurrentPage = useMemo(
+    () => items.find((item) => item.id === openedKnowledgeBaseId) ?? null,
+    [items, openedKnowledgeBaseId],
+  );
+  const openedKbQuery = useQuery({
+    queryKey: ["kbs", "detail", openedKnowledgeBaseId],
+    queryFn: () => apiClient.getKnowledgeBase(openedKnowledgeBaseId ?? ""),
+    enabled: Boolean(openedKnowledgeBaseId && !openedKbFromCurrentPage),
+    refetchOnWindowFocus: false,
+  });
+  const openedKb = openedKbFromCurrentPage ?? openedKbQuery.data ?? null;
   const recentCitations = useMemo(
     () => citationsQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [citationsQuery.data?.pages],
@@ -173,12 +193,15 @@ export function LibraryPremiumPage() {
   const showEmptyResults = canShowResults && items.length === 0 && !shouldShowCreateEntry;
   const activeSelectedKbId = useMemo(() => {
     if (items.length === 0) return null;
+    if (hoveredKbId && items.some((item) => item.id === hoveredKbId)) {
+      return hoveredKbId;
+    }
     if (selectedKbIdValue && items.some((item) => item.id === selectedKbIdValue)) {
       return selectedKbIdValue;
     }
 
     return items[0].id;
-  }, [items, selectedKbIdValue]);
+  }, [hoveredKbId, items, selectedKbIdValue]);
 
   const selectedKb = useMemo(
     () => items.find((item) => item.id === activeSelectedKbId) ?? null,
@@ -315,9 +338,18 @@ export function LibraryPremiumPage() {
     });
   };
 
+  const handleOpenKnowledgeBase = (item: KnowledgeBase) => {
+    setSelectedKbIdValue(item.id);
+    router.push(`/library?kbId=${encodeURIComponent(item.id)}`);
+  };
+
+  const handleCloseKnowledgeBase = () => {
+    router.replace("/library");
+  };
+
   return (
     <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} scrollContent>
-      <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
+      <div className="grid min-h-full min-w-0 grid-rows-[auto_minmax(0,1fr)]">
             <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
                 LIBRARY
@@ -326,15 +358,35 @@ export function LibraryPremiumPage() {
                 <div>
                   <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
                     <span className="size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
-                    LIBRARY / KNOWLEDGE ASSET COMMAND
+                    {openedKnowledgeBaseId ? "LIBRARY / KNOWLEDGE BASE / DOCUMENTS" : "LIBRARY / KNOWLEDGE ASSET COMMAND"}
                   </p>
                   <h1 className="max-w-[720px] text-[clamp(16px,2.4vw,34px)] font-black leading-none">
-                    让每个知识库都能被看见、被追踪、被提问。
+                    {openedKnowledgeBaseId ? openedKb?.name ?? "正在恢复文档界面" : "让每个知识库都能被看见、被追踪、被提问。"}
                   </h1>
+                  {openedKnowledgeBaseId ? (
+                    <p className="mt-1.5 max-w-[720px] truncate text-[11px] font-bold text-[var(--premium-ink-soft)]">
+                      {openedKb?.description || "知识库文档资产与版本档案"}
+                    </p>
+                  ) : null}
                 </div>
               </section>
             </header>
 
+            {openedKnowledgeBaseId ? openedKb ? (
+              <KnowledgeBaseDocumentView
+                knowledgeBase={openedKb}
+                onBack={handleCloseKnowledgeBase}
+              />
+            ) : (
+              <main className="ask-premium-main grid min-h-0 place-items-center bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] p-6">
+                <InlineState
+                  label={openedKbQuery.isError
+                    ? `知识库暂不可用：${openedKbQuery.error instanceof Error ? openedKbQuery.error.message : "请稍后重试"}`
+                    : "正在恢复文档界面"}
+                  fill
+                />
+              </main>
+            ) : (
             <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-visible bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:items-stretch lg:px-5">
               <section className="flex min-h-0 min-w-0 flex-col lg:h-full" aria-label="我的知识库">
                 <div className="mb-5 grid shrink-0 grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -437,7 +489,9 @@ export function LibraryPremiumPage() {
                             archiving={archivingKbId === item.id}
                             updateError={item.id === editingKbId && updateMutation.error instanceof Error ? updateMutation.error.message : null}
                             archiveError={item.id === archiveConfirmKbId && archiveMutation.error instanceof Error ? archiveMutation.error.message : null}
-                            onSelect={() => setSelectedKbIdValue(item.id)}
+                            onSelect={() => handleOpenKnowledgeBase(item)}
+                            onHover={() => setHoveredKbId(item.id)}
+                            onHoverEnd={() => setHoveredKbId(null)}
                             onStartEdit={() => handleStartEdit(item)}
                             onCancelEdit={handleCancelEdit}
                             onEditNameChange={setEditName}
@@ -495,7 +549,9 @@ export function LibraryPremiumPage() {
                               archiving={archivingKbId === item.id}
                               updateError={item.id === editingKbId && updateMutation.error instanceof Error ? updateMutation.error.message : null}
                               archiveError={item.id === archiveConfirmKbId && archiveMutation.error instanceof Error ? archiveMutation.error.message : null}
-                              onSelect={() => setSelectedKbIdValue(item.id)}
+                              onSelect={() => handleOpenKnowledgeBase(item)}
+                              onHover={() => setHoveredKbId(item.id)}
+                              onHoverEnd={() => setHoveredKbId(null)}
                               onStartEdit={() => handleStartEdit(item)}
                               onCancelEdit={handleCancelEdit}
                               onEditNameChange={setEditName}
@@ -572,9 +628,436 @@ export function LibraryPremiumPage() {
                 </div>
               </aside>
             </main>
+            )}
           </div>
     </PremiumConfigurationShell>
   );
+}
+
+type LibraryDocumentType = "PDF" | "MD" | "IMAGE" | "TXT";
+
+type LibraryDocumentItem = {
+  id: string;
+  name: string;
+  type: LibraryDocumentType;
+  version: number;
+  importedAt?: string;
+  size: string;
+  segments: number;
+  previewAvailable: boolean;
+  parseStatus: string;
+  indexStatus: string;
+};
+const DOCUMENT_GRID_PAGE_SIZES = [24, 48, 72] as const;
+const DOCUMENT_LIST_PAGE_SIZES = [25, 50, 100] as const;
+
+function KnowledgeBaseDocumentView({
+  knowledgeBase,
+  onBack,
+}: {
+  knowledgeBase: KnowledgeBase;
+  onBack: () => void;
+}) {
+  const router = useRouter();
+  const documentListRef = useRef<HTMLElement | null>(null);
+  const [keyword, setKeyword] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"ALL" | LibraryDocumentType>("ALL");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [documentPage, setDocumentPage] = useState(1);
+  const [documentPageSize, setDocumentPageSize] = useState<number>(DOCUMENT_GRID_PAGE_SIZES[0]);
+  const deferredDocumentKeyword = useDeferredValue(keyword.trim());
+  const documentsQuery = useQuery({
+    queryKey: [
+      "kbs",
+      knowledgeBase.id,
+      "documents",
+      documentPage,
+      documentPageSize,
+      deferredDocumentKeyword,
+      typeFilter,
+    ],
+    queryFn: () => apiClient.listKnowledgeBaseDocuments(knowledgeBase.id, {
+      page: documentPage,
+      size: documentPageSize,
+      ...(deferredDocumentKeyword ? { keyword: deferredDocumentKeyword } : {}),
+      ...(typeFilter !== "ALL" ? { fileType: typeFilter } : {}),
+    }),
+    refetchOnWindowFocus: false,
+  });
+  const documents = useMemo(
+    () => (documentsQuery.data?.items ?? []).map(toLibraryDocumentItem),
+    [documentsQuery.data?.items],
+  );
+  const documentTotal = documentsQuery.data?.total ?? 0;
+  const documentSegmentTotal = documentsQuery.data?.segmentTotal ?? 0;
+  const documentTotalPages = Math.max(1, Math.ceil(documentTotal / documentPageSize));
+  const activeDocumentPage = Math.min(documentPage, documentTotalPages);
+
+  const handleDocumentViewModeChange = (nextViewMode: ViewMode) => {
+    setViewMode(nextViewMode);
+    setDocumentPageSize(nextViewMode === "grid" ? DOCUMENT_GRID_PAGE_SIZES[0] : DOCUMENT_LIST_PAGE_SIZES[1]);
+    setDocumentPage(1);
+  };
+
+  const handleDocumentPageChange = (nextPage: number) => {
+    setDocumentPage(nextPage);
+    window.requestAnimationFrame(() => {
+      documentListRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  };
+
+  const handlePreview = (document: LibraryDocumentItem) => {
+    if (!document.previewAvailable) return;
+    const params = new URLSearchParams({ kbId: knowledgeBase.id });
+    router.push(`/preview/asset/${encodeURIComponent(document.id)}?${params.toString()}`);
+  };
+
+  return (
+    <main className="ask-premium-main library-document-view min-h-0 min-w-0 overflow-auto bg-[linear-gradient(100deg,rgba(255,255,255,0.88),rgba(255,255,255,0.4)),radial-gradient(circle_at_84%_8%,rgba(187,255,102,0.34),transparent_28rem)] px-4 py-4 sm:px-5 lg:px-5" aria-label={`${knowledgeBase.name} 文档`}>
+      <div className="mx-auto grid w-full max-w-[1500px] gap-4">
+        <section className="library-document-command relative overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-4 text-white shadow-[var(--premium-tight-shadow)] sm:p-5">
+          <div aria-hidden="true" className="library-document-orbit absolute -right-12 -top-20 size-64 rounded-full border border-white/10" />
+          <div aria-hidden="true" className="library-document-orbit library-document-orbit-secondary absolute -right-3 -top-8 size-40 rounded-full border border-[rgba(187,255,102,0.28)]" />
+          <div className="relative z-10 grid items-end gap-5 lg:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="min-w-0">
+              <button
+                type="button"
+                onClick={onBack}
+                className="group mb-6 inline-flex min-h-9 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 text-[11px] font-black text-white/75 transition duration-300 hover:-translate-x-1 hover:border-white/30 hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-accent)]"
+              >
+                <ArrowLeft size={15} className="transition group-hover:-translate-x-0.5" />
+                返回知识库
+              </button>
+              <p className="mb-2 flex items-center gap-2 text-[10px] font-black text-[var(--premium-accent)]">
+                <span className="size-1.5 rounded-full bg-current shadow-[0_0_0_5px_rgba(187,255,102,0.12)]" />
+                DOCUMENT LEDGER / LIVE ARCHIVE
+              </p>
+              <h2 className="max-w-[820px] text-[clamp(25px,4vw,54px)] font-black leading-[0.94]">
+                <span className="block">文档不只是文件</span>
+                <span className="mt-1 block text-[var(--premium-accent)]">而是可追溯的知识版本</span>
+              </h2>
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[360px]">
+              <DocumentMetric value={formatNumber(documentTotal)} label="DOCUMENTS" />
+              <DocumentMetric value={formatNumber(documentSegmentTotal)} label="SEGMENTS" />
+              <DocumentMetric value="READY" label="INDEX" accent />
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]" aria-label="文档筛选">
+          <label className="premium-focusable flex min-h-11 min-w-0 items-center gap-3 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-4 shadow-[0_12px_32px_rgba(17,19,21,0.07)] transition">
+            <Search size={19} className="shrink-0 text-[var(--premium-muted)]" />
+            <span className="sr-only">搜索文档</span>
+            <input
+              value={keyword}
+              onChange={(event) => {
+                setKeyword(event.target.value);
+                setDocumentPage(1);
+              }}
+              className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[var(--premium-ink)] outline-none placeholder:text-[var(--premium-muted)]"
+              placeholder="搜索文档名称…"
+            />
+            <span className="hidden text-[10px] font-black text-[var(--premium-muted)] sm:inline">
+              {documentsQuery.isFetching ? "LOADING" : `${documentTotal} RESULTS`}
+            </span>
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] p-1" aria-label="文档类型">
+              <SlidersHorizontal size={14} className="ml-2 text-[var(--premium-muted)]" />
+              {(["ALL", "PDF", "MD", "IMAGE", "TXT"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    setTypeFilter(type);
+                    setDocumentPage(1);
+                  }}
+                  aria-pressed={typeFilter === type}
+                  className={[
+                    "h-8 rounded-full px-3 text-[10px] font-black transition duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]",
+                    typeFilter === type
+                      ? "bg-[var(--premium-ink)] text-[var(--premium-bg)] shadow-[0_8px_18px_rgba(17,19,21,0.14)]"
+                      : "text-[var(--premium-muted)] hover:bg-[var(--premium-panel-muted)] hover:text-[var(--premium-ink)]",
+                  ].join(" ")}
+                >
+                  {type === "ALL" ? "全部" : type}
+                </button>
+              ))}
+            </div>
+            <div className="inline-flex gap-1 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] p-1">
+              <button type="button" onClick={() => handleDocumentViewModeChange("grid")} className={viewButtonClass(viewMode === "grid")} aria-label="文档卡片视图" aria-pressed={viewMode === "grid"}><Grid3X3 size={16} /></button>
+              <button type="button" onClick={() => handleDocumentViewModeChange("list")} className={viewButtonClass(viewMode === "list")} aria-label="文档列表视图" aria-pressed={viewMode === "list"}><List size={16} /></button>
+            </div>
+          </div>
+        </section>
+
+        <section ref={documentListRef} aria-labelledby="document-list-title">
+          <div className="mb-3 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black text-[var(--premium-blue)]">KNOWLEDGE OBJECTS</p>
+              <h3 id="document-list-title" className="mt-1 text-[clamp(19px,2.2vw,28px)] font-black leading-none">库内文档</h3>
+            </div>
+            <p className="hidden text-right text-[11px] leading-5 text-[var(--premium-muted)] sm:block">
+              点击文档进入预览<br />版本与入库时间永久留痕
+            </p>
+          </div>
+
+          {documentsQuery.isLoading ? (
+            <InlineState label="正在加载文档" />
+          ) : documentsQuery.isError ? (
+            <InlineState label={`文档暂不可用：${documentsQuery.error instanceof Error ? documentsQuery.error.message : "请稍后重试"}`} />
+          ) : documents.length === 0 ? (
+            <InlineState label="没有找到匹配的文档" />
+          ) : viewMode === "grid" ? (
+            <div className="library-document-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {documents.map((document, index) => (
+                <DocumentCard key={document.id} document={document} index={index} onPreview={() => handlePreview(document)} />
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] shadow-[var(--premium-tight-shadow)]">
+              <div className="grid min-w-[760px] grid-cols-[minmax(0,1fr)_100px_100px_168px_100px] gap-4 border-b border-[var(--premium-line)] px-4 py-3 text-[10px] font-black text-[var(--premium-muted)]">
+                <span>文档名称</span><span>类型</span><span>版本</span><span>入库时间</span><span className="text-right">预览</span>
+              </div>
+              <div className="divide-y divide-[var(--premium-line)]">
+                {documents.map((document, index) => (
+                  <DocumentListItem key={document.id} document={document} index={index} onPreview={() => handlePreview(document)} />
+                ))}
+              </div>
+            </div>
+          )}
+          {!documentsQuery.isLoading && !documentsQuery.isError && documentTotal > 0 ? (
+            <DocumentPagination
+              page={activeDocumentPage}
+              total={documentTotal}
+              pageSize={documentPageSize}
+              pageSizeOptions={viewMode === "grid" ? DOCUMENT_GRID_PAGE_SIZES : DOCUMENT_LIST_PAGE_SIZES}
+              totalPages={documentTotalPages}
+              onPageChange={handleDocumentPageChange}
+              onPageSizeChange={(nextPageSize) => {
+                setDocumentPageSize(nextPageSize);
+                handleDocumentPageChange(1);
+              }}
+            />
+          ) : null}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function DocumentPagination({
+  page,
+  total,
+  pageSize,
+  pageSizeOptions,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  total: number;
+  pageSize: number;
+  pageSizeOptions: readonly number[];
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}) {
+  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  const visiblePages = getVisiblePages(page, totalPages);
+
+  return (
+    <nav className="library-document-pagination mt-4 grid gap-3 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] p-3 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center" aria-label="文档分页">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-bold text-[var(--premium-muted)]">
+        <span>
+          共 <b className="text-[var(--premium-ink)]">{formatNumber(total)}</b> 份文档
+          <span className="ml-1.5">· 当前 {formatNumber(start)}–{formatNumber(end)}</span>
+        </span>
+        <label className="inline-flex items-center gap-2">
+          每页
+          <select
+            value={pageSize}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+            className="h-8 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-[11px] font-black text-[var(--premium-ink)] outline-none transition focus:border-[var(--premium-focus-line)] focus:shadow-[0_0_0_3px_var(--premium-focus-ring)]"
+            aria-label="每页文档数量"
+          >
+            {pageSizeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+          条
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
+        <span className="mr-1 text-[10px] font-black text-[var(--premium-muted)]">第 {page} / {totalPages} 页</span>
+        <button
+          type="button"
+          disabled={page === 1}
+          onClick={() => onPageChange(1)}
+          className="hidden h-8 items-center rounded-full border border-[var(--premium-line)] px-3 text-[10px] font-black text-[var(--premium-ink-soft)] transition hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)] disabled:cursor-not-allowed disabled:opacity-35 sm:inline-flex"
+        >
+          首页
+        </button>
+        <button type="button" disabled={page === 1} onClick={() => onPageChange(page - 1)} className={paginationIconButtonClass()} aria-label="文档上一页">
+          <ChevronLeft size={16} />
+        </button>
+        <div className="flex items-center gap-1">
+          {visiblePages.map((visiblePage) => (
+            <button
+              key={visiblePage}
+              type="button"
+              disabled={visiblePage === page}
+              onClick={() => onPageChange(visiblePage)}
+              className={[
+                "grid size-8 place-items-center rounded-full text-[11px] font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]",
+                visiblePage === page
+                  ? "bg-[var(--premium-ink)] text-[var(--premium-bg)] shadow-[0_8px_20px_rgba(17,19,21,0.16)]"
+                  : "text-[var(--premium-muted)] hover:bg-[var(--premium-panel-muted)] hover:text-[var(--premium-ink)]",
+              ].join(" ")}
+              aria-label={`转到第 ${visiblePage} 页`}
+              aria-current={visiblePage === page ? "page" : undefined}
+            >
+              {visiblePage}
+            </button>
+          ))}
+        </div>
+        <button type="button" disabled={page === totalPages} onClick={() => onPageChange(page + 1)} className={paginationIconButtonClass()} aria-label="文档下一页">
+          <ChevronRight size={16} />
+        </button>
+        <button
+          type="button"
+          disabled={page === totalPages}
+          onClick={() => onPageChange(totalPages)}
+          className="hidden h-8 items-center rounded-full border border-[var(--premium-line)] px-3 text-[10px] font-black text-[var(--premium-ink-soft)] transition hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)] disabled:cursor-not-allowed disabled:opacity-35 sm:inline-flex"
+        >
+          末页
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+function DocumentMetric({ value, label, accent = false }: { value: string; label: string; accent?: boolean }) {
+  return (
+    <div className="min-w-0 rounded-[8px] border border-white/10 bg-white/[0.07] p-3 backdrop-blur-md">
+      <strong className={[
+        "block truncate text-[clamp(16px,2vw,24px)] font-black leading-none",
+        accent ? "text-[var(--premium-accent)]" : "text-white",
+      ].join(" ")}>{value}</strong>
+      <span className="mt-2 block truncate text-[9px] font-black text-white/55">{label}</span>
+    </div>
+  );
+}
+
+function DocumentCard({
+  document,
+  index,
+  onPreview,
+}: {
+  document: LibraryDocumentItem;
+  index: number;
+  onPreview: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPreview}
+      disabled={!document.previewAvailable}
+      title={document.previewAvailable ? `预览 ${document.name}` : documentPreviewUnavailableLabel(document)}
+      style={{ animationDelay: `${Math.min(index, 6) * 58}ms` }}
+      className={[
+        "library-document-card group relative grid min-h-[230px] overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] p-4 text-left shadow-[var(--premium-tight-shadow)] transition duration-500 enabled:hover:-translate-y-1 enabled:hover:border-[var(--premium-line-strong)] enabled:hover:shadow-[0_24px_56px_rgba(17,19,21,0.14)] disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]",
+        index === 0 ? "sm:col-span-2 xl:col-span-1" : "",
+      ].join(" ")}
+      aria-label={`预览 ${document.name}`}
+    >
+      <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 origin-left scale-x-0 bg-[var(--premium-accent)] transition-transform duration-500 group-hover:scale-x-100 group-focus-visible:scale-x-100" />
+      <span aria-hidden="true" className="absolute -right-14 -top-14 size-36 rounded-full border border-[var(--premium-line)] transition duration-500 group-hover:scale-125 group-hover:border-[rgba(49,88,255,0.28)]" />
+      <span className="relative z-10 flex items-start justify-between gap-3">
+        <FileTypeIcon fileName={document.name} className="shadow-[0_10px_28px_rgba(17,19,21,0.1)]" />
+        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2.5 py-1 text-[10px] font-black text-[var(--premium-ink-soft)]">
+          <History size={12} /> V{document.version}
+        </span>
+      </span>
+      <span className="relative z-10 mt-7 min-w-0">
+        <span className="mb-2 flex items-center gap-2">
+          <span className="rounded-full bg-[var(--premium-blue-soft)] px-2 py-1 text-[9px] font-black text-[var(--premium-blue)]">{document.type}</span>
+          <span className="text-[10px] font-bold text-[var(--premium-muted)]">{document.size} · {document.segments} 片段</span>
+        </span>
+        <strong className="line-clamp-2 break-words text-[17px] font-black leading-[1.18] text-[var(--premium-ink)]">{document.name}</strong>
+      </span>
+      <span className="relative z-10 mt-auto flex items-end justify-between gap-3 border-t border-[var(--premium-line)] pt-3">
+        <span className="min-w-0 text-[10px] text-[var(--premium-muted)]">
+          <span className="mb-1 flex items-center gap-1.5 font-bold"><Clock3 size={12} /> 入库时间</span>
+          <time className="block truncate font-black text-[var(--premium-ink-soft)]" dateTime={document.importedAt}>{formatDateTime(document.importedAt)}</time>
+        </span>
+        <span className="grid min-h-9 shrink-0 place-items-center rounded-full bg-[var(--premium-ink)] px-3 text-[10px] font-black text-[var(--premium-bg)] transition duration-500 group-enabled:group-hover:translate-x-0.5 group-enabled:group-hover:bg-[var(--premium-blue)] group-enabled:group-hover:text-white">
+          {document.previewAvailable ? <Eye size={15} /> : statusText(document.parseStatus)}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function DocumentListItem({ document, index, onPreview }: { document: LibraryDocumentItem; index: number; onPreview: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onPreview}
+      disabled={!document.previewAvailable}
+      title={document.previewAvailable ? `预览 ${document.name}` : documentPreviewUnavailableLabel(document)}
+      style={{ animationDelay: `${Math.min(index, 6) * 48}ms` }}
+      className="library-document-card group grid min-h-16 w-full min-w-[760px] grid-cols-[minmax(0,1fr)_100px_100px_168px_100px] items-center gap-4 px-4 py-2 text-left transition duration-300 enabled:hover:bg-[var(--premium-panel-strong)] disabled:cursor-not-allowed disabled:opacity-65 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--premium-blue)]"
+      aria-label={`预览 ${document.name}`}
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        <FileTypeIcon fileName={document.name} compact />
+        <span className="min-w-0">
+          <strong className="block truncate text-xs font-black text-[var(--premium-ink)]">{document.name}</strong>
+          <span className="mt-1 block text-[10px] text-[var(--premium-muted)]">{document.size} · {document.segments} 片段</span>
+        </span>
+      </span>
+      <span className="text-[11px] font-black text-[var(--premium-blue)]">{document.type}</span>
+      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-[var(--premium-panel-muted)] px-2 py-1 text-[10px] font-black text-[var(--premium-ink-soft)]"><History size={11} /> V{document.version}</span>
+      <time className="truncate text-[11px] font-bold text-[var(--premium-muted)]" dateTime={document.importedAt}>{formatDateTime(document.importedAt)}</time>
+      <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-black text-[var(--premium-ink-soft)] transition group-enabled:group-hover:translate-x-1 group-enabled:group-hover:text-[var(--premium-blue)]">
+        {document.previewAvailable ? <>预览 <Eye size={14} /></> : statusText(document.parseStatus)}
+      </span>
+    </button>
+  );
+}
+
+function toLibraryDocumentItem(asset: KnowledgeBaseDocument): LibraryDocumentItem {
+  return {
+    id: asset.id,
+    name: asset.fileName || asset.title || asset.id,
+    type: libraryDocumentType(asset),
+    version: asset.versionNo ?? 1,
+    importedAt: asset.createdAt,
+    size: formatFileSize(asset.sizeBytes ?? undefined),
+    segments: asset.segmentCount,
+    previewAvailable: asset.previewAvailable,
+    parseStatus: asset.parseStatus,
+    indexStatus: asset.indexStatus,
+  };
+}
+
+function libraryDocumentType(asset: KnowledgeBaseDocument): LibraryDocumentType {
+  const rawType = asset.fileType?.trim().toUpperCase();
+  const fileName = asset.fileName?.toLowerCase() ?? "";
+
+  if (rawType === "PDF" || fileName.endsWith(".pdf")) return "PDF";
+  if (rawType === "MD" || rawType === "MARKDOWN" || /\.mdx?$/i.test(fileName)) return "MD";
+  if (rawType === "IMAGE" || rawType?.startsWith("IMAGE/") || /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(fileName)) return "IMAGE";
+  return "TXT";
+}
+
+function documentPreviewUnavailableLabel(document: LibraryDocumentItem) {
+  return `暂不可预览：解析${statusText(document.parseStatus)}，索引${statusText(document.indexStatus)}`;
 }
 
 function viewButtonClass(active: boolean) {
@@ -657,6 +1140,8 @@ function KnowledgeBaseCard({
   updateError,
   archiveError,
   onSelect,
+  onHover,
+  onHoverEnd,
   onStartEdit,
   onCancelEdit,
   onEditNameChange,
@@ -671,6 +1156,8 @@ function KnowledgeBaseCard({
   stats?: KnowledgeBaseStats;
   selected: boolean;
   onSelect: () => void;
+  onHover: () => void;
+  onHoverEnd: () => void;
 } & KnowledgeBaseRowActions) {
   const lastUpdated = item.updatedAt ?? item.lastIngestedAt ?? item.createdAt;
   const active = isActiveKnowledgeBase(item);
@@ -679,9 +1166,14 @@ function KnowledgeBaseCard({
 
   return (
     <article
-      onClick={onSelect}
+      onMouseEnter={onHover}
+      onMouseLeave={onHoverEnd}
+      onFocusCapture={onHover}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onHoverEnd();
+      }}
       className={[
-        "library-kb-card group relative grid h-full min-h-[254px] cursor-pointer grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 overflow-hidden rounded-[8px] border p-2.5 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(17,19,21,0.13)] lg:min-h-0",
+        "library-kb-card group relative grid h-full min-h-[254px] grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 overflow-hidden rounded-[8px] border p-2.5 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(17,19,21,0.13)] lg:min-h-0",
         selected ? "border-[var(--premium-line-strong)] bg-[var(--premium-panel-strong)] ring-1 ring-black/5 dark:ring-white/10" : "border-[var(--premium-line)] bg-[var(--premium-panel)]",
       ].join(" ")}
     >
@@ -693,19 +1185,27 @@ function KnowledgeBaseCard({
             "linear-gradient(120deg, rgba(39,93,255,0.12), transparent 36%), radial-gradient(circle at 86% 8%, rgba(187,255,102,0.34), transparent 12rem)",
         }}
       />
-      <div className="relative z-10 flex items-start justify-between gap-3">
+      {!editing && !archiveConfirming ? (
+        <button
+          type="button"
+          onClick={onSelect}
+          className="absolute inset-0 z-[5] cursor-pointer rounded-[8px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[var(--premium-blue)]"
+          aria-label={`打开 ${item.name} 的文档`}
+        />
+      ) : null}
+      <div className="pointer-events-none relative z-10 flex items-start justify-between gap-3">
         <KnowledgeGlyph index={index} />
         <StatusBadge status={item.status} />
       </div>
 
       {editing ? (
-        <div className="relative z-10 grid min-w-0 self-start content-start gap-1.5" onClick={(event) => event.stopPropagation()}>
+        <div className="pointer-events-auto relative z-10 grid min-w-0 self-start content-start gap-1.5">
           <input className={compactFieldClass()} value={editName} onChange={(event) => onEditNameChange(event.target.value)} placeholder="知识库名称" />
           <input className={compactFieldClass()} value={editDescription} onChange={(event) => onEditDescriptionChange(event.target.value)} placeholder="描述，可选" />
           {updateError ? <p className="line-clamp-1 text-[11px] text-rose-600 dark:text-rose-300">{updateError}</p> : null}
         </div>
       ) : (
-        <div className="relative z-10 min-w-0 self-start">
+        <div className="pointer-events-none relative z-10 min-w-0 self-start">
           <h3 className="library-kb-title line-clamp-1 break-words text-[16px] font-black leading-[1.08]">{item.name}</h3>
           <p className="mt-1 line-clamp-1 min-h-4 text-[11px] leading-4 text-[var(--premium-ink-soft)]">{item.description || "暂无描述"}</p>
           <div className="mt-1.5 grid grid-cols-2 gap-1.5">
@@ -716,7 +1216,7 @@ function KnowledgeBaseCard({
         </div>
       )}
 
-      <div className="library-kb-footer relative z-10 flex min-h-12 shrink-0 flex-col gap-1.5 border-t border-[var(--premium-line)] pt-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="library-kb-footer pointer-events-none relative z-10 flex min-h-12 shrink-0 flex-col gap-1.5 border-t border-[var(--premium-line)] pt-2 sm:flex-row sm:items-center sm:justify-between">
         <small className="library-kb-updated inline-flex h-8 items-center text-xs text-[var(--premium-muted)]">更新于 {formatDateTime(lastUpdated)}</small>
         {editing ? (
           <EditConfirmActions saving={saving} canSave={Boolean(editName.trim())} onSave={onSaveEdit} onCancel={onCancelEdit} />
@@ -743,6 +1243,8 @@ function KnowledgeBaseListRow({
   updateError,
   archiveError,
   onSelect,
+  onHover,
+  onHoverEnd,
   onStartEdit,
   onCancelEdit,
   onEditNameChange,
@@ -756,22 +1258,37 @@ function KnowledgeBaseListRow({
   index: number;
   selected: boolean;
   onSelect: () => void;
+  onHover: () => void;
+  onHoverEnd: () => void;
 } & KnowledgeBaseRowActions) {
   const lastUpdated = item.updatedAt ?? item.lastIngestedAt ?? item.createdAt;
   const active = isActiveKnowledgeBase(item);
 
   return (
     <div
-      onClick={onSelect}
+      onMouseEnter={onHover}
+      onMouseLeave={onHoverEnd}
+      onFocusCapture={onHover}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onHoverEnd();
+      }}
       className={[
-      "grid h-full min-h-0 max-h-full overflow-hidden cursor-pointer grid-cols-[minmax(0,1fr)_92px_112px_136px_184px] items-center gap-4 px-5 py-2 transition",
+      "relative grid h-full min-h-0 max-h-full overflow-hidden grid-cols-[minmax(0,1fr)_92px_112px_136px_184px] items-center gap-4 px-5 py-2 transition",
       selected ? "bg-[var(--premium-panel-strong)]" : "hover:bg-[var(--premium-panel-muted)]",
     ].join(" ")}
     >
-      <div className="flex min-w-0 items-center gap-4 text-left">
+      {!editing && !archiveConfirming ? (
+        <button
+          type="button"
+          onClick={onSelect}
+          className="absolute inset-0 z-[5] cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[var(--premium-blue)]"
+          aria-label={`打开 ${item.name} 的文档`}
+        />
+      ) : null}
+      <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-4 text-left">
         <KnowledgeGlyph index={index} compact />
         {editing ? (
-          <div className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-2" onClick={(event) => event.stopPropagation()}>
+          <div className="pointer-events-auto grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-2">
             <input className={compactFieldClass()} value={editName} onChange={(event) => onEditNameChange(event.target.value)} placeholder="知识库名称" />
             <input className={compactFieldClass()} value={editDescription} onChange={(event) => onEditDescriptionChange(event.target.value)} placeholder="描述，可选" />
           </div>
@@ -785,12 +1302,12 @@ function KnowledgeBaseListRow({
           </div>
         )}
       </div>
-      <span className="text-center text-sm text-[var(--premium-ink-soft)]">{formatNumber(item.documentCount)}</span>
-      <span className="text-center text-sm text-[var(--premium-ink-soft)]">{formatNumber(item.segmentCount)}</span>
-      <span className="truncate text-center text-sm text-[var(--premium-muted)]">
+      <span className="pointer-events-none relative z-10 text-center text-sm text-[var(--premium-ink-soft)]">{formatNumber(item.documentCount)}</span>
+      <span className="pointer-events-none relative z-10 text-center text-sm text-[var(--premium-ink-soft)]">{formatNumber(item.segmentCount)}</span>
+      <span className="pointer-events-none relative z-10 truncate text-center text-sm text-[var(--premium-muted)]">
         {editing && updateError ? updateError : archiveConfirming && archiveError ? archiveError : formatDateTime(lastUpdated)}
       </span>
-      <div className="flex justify-center">
+      <div className="pointer-events-auto relative z-10 flex justify-center">
         {editing ? (
           <EditConfirmActions saving={saving} canSave={Boolean(editName.trim())} onSave={onSaveEdit} onCancel={onCancelEdit} />
         ) : archiveConfirming ? (
@@ -821,7 +1338,7 @@ function KnowledgeBaseActions({
   }
 
   return (
-    <div className={["flex h-8 items-center", compact ? "gap-1" : "gap-1.5"].join(" ")}>
+    <div className={["pointer-events-auto flex h-8 items-center", compact ? "gap-1" : "gap-1.5"].join(" ")}>
       <AskKbLink item={item} label="进入提问" />
       <IconActionButton label="编辑知识库" onClick={onStartEdit}>
         <Edit3 size={14} />
@@ -845,7 +1362,7 @@ function EditConfirmActions({
   onCancel: () => void;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="pointer-events-auto flex items-center gap-1.5">
       <IconActionButton label="保存知识库" disabled={saving || !canSave} onClick={onSave}>
         {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
       </IconActionButton>
@@ -872,7 +1389,7 @@ function ArchiveConfirmActions({
   onCancel: () => void;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <div className="pointer-events-auto flex min-w-0 items-center gap-1.5">
       {!compact ? (
         <span className="max-w-[130px] truncate text-[11px] font-black text-[var(--premium-muted)]" title={error ?? `归档 ${item.name}`}>
           {error ?? `归档「${item.name}」?`}
@@ -1077,8 +1594,8 @@ function CreateKnowledgeBaseCard({
 }: CreateKnowledgeBaseProps) {
   if (expanded) {
     return (
-      <div className="library-create-kb-card grid h-full min-h-[254px] gap-2 rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-[var(--premium-panel)] p-2.5 shadow-[var(--premium-tight-shadow)] lg:min-h-0">
-        <div className="flex items-center gap-2 font-black text-[var(--premium-blue)]">
+      <div className="library-create-kb-card grid h-full min-h-[254px] gap-2 rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-white p-2.5 text-[var(--premium-ink)] shadow-[var(--premium-tight-shadow)] dark:border-white/30 dark:bg-[#101214] dark:text-white lg:min-h-0">
+        <div className="flex items-center gap-2 font-black text-[var(--premium-blue)] dark:text-[var(--premium-accent)]">
           <Plus size={20} />
           新建知识库
         </div>
@@ -1086,11 +1603,11 @@ function CreateKnowledgeBaseCard({
         <input className={premiumFieldClass()} value={description} onChange={(event) => onDescriptionChange(event.target.value)} placeholder="描述，可选" />
         {error ? <div className="text-xs text-rose-600 dark:text-rose-300">{error}</div> : null}
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={onCreate} disabled={pending || !name.trim()} className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--premium-ink)] px-3.5 text-xs font-black text-[var(--premium-bg)] disabled:opacity-45">
+          <button type="button" onClick={onCreate} disabled={pending || !name.trim()} className="inline-flex h-9 items-center gap-2 rounded-full bg-[#101214] px-3.5 text-xs font-black text-white disabled:opacity-45 dark:bg-white dark:text-[#101214]">
             {pending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
             {pending ? "创建中" : "创建"}
           </button>
-          <button type="button" onClick={onCancel} className="h-9 rounded-full border border-[var(--premium-line)] px-3.5 text-xs font-black text-[var(--premium-ink-soft)] hover:bg-[var(--premium-panel-muted)]">
+          <button type="button" onClick={onCancel} className="h-9 rounded-full border border-[var(--premium-line)] px-3.5 text-xs font-black text-[var(--premium-ink-soft)] hover:bg-[var(--premium-panel-muted)] dark:border-white/20 dark:text-white/75 dark:hover:bg-white/10 dark:hover:text-white">
             取消
           </button>
         </div>
@@ -1102,14 +1619,14 @@ function CreateKnowledgeBaseCard({
     <button
       type="button"
       onClick={onExpand}
-      className="library-create-kb-card grid h-full min-h-[254px] place-items-center rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-[linear-gradient(135deg,var(--premium-panel),rgba(255,255,255,0.28)),repeating-linear-gradient(135deg,rgba(17,19,21,0.035)_0_1px,transparent_1px_12px)] p-3 text-center transition hover:-translate-y-1 hover:border-[var(--premium-ink-soft)] hover:bg-[var(--premium-panel-strong)] lg:min-h-0"
+      className="library-create-kb-card grid h-full min-h-[254px] place-items-center rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-white p-3 text-center text-[var(--premium-ink)] shadow-[var(--premium-tight-shadow)] transition hover:-translate-y-1 hover:border-[var(--premium-blue)] hover:bg-[#f9faf7] dark:border-white/30 dark:bg-[#101214] dark:text-white dark:hover:border-[var(--premium-accent)] dark:hover:bg-[#171a1c] lg:min-h-0"
     >
       <span>
-        <span className="mx-auto mb-2 grid size-12 place-items-center rounded-full bg-[var(--premium-ink)] text-[var(--premium-bg)] shadow-[0_14px_30px_rgba(17,19,21,0.18)]">
+        <span className="mx-auto mb-2 grid size-12 place-items-center rounded-full bg-[#101214] text-white shadow-[0_14px_30px_rgba(17,19,21,0.18)] dark:bg-white dark:text-[#101214] dark:shadow-[0_14px_30px_rgba(0,0,0,0.3)]">
           <Plus size={24} />
         </span>
         <strong className="block text-base font-black">新建知识库</strong>
-        <span className="mx-auto mt-1.5 block max-w-[330px] text-xs leading-5 text-[var(--premium-muted)]">上传文件或连接数据源，让新的业务上下文进入可检索、可引用、可问答的资产流。</span>
+        <span className="mx-auto mt-1.5 block max-w-[330px] text-xs leading-5 text-[var(--premium-muted)] dark:text-white/55">上传文件或连接数据源，让新的业务上下文进入可检索、可引用、可问答的资产流。</span>
       </span>
     </button>
   );

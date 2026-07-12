@@ -42,6 +42,52 @@ export type KnowledgeBaseUpdateRequest = {
 
 export type KnowledgeBaseListResponse = PagedList<KnowledgeBase>;
 
+export type KnowledgeBaseDocument = {
+  id: string;
+  kbId: string;
+  fileName: string;
+  title?: string | null;
+  fileType: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  sourceUrl?: string | null;
+  versionNo?: number | null;
+  previewAvailable: boolean;
+  parseStatus: string;
+  indexStatus: string;
+  segmentCount: number;
+  indexedSegmentCount: number;
+  embeddingProfile?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type KnowledgeBaseDocumentList = PagedList<KnowledgeBaseDocument> & {
+  segmentTotal: number;
+};
+
+export type AssetPreview = {
+  assetId: string;
+  kbId: string;
+  kbName?: string | null;
+  fileName: string;
+  title?: string | null;
+  fileType: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  versionNo?: number | null;
+  createdAt?: string;
+  parseStatus: string;
+  indexStatus: string;
+  segmentCount: number;
+  previewType: string;
+  previewUrl?: string | null;
+  thumbnailUrl?: string | null;
+  expiresAt?: number | null;
+};
+
 export type KnowledgeBaseStats = {
   kbId: string;
   documentCount: number;
