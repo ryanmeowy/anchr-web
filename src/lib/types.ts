@@ -42,6 +42,52 @@ export type KnowledgeBaseUpdateRequest = {
 
 export type KnowledgeBaseListResponse = PagedList<KnowledgeBase>;
 
+export type KnowledgeBaseDocument = {
+  id: string;
+  kbId: string;
+  fileName: string;
+  title?: string | null;
+  fileType: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  sourceUrl?: string | null;
+  versionNo?: number | null;
+  previewAvailable: boolean;
+  parseStatus: string;
+  indexStatus: string;
+  segmentCount: number;
+  indexedSegmentCount: number;
+  embeddingProfile?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type KnowledgeBaseDocumentList = PagedList<KnowledgeBaseDocument> & {
+  segmentTotal: number;
+};
+
+export type AssetPreview = {
+  assetId: string;
+  kbId: string;
+  kbName?: string | null;
+  fileName: string;
+  title?: string | null;
+  fileType: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  versionNo?: number | null;
+  createdAt?: string;
+  parseStatus: string;
+  indexStatus: string;
+  segmentCount: number;
+  previewType: string;
+  previewUrl?: string | null;
+  thumbnailUrl?: string | null;
+  expiresAt?: number | null;
+};
+
 export type KnowledgeBaseStats = {
   kbId: string;
   documentCount: number;
@@ -131,6 +177,8 @@ export type RecentCitation = {
   sessionId?: string | null;
   citationIndex?: string | null;
   question?: string | null;
+  anchor?: PreviewAnchor | null;
+  chunks?: CitationChunk[] | null;
 };
 
 export type RecentSearch = {
@@ -273,6 +321,7 @@ export type SearchResult = {
   assetId?: string;
   sourceRef?: string;
   segmentType?: string;
+  title?: string;
   assetType: SearchAssetType;
   content?: string;
   snippet?: string;
@@ -316,33 +365,54 @@ export type SearchResult = {
   totalHits?: number;
   topChunks?: Array<{
     segmentId: string;
+    title?: string;
+    content?: string;
     snippet?: string;
     pageNo?: number | null;
     chunkOrder?: number | null;
+    anchor?: PreviewAnchor;
   }>;
+};
+
+export type PreviewAnchor = {
+  pageNo?: number | null;
+  chunkOrder?: number | null;
+  bbox?: PreviewBBoxRecord[] | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
+};
+
+export type CitationChunk = {
+  segmentId: string;
+  title?: string;
+  pageNo?: number | null;
+  chunkOrder?: number | null;
+  content?: string;
+  snippet?: string;
+  hitType?: string;
+  anchor?: PreviewAnchor | null;
+  why?: {
+    score?: number | null;
+    hitSources?: string[];
+    matchedBy?: {
+      vector?: boolean;
+      title?: boolean;
+      content?: boolean;
+      ocr?: boolean;
+    } | null;
+    matchSummary?: string | null;
+    reason?: string | null;
+  } | null;
 };
 
 export type SearchAnswer = {
   answer?: string;
   citations?: Array<{
     citationIndex: number;
-    segmentId: string;
     assetId?: string;
     kbId?: string;
     fileName?: string;
-    pageNo?: number;
-    snippet?: string;
-    why?: {
-      score?: number | null;
-      hitSources?: string[];
-      matchedBy?: {
-        vector?: boolean;
-        title?: boolean;
-        content?: boolean;
-        ocr?: boolean;
-      } | null;
-      matchSummary?: string | null;
-    } | null;
+    chunks: CitationChunk[];
   }>;
 };
 
@@ -404,11 +474,7 @@ export type PreviewCitationInfo = {
   segmentId?: string;
   citationIndex?: string;
   reason?: string;
-  why?: {
-    score?: string;
-    hitSources?: string[];
-    matchSummary?: string;
-  };
+  chunks?: CitationChunk[];
 };
 
 export type PreviewRequest = {
@@ -434,7 +500,7 @@ export type PreviewSegment = {
   sourceRef?: string;
   thumbnail?: string;
   title?: string;
-  snippet?: string;
+  content?: string;
   ocrSummary?: string;
   anchor?: {
     pageNo?: number;
@@ -443,16 +509,6 @@ export type PreviewSegment = {
     imageWidth?: number;
     imageHeight?: number;
   };
-  surroundingChunks?: Array<{
-    segmentId: string;
-    content?: string;
-    snippet?: string;
-    title?: string;
-    pageNo?: number;
-    chunkOrder?: number;
-    relation?: string;
-    bbox?: PreviewBBoxRecord[] | null;
-  }>;
   citationContext?: {
     sourceQuestion?: string;
     answerClaim?: string;
@@ -549,17 +605,11 @@ export type StorageConnectionTestResult = {
 };
 
 export type ConversationCitation = {
+  citationIndex?: number;
   fileName?: string;
-  pageNo?: number;
-  snippet?: string;
-  hitType?: string;
+  kbId?: string;
   assetId?: string;
-  segmentId?: string;
-  why?: {
-    score?: number | null;
-    hitSources?: string[];
-    matchSummary?: string | null;
-  } | null;
+  chunks: CitationChunk[];
 };
 
 export type ConversationSession = {
@@ -589,6 +639,8 @@ export type ConversationTurn = {
   kbScope?: string[];
   assetScope?: string[];
   answerMode?: string;
+  answerStatus?: ConversationAnswerStatus;
+  answerFallbackReason?: string | null;
   citations?: ConversationCitation[];
   resultCards?: Array<{
     assetId?: string;
@@ -631,11 +683,15 @@ export type ConversationMessage = {
   kbScope?: string[];
   assetScope?: string[];
   answerMode?: string;
+  answerStatus?: ConversationAnswerStatus;
+  answerFallbackReason?: string | null;
   retrievalStage?: string;
   citations?: ConversationCitation[];
   suggestedQuestions?: string[];
   createdAt?: number;
 };
+
+export type ConversationAnswerStatus = "ANSWERED" | "NO_EVIDENCE" | "MODEL_FALLBACK";
 export type SegmentIndexStatus = {
   status: "NOT_READY" | "INITIALIZING" | "READY" | "REBUILDING";
   indexExists: boolean;

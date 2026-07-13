@@ -38,6 +38,7 @@ import {
 import type {
   CapabilityConfig,
   ConversationAnswerMode,
+  ConversationAnswerStatus,
   ConversationCitation,
   ConversationSession,
   ConversationTurn,
@@ -52,6 +53,8 @@ type ChatMessage = {
   citations?: ConversationCitation[];
   assetScope?: string[];
   answerMode?: ConversationAnswerMode | string;
+  answerStatus?: ConversationAnswerStatus;
+  answerFallbackReason?: string | null;
   pending?: boolean;
   error?: string;
 };
@@ -102,7 +105,7 @@ export function AskPremiumPage() {
   const [selectedKbIdsValue, setSelectedKbIdsValue] = useState<string[] | null>(initialKbId ? [initialKbId] : null);
   const [selectedAnswerMode, setSelectedAnswerMode] = useState<ConversationAnswerMode>("STRICT");
   const [selectedGenerationConfigId, setSelectedGenerationConfigId] = useState<number | null>(null);
-  const [activeSessionId, setActiveSessionId] = useState("");
+  const [activeSessionId, setActiveSessionId] = useState(initialSessionId);
   const [conversations, setConversations] = useState<ConversationSession[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
@@ -223,9 +226,26 @@ export function AskPremiumPage() {
     ]);
   }, []);
 
+  const syncSessionUrl = useCallback((sessionId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (sessionId) {
+      params.set("session", sessionId);
+    } else {
+      params.delete("session");
+    }
+    params.delete("turn");
+    const nextQuery = params.toString();
+    router.replace(nextQuery ? `/ask?${nextQuery}` : "/ask", { scroll: false });
+  }, [router, searchParams]);
+
   useEffect(() => {
     const handoff = consumeAssetScopeHandoff("ask");
     const restored = readPreviewRestoreState<AskPremiumReturnState>("ask");
+    if (initialTurnId) {
+      clearPreviewRestoreState("ask");
+      return;
+    }
+
     if (!restored?.context.returnState) {
       if (handoff?.sessionId) {
         window.requestAnimationFrame(() => {
@@ -254,7 +274,7 @@ export function AskPremiumPage() {
       if (messageScrollRef.current) messageScrollRef.current.scrollTop = state.messageScrollTop;
       if (listScrollRef.current) listScrollRef.current.scrollTop = state.conversationListScrollTop;
     });
-  }, []);
+  }, [initialTurnId]);
 
   const loadConversations = useCallback(async (cursor?: string | null, append = false) => {
     if (append) setIsLoadingMoreConversations(true);
@@ -378,18 +398,9 @@ export function AskPremiumPage() {
   }, [activeSessionId, hasLoadedActiveMessages]);
 
   useEffect(() => {
+    if (initialTurnId && activeSessionId === initialSessionId) return;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [activeSessionId, activeMessages.length, lastActiveMessageContent]);
-
-  useEffect(() => {
-    if (!initialSessionId || initialSessionId === activeSessionId) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      handleSelectConversation(initialSessionId);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [initialSessionId, activeSessionId]);
+  }, [initialTurnId, initialSessionId, activeSessionId, activeMessages.length, lastActiveMessageContent]);
 
   useEffect(() => {
     if (!initialTurnId || !initialSessionId || activeSessionId !== initialSessionId || isLoadingMessages) return;
@@ -398,7 +409,7 @@ export function AskPremiumPage() {
     const node = document.querySelector(`[data-turn-id="${CSS.escape(initialTurnId)}"]`);
     if (!node) return;
 
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    node.scrollIntoView({ behavior: "auto", block: "center" });
     const frame = window.requestAnimationFrame(() => setHighlightedTurnId(initialTurnId));
     const timer = window.setTimeout(() => setHighlightedTurnId(null), 2500);
 
@@ -417,6 +428,7 @@ export function AskPremiumPage() {
 
   const handleNewConversation = () => {
     setActiveSessionId("");
+    syncSessionUrl("");
     setMessageError(null);
     setStreamError(null);
     setOpenMenuSessionId(null);
@@ -426,6 +438,7 @@ export function AskPremiumPage() {
 
   function handleSelectConversation(sessionId: string) {
     setActiveSessionId(sessionId);
+    syncSessionUrl(sessionId);
     setMessageError(null);
     setStreamError(null);
     setOpenMenuSessionId(null);
@@ -438,10 +451,12 @@ export function AskPremiumPage() {
     citationIndex: number,
     question?: string,
   ) => {
-    if (!citation.segmentId) return;
+    const firstChunk = citation.chunks?.[0];
+    if (!firstChunk?.segmentId) return;
 
     const contextKey = savePreviewNavigation<AskPremiumReturnState>({
       source: "ask",
+      navigationMode: "CITATION",
       sourceId: message.turnId,
       sessionId: message.sessionId,
       question,
@@ -463,10 +478,10 @@ export function AskPremiumPage() {
     const params = new URLSearchParams({
       from: "ask",
       contextKey,
-      citationIndex: String(citationIndex + 1),
+      citationIndex: String(citation.citationIndex ?? citationIndex + 1),
     });
 
-    router.push(`/preview/${encodeURIComponent(citation.segmentId)}?${params.toString()}`);
+    router.push(`/preview/${encodeURIComponent(firstChunk.segmentId)}?${params.toString()}`);
   }, [
     activeSessionId,
     conversations,
@@ -507,6 +522,7 @@ export function AskPremiumPage() {
         targetSessionId = session.sessionId;
         setConversations((previous) => mergeConversations([{ ...session, title: session.title || "新对话" }], previous));
         setActiveSessionId(targetSessionId);
+        syncSessionUrl(targetSessionId);
       }
 
       const userMessage: ChatMessage = {
@@ -604,6 +620,8 @@ export function AskPremiumPage() {
               turnId: event.turnId,
               assetScope: event.assetScope ?? message.assetScope,
               answerMode: event.answerMode ?? message.answerMode,
+              answerStatus: event.answerStatus ?? message.answerStatus ?? "ANSWERED",
+              answerFallbackReason: event.fallbackReason ?? message.answerFallbackReason,
               content: stripTraceText(message.content) || "未生成回答。",
             }));
             setConversations((previous) => previous.map((item) => (
@@ -734,6 +752,7 @@ export function AskPremiumPage() {
 
     if (activeSessionId === sessionId) {
       setActiveSessionId("");
+      syncSessionUrl("");
       setMessageError(null);
       setStreamError(null);
       setTraceEvents([]);
@@ -1520,6 +1539,16 @@ function PremiumChatBubble({
                 {answerModeDisplayName(message.answerMode)}
               </span>
             ) : null}
+            {message.answerStatus === "NO_EVIDENCE" ? (
+              <span className="inline-flex min-h-6 items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 text-[10px] font-black text-amber-700 dark:text-amber-200">
+                证据不足
+              </span>
+            ) : null}
+            {message.answerStatus === "MODEL_FALLBACK" ? (
+              <span className="inline-flex min-h-6 items-center rounded-full border border-orange-500/20 bg-orange-500/10 px-2.5 text-[10px] font-black text-orange-700 dark:text-orange-200">
+                降级回答
+              </span>
+            ) : null}
           </div>
           {message.pending ? (
             <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#bbff66]/25" aria-label="流式回答中" title="流式回答中">
@@ -1547,18 +1576,25 @@ function PremiumChatBubble({
         <div className="ask-premium-answer-text whitespace-pre-wrap break-words text-[14px] leading-7 text-slate-700">
           {message.pending && !stripTraceText(message.content) ? "正在生成回答..." : stripTraceText(message.content)}
         </div>
+        {message.answerStatus === "NO_EVIDENCE" ? (
+          <div className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-200">当前检索内容不足以支持可靠回答，可补充关键词或限定资料范围后重试。</div>
+        ) : null}
+        {message.answerStatus === "MODEL_FALLBACK" ? (
+          <div className="mt-2 text-xs font-semibold text-orange-700 dark:text-orange-200">模型生成发生降级，以下内容仅基于当前可确认的证据整理。</div>
+        ) : null}
         {message.error ? <div className="mt-3 text-sm text-rose-600">{message.error}</div> : null}
-        {message.citations?.length ? (
+        {message.answerStatus !== "NO_EVIDENCE" && message.citations?.length ? (
           <div className="mt-4 flex flex-wrap gap-2" aria-label="引用来源">
             {message.citations.map((citation, index) => (
               <button
                 type="button"
-                key={`${citation.segmentId ?? citation.fileName ?? index}-${index}`}
+                key={`${citation.assetId ?? citation.fileName ?? index}-${index}`}
                 onClick={() => onPreviewCitation(message, citation, index, question)}
-                disabled={!citation.segmentId}
+                disabled={!citation.chunks?.length}
                 className="ask-premium-citation inline-flex min-h-[30px] items-center gap-2 rounded-full border border-black/10 bg-[#f7f7f2]/85 px-2.5 text-[11px] font-black text-[#111315] transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
               >
-                [{index + 1}] {citation.fileName ?? "引用来源"} {citation.pageNo ? `第 ${citation.pageNo} 页` : ""}
+                [{citation.citationIndex ?? index + 1}] {citation.fileName ?? "引用来源"}
+                {citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}
               </button>
             ))}
           </div>
@@ -1595,6 +1631,8 @@ function turnsToMessages(turns: ConversationTurn[]) {
       citations: turn.citations ?? [],
       assetScope: turn.assetScope ?? [],
       answerMode: turn.answerMode,
+      answerStatus: turn.answerStatus ?? "ANSWERED",
+      answerFallbackReason: turn.answerFallbackReason,
     });
 
     return messages;

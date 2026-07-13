@@ -1229,6 +1229,131 @@ a {
   }
 }
 
+.library-document-view {
+  scrollbar-color: var(--premium-line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.library-health-panel {
+  background:
+    radial-gradient(circle at 105% -5%, rgba(187, 255, 102, 0.12), transparent 15rem),
+    linear-gradient(145deg, #111613, #090c0a 72%);
+}
+
+.library-health-orbit {
+  animation: libraryHealthOrbit 12s linear infinite;
+  box-shadow:
+    0 0 0 28px rgba(255, 255, 255, 0.018),
+    0 0 0 56px rgba(255, 255, 255, 0.012);
+}
+
+.library-health-snapshot {
+  animation: libraryHealthSnapshotIn 520ms cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.library-health-type-slice {
+  transition: flex-grow 720ms cubic-bezier(0.19, 1, 0.22, 1), filter 260ms ease;
+}
+
+.library-health-type-slice:hover {
+  filter: brightness(1.25);
+}
+
+.premium-theme:not([data-premium-theme="dark"]) .library-document-view {
+  --premium-muted: #687078;
+  --premium-blue: #2446d8;
+}
+
+.library-document-command {
+  animation: libraryDocumentCommandIn 620ms cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.library-document-card {
+  animation: libraryDocumentCardIn 520ms cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.library-document-orbit {
+  animation: libraryDocumentOrbit 12s linear infinite;
+  box-shadow:
+    0 0 0 28px rgba(255, 255, 255, 0.025),
+    0 0 0 68px rgba(255, 255, 255, 0.018);
+}
+
+.library-document-orbit-secondary {
+  animation-direction: reverse;
+  animation-duration: 8s;
+}
+
+@keyframes libraryDocumentCommandIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+    clip-path: inset(0 0 18% 0 round 8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    clip-path: inset(0 0 0 0 round 8px);
+  }
+}
+
+@keyframes libraryDocumentCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes libraryDocumentOrbit {
+  to {
+    transform: rotate(360deg) scale(1.04);
+  }
+}
+
+@keyframes libraryHealthOrbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes libraryHealthSnapshotIn {
+  from {
+    opacity: 0.45;
+    transform: translateY(8px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-document-command,
+  .library-document-card,
+  .library-document-orbit,
+  .library-health-orbit,
+  .library-health-snapshot {
+    animation: none;
+  }
+
+  .library-document-card,
+  .library-document-card *,
+  .library-document-command button,
+  .library-kb-card,
+  .library-kb-card *,
+  .library-health-panel * {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @keyframes askPremiumMenuRise {
   from {
     opacity: 0;

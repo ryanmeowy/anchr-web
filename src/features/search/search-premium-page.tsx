@@ -443,11 +443,13 @@ export function SearchPremiumPage() {
       segmentId: string | undefined,
       citationIndex: number,
       citations: PreviewCitation[],
+      navigationMode: "CITATION" | "NONE",
       context?: { question?: string; answer?: string },
     ) => {
       if (!segmentId) return;
       const contextKey = savePreviewNavigation<SearchPremiumReturnState>({
         source: "search",
+        navigationMode,
         question: context?.question,
         answer: context?.answer,
         citations,
@@ -614,7 +616,7 @@ export function SearchPremiumPage() {
                         answer={searchData?.answer?.answer}
                         citations={searchData?.answer?.citations ?? []}
                         onPreview={(citation, index) =>
-                          openPreview(citation.segmentId, citation.citationIndex ?? index + 1, normalizedCitations, {
+                          openPreview(citation.chunks?.[0]?.segmentId, citation.citationIndex ?? index + 1, normalizedCitations, "CITATION", {
                             question: submittedQuery,
                             answer: searchData?.answer?.answer,
                           })
@@ -628,11 +630,8 @@ export function SearchPremiumPage() {
                         isAppending={isAppending}
                         onLoadMore={handleLoadMore}
                         onPreview={(item) => {
-                          const matched = normalizedCitations.find((citation) => citation.segmentId === item.segmentId);
-                          const citations = normalizedCitations.length ? normalizedCitations : [searchResultToCitation(item)];
-                          openPreview(item.segmentId, matched?.citationIndex ?? 1, citations, {
+                          openPreview(item.segmentId, 1, [searchResultToCitation(item)], "NONE", {
                             question: submittedQuery,
-                            answer: searchData?.answer?.answer,
                           });
                         }}
                       />
@@ -849,15 +848,15 @@ const AnswerPanel = function AnswerPanel({
           {visibleCitations.map((citation, index) => (
             <button
               type="button"
-              key={`${citation.segmentId}-${citation.citationIndex ?? "citation"}-${index}`}
+              key={`${citation.assetId ?? citation.fileName}-${citation.citationIndex ?? "citation"}-${index}`}
               onClick={() => onPreview(citation, index)}
-              disabled={!citation.segmentId}
+              disabled={!citation.chunks?.length}
               className="search-premium-citation"
               title={`[${citation.citationIndex ?? index + 1}] ${citation.fileName ?? "引用来源"}`}
             >
               <span>
                 [{citation.citationIndex ?? index + 1}] {citation.fileName ?? "引用来源"}
-                {citation.pageNo ? ` P${citation.pageNo}` : ""}
+                {citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}
               </span>
             </button>
           ))}
@@ -2157,9 +2156,6 @@ function buildInsightData(
     };
   }
 
-  const itemBySegment = new Map(
-    data.items.filter((item) => item.segmentId).map((item) => [item.segmentId as string, item]),
-  );
   const itemByAsset = new Map(
     data.items.filter((item) => item.assetId).map((item) => [item.assetId as string, item]),
   );
@@ -2170,8 +2166,7 @@ function buildInsightData(
   const sourceCountMap = new Map<string, number>();
 
   citations.forEach((citation) => {
-    const item = (citation.segmentId ? itemBySegment.get(citation.segmentId) : undefined)
-      ?? (citation.assetId ? itemByAsset.get(citation.assetId) : undefined);
+    const item = citation.assetId ? itemByAsset.get(citation.assetId) : undefined;
     const label = item
       ? getEvidenceSourceLabel(item)
       : getSourceLabelFromFileName(citation.fileName);
@@ -2288,7 +2283,7 @@ function renderAnswerText(
         key={`${part}-${index}`}
         type="button"
         onClick={() => onPreview(citation, citationIndex)}
-        disabled={!citation.segmentId}
+        disabled={!citation.chunks?.length}
         className="search-premium-inline-citation"
         aria-label={`查看引用 ${citationNumber}`}
       >
@@ -2315,23 +2310,48 @@ function groupResults(results: SearchResult[], kbById: Map<string, KnowledgeBase
 
 function searchResultToCitation(item: SearchResult): PreviewCitation {
   const hitSources = item.explain?.hitSources;
+  const chunks = item.topChunks?.length
+    ? item.topChunks.map((chunk) => ({
+        segmentId: chunk.segmentId,
+        title: chunk.title,
+        pageNo: chunk.pageNo ?? chunk.anchor?.pageNo ?? undefined,
+        chunkOrder: chunk.chunkOrder ?? chunk.anchor?.chunkOrder ?? undefined,
+        content: chunk.content,
+        snippet: chunk.snippet,
+        anchor: chunk.anchor,
+        ...(chunk.segmentId === item.segmentId && (item.score !== undefined || hitSources?.length)
+          ? {
+              why: {
+                ...(item.score !== undefined ? { score: item.score } : {}),
+                ...(hitSources?.length ? { hitSources } : {}),
+              },
+            }
+          : {}),
+      }))
+    : [{
+        segmentId: item.segmentId ?? "",
+        title: item.title,
+        pageNo: item.pageNo ?? item.anchor?.pageNo ?? undefined,
+        chunkOrder: item.anchor?.chunkOrder ?? undefined,
+        content: item.content,
+        snippet: item.snippet || item.content || item.ocrSummary,
+        anchor: item.anchor,
+        ...(item.score !== undefined || hitSources?.length
+          ? {
+              why: {
+                ...(item.score !== undefined ? { score: item.score } : {}),
+                ...(hitSources?.length ? { hitSources } : {}),
+              },
+            }
+          : {}),
+      }];
 
   return {
     citationIndex: 1,
-    segmentId: item.segmentId,
     assetId: item.assetId,
     kbId: item.kbId,
     fileName: displaySourceName(item.sourceRef, item.assetId),
-    pageNo: item.pageNo ?? item.anchor?.pageNo ?? undefined,
-    snippet: item.snippet || item.content || item.ocrSummary,
-    ...(item.score !== undefined || hitSources?.length
-      ? {
-          why: {
-            ...(item.score !== undefined ? { score: item.score } : {}),
-            ...(hitSources?.length ? { hitSources } : {}),
-          },
-        }
-      : {}),
+    chunks: chunks.filter((chunk) => Boolean(chunk.segmentId)),
   };
 }
 

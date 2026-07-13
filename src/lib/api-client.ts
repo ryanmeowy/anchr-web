@@ -8,6 +8,7 @@ import type {
   CapabilityConnectionTestResult,
   CapabilityParams,
   ConversationAnswerMode,
+  ConversationAnswerStatus,
   ConversationCitation,
   ConversationMessageList,
   ConversationSession,
@@ -17,11 +18,13 @@ import type {
   IngestionTaskList,
   IngestionTask,
   KnowledgeBase,
+  KnowledgeBaseDocumentList,
   KnowledgeBaseHealth,
   KnowledgeBaseListResponse,
   KnowledgeBaseQueryRequest,
   KnowledgeBaseStats,
   KnowledgeBaseUpdateRequest,
+  AssetPreview,
   PagedList,
   PreviewRequest,
   PreviewSegment,
@@ -53,7 +56,7 @@ type StreamMessageCallbacks = {
   onTrace?: (event: { stage?: string; message?: string; answerMode?: ConversationAnswerMode | string }) => void;
   onDelta?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number }) => void;
 };
 
 type ConversationMessageRequest = {
@@ -213,7 +216,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "done") {
-    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
+    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number }>(data) ?? {});
     return;
   }
 
@@ -253,10 +256,35 @@ export const apiClient = {
     request<PagedList<KnowledgeBase>>("/api/v1/kbs/search", { method: "POST", body: { page, size, status: "0" } }),
   queryKnowledgeBases: (body: KnowledgeBaseQueryRequest) =>
     request<KnowledgeBaseListResponse>("/api/v1/kbs/search", { method: "POST", body }),
+  getKnowledgeBase: (kbId: string) =>
+    request<KnowledgeBase>(`/api/v1/kbs/${encodeURIComponent(kbId)}`),
   getKnowledgeBaseStats: (kbIds: string[]) =>
     request<KnowledgeBaseStats[]>("/api/v1/kbs/stats", { method: "POST", body: { kbIds } }),
   getKnowledgeBaseHealth: (kbId: string) =>
     request<KnowledgeBaseHealth>(`/api/v1/kbs/${encodeURIComponent(kbId)}/health`),
+  listKnowledgeBaseDocuments: (
+    kbId: string,
+    query: { page: number; size: number; keyword?: string; fileType?: string },
+  ) => {
+    const params = new URLSearchParams({
+      page: String(query.page),
+      size: String(query.size),
+    });
+    if (query.keyword) params.set("keyword", query.keyword);
+    if (query.fileType) params.set("fileType", query.fileType);
+    return request<KnowledgeBaseDocumentList>(
+      `/api/v1/kbs/${encodeURIComponent(kbId)}/documents?${params.toString()}`,
+    );
+  },
+  previewAsset: (kbId: string, assetId: string) =>
+    request<AssetPreview>(
+      `/api/v1/kbs/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(assetId)}/preview`,
+    ),
+  deleteKnowledgeBaseDocument: (kbId: string, assetId: string) =>
+    request<null>(
+      `/api/v1/kbs/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(assetId)}`,
+      { method: "DELETE" },
+    ),
   getElasticsearchHealth: () =>
     request<ElasticsearchHealth>("/api/v1/health/elasticsearch"),
   createKnowledgeBase: (body: { name: string; description?: string }) =>
