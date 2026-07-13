@@ -10,11 +10,15 @@
   animation: previewPremiumGlow 2.6s cubic-bezier(0.19, 1, 0.22, 1) infinite alternate;
 }
 
-.bboxLock {
+.bboxLock,
+.bboxStable {
   isolation: isolate;
   box-shadow:
     0 0 0 1px rgba(37, 99, 235, 0.14),
     0 12px 34px rgba(37, 99, 235, 0.18);
+}
+
+.bboxLock {
   animation: previewPremiumBBoxLock 1100ms cubic-bezier(0.19, 1, 0.22, 1) both;
 }
 

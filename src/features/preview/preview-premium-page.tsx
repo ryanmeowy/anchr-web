@@ -14,7 +14,7 @@ import {
   RefreshCcw,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { ErrorBlock } from "@/components/ui/query-state";
@@ -366,19 +366,77 @@ function PreviewContent({
   const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
   const [pdfPageSize, setPdfPageSize] = useState<PdfPageSize | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null);
+  const [pdfNavigationToken, setPdfNavigationToken] = useState(0);
+  const pdfNavigationPageRef = useRef(item.anchor?.pageNo ?? 1);
+  const pdfVisiblePageRef = useRef(item.anchor?.pageNo ?? 1);
+  const pendingPdfZoomAnchorRef = useRef<{ page: number; x: number; y: number } | null>(null);
   const [previewFrameSize, setPreviewFrameSize] = useState({ width: 0, height: 0 });
   const [previewOverflow, setPreviewOverflow] = useState<PreviewOverflow>({
     horizontal: false,
     vertical: false,
   });
 
+  useLayoutEffect(() => {
+    const targetPage = item.anchor?.pageNo ?? 1;
+    pdfNavigationPageRef.current = targetPage;
+    pdfVisiblePageRef.current = targetPage;
+  }, [item.anchor?.pageNo, item.segmentId]);
+
   const handleChunkSelect = useCallback((chunk: CitationChunk) => {
     const nextPage = chunk.pageNo ?? chunk.anchor?.pageNo;
     if (nextPage) {
+      pdfNavigationPageRef.current = nextPage;
+      pdfVisiblePageRef.current = nextPage;
       setPdfPage(nextPage);
+      setPdfNavigationToken((token) => token + 1);
     }
     onCitationSelect(chunk);
   }, [onCitationSelect]);
+
+  const navigateToPdfPage = useCallback((page: number) => {
+    const nextPage = Math.max(1, Math.min(pdfPageCount ?? page, page));
+    pdfNavigationPageRef.current = nextPage;
+    pdfVisiblePageRef.current = nextPage;
+    setPdfPage(nextPage);
+    setPdfNavigationToken((token) => token + 1);
+  }, [pdfPageCount]);
+
+  const scrollPdfElementIntoView = useCallback((element: HTMLElement, behavior: ScrollBehavior, center = false) => {
+    const scroller = previewScrollerRef.current;
+    if (!scroller) return;
+
+    const scrollerRect = scroller.getBoundingClientRect();
+    const elementRect = element.getBoundingClientRect();
+    const centeredOffset = center ? (scroller.clientHeight - elementRect.height) / 2 : 24;
+    scroller.scrollTo({
+      top: scroller.scrollTop + elementRect.top - scrollerRect.top - centeredOffset,
+      behavior,
+    });
+  }, []);
+
+  const scrollPdfPageIntoView = useCallback((pageNo: number, behavior: ScrollBehavior) => {
+    const page = previewScrollerRef.current?.querySelector<HTMLElement>(`[data-pdf-page="${pageNo}"]`);
+    if (page) scrollPdfElementIntoView(page, behavior);
+  }, [scrollPdfElementIntoView]);
+
+  const capturePdfZoomAnchor = useCallback(() => {
+    const scroller = previewScrollerRef.current;
+    const page = scroller?.querySelector<HTMLElement>(`[data-pdf-page="${pdfVisiblePageRef.current}"]`);
+    if (!scroller || !page) return;
+
+    const rootRect = scroller.getBoundingClientRect();
+    const pageRect = page.getBoundingClientRect();
+    pendingPdfZoomAnchorRef.current = {
+      page: pdfVisiblePageRef.current,
+      x: Math.min(1, Math.max(0, (rootRect.left + scroller.clientWidth / 2 - pageRect.left) / pageRect.width)),
+      y: Math.min(1, Math.max(0, (rootRect.top + scroller.clientHeight / 2 - pageRect.top) / pageRect.height)),
+    };
+  }, []);
+
+  const handleVisiblePdfPageChange = useCallback((page: number) => {
+    pdfVisiblePageRef.current = page;
+    setPdfPage(page);
+  }, []);
 
   const pageNumbers = useMemo(() => {
     if (previewType !== "PDF") {
@@ -488,22 +546,87 @@ function PreviewContent({
   }, [item.segmentId, pdfPage, pdfPageSize, pdfScale, updatePreviewOverflow]);
 
   useEffect(() => {
+    if (previewType !== "PDF" || !pdfPageCount) {
+      return;
+    }
+
+    let bboxObserver: MutationObserver | null = null;
+    let observerTimeout: number | null = null;
+    const frame = window.requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const behavior = pdfNavigationToken === 0 || reduceMotion ? "auto" : "smooth";
+      const targetPageNo = pdfNavigationPageRef.current;
+      scrollPdfPageIntoView(
+        targetPageNo,
+        item.anchor?.pageNo === targetPageNo && item.anchor.bbox?.length ? "auto" : behavior,
+      );
+
+      if (item.anchor?.pageNo !== targetPageNo || !item.anchor.bbox?.length) return;
+      const page = previewScrollerRef.current?.querySelector<HTMLElement>(`[data-pdf-page="${targetPageNo}"]`);
+      if (!page) return;
+
+      const focusBBox = () => {
+        const bbox = page.querySelector<HTMLElement>("[data-citation-bbox]");
+        if (!bbox) return false;
+        scrollPdfElementIntoView(bbox, behavior, true);
+        return true;
+      };
+      if (focusBBox()) return;
+
+      bboxObserver = new MutationObserver(() => {
+        if (focusBBox()) bboxObserver?.disconnect();
+      });
+      bboxObserver.observe(page, { childList: true, subtree: true });
+      observerTimeout = window.setTimeout(() => bboxObserver?.disconnect(), 4000);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      bboxObserver?.disconnect();
+      if (observerTimeout !== null) window.clearTimeout(observerTimeout);
+    };
+  }, [item.anchor?.bbox, item.anchor?.pageNo, item.segmentId, pdfNavigationToken, pdfPageCount, previewType, scrollPdfElementIntoView, scrollPdfPageIntoView]);
+
+  useEffect(() => {
+    if (previewType !== "PDF" || !pendingPdfZoomAnchorRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      const anchor = pendingPdfZoomAnchorRef.current;
+      const scroller = previewScrollerRef.current;
+      const page = anchor && scroller?.querySelector<HTMLElement>(`[data-pdf-page="${anchor.page}"]`);
+      if (!anchor || !scroller || !page) return;
+
+      const rootRect = scroller.getBoundingClientRect();
+      const pageRect = page.getBoundingClientRect();
+      scroller.scrollTo({
+        top: scroller.scrollTop + pageRect.top + pageRect.height * anchor.y - rootRect.top - scroller.clientHeight / 2,
+        left: scroller.scrollLeft + pageRect.left + pageRect.width * anchor.x - rootRect.left - scroller.clientWidth / 2,
+        behavior: "auto",
+      });
+      pendingPdfZoomAnchorRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pdfScale, previewType]);
+
+  useEffect(() => {
     if (previewType !== "PDF" || pdfFitMode === "manual") {
       return;
     }
 
     const frame = window.requestAnimationFrame(() => {
       const nextScale = pdfFitMode === "width" ? getPdfWidthScale() : getPdfAutoScale();
-      setPdfScale((scale) => (Math.abs(scale - nextScale) < 0.01 ? scale : nextScale));
+      if (Math.abs(pdfScale - nextScale) < 0.01) return;
+      capturePdfZoomAnchor();
+      setPdfScale(nextScale);
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [getPdfAutoScale, getPdfWidthScale, pdfFitMode, previewType]);
+  }, [capturePdfZoomAnchor, getPdfAutoScale, getPdfWidthScale, pdfFitMode, pdfScale, previewType]);
 
   const fitPdfToWidth = useCallback(() => {
+    capturePdfZoomAnchor();
     setPdfFitMode("width");
     setPdfScale(getPdfWidthScale());
-  }, [getPdfWidthScale]);
+  }, [capturePdfZoomAnchor, getPdfWidthScale]);
 
   const toggleFullscreen = useCallback(() => {
     const shell = previewShellRef.current;
@@ -532,7 +655,7 @@ function PreviewContent({
           <button
             key={page}
             type="button"
-            onClick={() => setPdfPage(page)}
+            onClick={() => navigateToPdfPage(page)}
             disabled={previewType !== "PDF"}
             className="grid gap-2 border-0 bg-transparent text-center text-[var(--premium-muted)]"
           >
@@ -566,7 +689,7 @@ function PreviewContent({
             <ToolButton
               label="上一页"
               disabled={previewType !== "PDF" || pdfPage <= 1}
-              onClick={() => setPdfPage((page) => Math.max(1, page - 1))}
+              onClick={() => navigateToPdfPage(pdfPage - 1)}
             >
               <ChevronLeft size={17} />
             </ToolButton>
@@ -580,7 +703,7 @@ function PreviewContent({
             <ToolButton
               label="下一页"
               disabled={previewType !== "PDF" || (pdfPageCount !== null && pdfPage >= pdfPageCount)}
-              onClick={() => setPdfPage((page) => Math.min(pdfPageCount ?? page + 1, page + 1))}
+              onClick={() => navigateToPdfPage(pdfPage + 1)}
             >
               <ChevronRight size={17} />
             </ToolButton>
@@ -591,6 +714,7 @@ function PreviewContent({
               label="缩小"
               disabled={previewType !== "PDF"}
               onClick={() => {
+                capturePdfZoomAnchor();
                 setPdfFitMode("manual");
                 setPdfScale((scale) => clampScale(scale - 0.1));
               }}
@@ -604,6 +728,7 @@ function PreviewContent({
               label="放大"
               disabled={previewType !== "PDF"}
               onClick={() => {
+                capturePdfZoomAnchor();
                 setPdfFitMode("manual");
                 setPdfScale((scale) => clampScale(scale + 0.1));
               }}
@@ -638,8 +763,9 @@ function PreviewContent({
           {previewType === "PDF" && item.previewUrl ? (
             <PdfPreview
               item={item}
-              pageNo={pdfPage}
               scale={pdfScale}
+              scrollRootRef={previewScrollerRef}
+              onVisiblePageChange={handleVisiblePdfPageChange}
               onPageCountChange={setPdfPageCount}
               onPageSizeChange={setPdfPageSize}
               onDocumentChange={setPdfDoc}
@@ -979,24 +1105,25 @@ function getPreviewFrameSize(scroller: HTMLElement) {
 
 function PdfPreview({
   item,
-  pageNo,
   scale,
+  scrollRootRef,
+  onVisiblePageChange,
   onPageCountChange,
   onPageSizeChange,
   onDocumentChange,
 }: {
   item: PreviewSegment;
-  pageNo: number;
   scale: number;
+  scrollRootRef: RefObject<HTMLDivElement | null>;
+  onVisiblePageChange: (page: number) => void;
   onPageCountChange: (count: number) => void;
   onPageSizeChange: (size: PdfPageSize | null) => void;
   onDocumentChange: (doc: PdfDocumentProxy | null) => void;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pagesRootRef = useRef<HTMLDivElement | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null);
-  const [pageSize, setPageSize] = useState<PdfPageSize | null>(null);
+  const [basePageSize, setBasePageSize] = useState<{ widthPt: number; heightPt: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isRendering, setIsRendering] = useState(false);
 
   useEffect(() => {
     if (!item.previewUrl) {
@@ -1008,18 +1135,22 @@ function PdfPreview({
       if (!cancelled) {
         setError(null);
         setPdfDoc(null);
-        setPageSize(null);
+        setBasePageSize(null);
         onPageSizeChange(null);
       }
     });
     const loadingTask = pdfjsLib.getDocument({ url: item.previewUrl });
 
     loadingTask.promise
-      .then((doc) => {
+      .then(async (doc) => {
         if (cancelled) {
           void (doc as { destroy?: () => void | Promise<void> }).destroy?.();
           return;
         }
+        const firstPage = await doc.getPage(1);
+        if (cancelled) return;
+        const [x1, y1, x2, y2] = firstPage.view;
+        setBasePageSize({ widthPt: Math.abs(x2 - x1), heightPt: Math.abs(y2 - y1) });
         setPdfDoc(doc);
         onDocumentChange(doc);
         onPageCountChange(doc.numPages);
@@ -1039,72 +1170,220 @@ function PdfPreview({
   }, [item.previewUrl, onDocumentChange, onPageCountChange, onPageSizeChange]);
 
   useEffect(() => {
-    if (!pdfDoc || !canvasRef.current) {
+    if (!basePageSize) {
       return;
     }
+    onPageSizeChange({
+      width: basePageSize.widthPt * scale,
+      height: basePageSize.heightPt * scale,
+      widthPt: basePageSize.widthPt,
+      heightPt: basePageSize.heightPt,
+    });
+  }, [basePageSize, onPageSizeChange, scale]);
+
+  useEffect(() => {
+    const pagesRoot = pagesRootRef.current;
+    const scrollRoot = scrollRootRef.current;
+    if (!pdfDoc || !pagesRoot || !scrollRoot) return;
+
+    const visibility = new Map<number, { height: number; centerDistance: number }>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const page = Number((entry.target as HTMLElement).dataset.pdfPage);
+          if (Number.isFinite(page)) {
+            const rootCenter = entry.rootBounds
+              ? entry.rootBounds.top + entry.rootBounds.height / 2
+              : 0;
+            const visibleCenter = entry.intersectionRect.top + entry.intersectionRect.height / 2;
+            visibility.set(page, {
+              height: entry.isIntersecting ? entry.intersectionRect.height : 0,
+              centerDistance: entry.isIntersecting ? Math.abs(visibleCenter - rootCenter) : Number.POSITIVE_INFINITY,
+            });
+          }
+        });
+
+        let visiblePage = 0;
+        let bestHeight = 0;
+        let bestCenterDistance = Number.POSITIVE_INFINITY;
+        visibility.forEach(({ height, centerDistance }, page) => {
+          if (height > bestHeight || (height === bestHeight && centerDistance < bestCenterDistance)) {
+            bestHeight = height;
+            bestCenterDistance = centerDistance;
+            visiblePage = page;
+          }
+        });
+        if (visiblePage > 0) onVisiblePageChange(visiblePage);
+      },
+      { root: scrollRoot, threshold: [0, 0.15, 0.3, 0.5, 0.7, 0.9] },
+    );
+
+    pagesRoot.querySelectorAll<HTMLElement>("[data-pdf-page]").forEach((page) => observer.observe(page));
+    return () => observer.disconnect();
+  }, [onVisiblePageChange, pdfDoc, scrollRootRef]);
+
+  if (error) {
+    return <ErrorBlock message={error} />;
+  }
+
+  if (!pdfDoc || !basePageSize) {
+    return (
+      <div className="grid min-h-48 place-items-center text-[var(--premium-muted)]" role="status" aria-label="正在加载 PDF">
+        <Loader2 className="animate-spin" size={24} />
+      </div>
+    );
+  }
+
+  const citationPage = item.anchor?.pageNo ?? 1;
+  const pages = Array.from({ length: pdfDoc.numPages }, (_, index) => index + 1);
+
+  return (
+    <div ref={pagesRootRef} className={`${styles.reveal} grid w-fit min-w-full justify-items-center gap-7 pb-8`}>
+      {pages.map((page) => (
+        <PdfContinuousPage
+          key={page}
+          pdfDoc={pdfDoc}
+          pageNo={page}
+          scale={scale}
+          basePageSize={basePageSize}
+          scrollRootRef={scrollRootRef}
+          segmentId={item.segmentId}
+          bboxRecords={(item.anchor?.bbox ?? []).filter((record) => (
+            record.pageNo ? record.pageNo === page : page === citationPage
+          ))}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PdfContinuousPage({
+  pdfDoc,
+  pageNo,
+  scale,
+  basePageSize,
+  scrollRootRef,
+  segmentId,
+  bboxRecords,
+}: {
+  pdfDoc: PdfDocumentProxy;
+  pageNo: number;
+  scale: number;
+  basePageSize: { widthPt: number; heightPt: number };
+  scrollRootRef: RefObject<HTMLDivElement | null>;
+  segmentId: string;
+  bboxRecords: PreviewBBoxRecord[];
+}) {
+  const containerRef = useRef<HTMLElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [shouldRender, setShouldRender] = useState(false);
+  const [pageSize, setPageSize] = useState<(PdfPageSize & { renderScale: number }) | null>(null);
+  const [isRendering, setIsRendering] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [animatedBBoxSegment, setAnimatedBBoxSegment] = useState<string | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setShouldRender(entry.isIntersecting),
+      { root: scrollRootRef.current, rootMargin: "900px 0px" },
+    );
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [scrollRootRef]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!shouldRender) {
+      if (canvas) {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      return;
+    }
+    if (!canvas) return;
 
     let cancelled = false;
     let renderTask: PdfRenderTask | null = null;
+    setHasError(false);
     setIsRendering(true);
 
     pdfDoc.getPage(pageNo)
       .then((page) => {
-        if (cancelled) {
-          return null;
-        }
-        const renderTarget = renderPdfPage(page, canvasRef.current, scale);
+        if (cancelled) return null;
+        const renderTarget = renderPdfPage(page, canvas, scale);
         renderTask = renderTarget.renderTask;
         return renderTarget.promise;
       })
       .then((size) => {
-        if (!cancelled && size) {
-          setPageSize(size);
-          onPageSizeChange(size);
-        }
+        if (!cancelled && size) setPageSize({ ...size, renderScale: scale });
       })
       .catch((nextError: unknown) => {
-        if (!cancelled && !isPdfRenderingCancelled(nextError)) {
-          setError(nextError instanceof Error ? nextError.message : "PDF 渲染失败");
-        }
+        if (!cancelled && !isPdfRenderingCancelled(nextError)) setHasError(true);
       })
       .finally(() => {
-        if (!cancelled) {
-          setIsRendering(false);
-        }
+        if (!cancelled) setIsRendering(false);
       });
 
     return () => {
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [onPageSizeChange, pageNo, pdfDoc, scale]);
+  }, [pageNo, pdfDoc, scale, shouldRender]);
 
-  if (error) {
-    return <ErrorBlock message={error} />;
-  }
+  const placeholderWidth = Math.max(1, Math.floor(basePageSize.widthPt * scale));
+  const placeholderHeight = Math.max(1, Math.floor(basePageSize.heightPt * scale));
+  const shouldAnimateBBox = animatedBBoxSegment !== segmentId;
+  const isPageReady = Boolean(
+    shouldRender
+    && !isRendering
+    && pageSize
+    && Math.abs(pageSize.renderScale - scale) < 0.001,
+  );
+
+  useEffect(() => {
+    if (!isPageReady || !bboxRecords.length || !shouldAnimateBBox) return;
+    const timeout = window.setTimeout(() => {
+      setAnimatedBBoxSegment(segmentId);
+    }, 1150);
+    return () => window.clearTimeout(timeout);
+  }, [bboxRecords.length, isPageReady, segmentId, shouldAnimateBBox]);
 
   return (
-    <div className={`${styles.reveal} mx-auto w-fit`}>
-      <div className="relative overflow-hidden rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.18)]">
-        <canvas ref={canvasRef} className="block bg-white" />
-        {pageSize ? (
-          <BBoxOverlay
-            key={`${item.segmentId}:${pageNo}`}
-            records={item.anchor?.bbox ?? []}
-            pageNo={pageNo}
-            pageWidthPt={pageSize.widthPt}
-            pageHeightPt={pageSize.heightPt}
-            renderedWidth={pageSize.width}
-            renderedHeight={pageSize.height}
-          />
-        ) : null}
-        {isRendering ? (
-          <div className="absolute inset-0 grid place-items-center bg-white/55 text-slate-500">
-            <Loader2 className="animate-spin" size={24} />
-          </div>
-        ) : null}
-      </div>
-    </div>
+    <section
+      ref={containerRef}
+      data-pdf-page={pageNo}
+      aria-label={`PDF 第 ${pageNo} 页`}
+      className="relative scroll-mt-6 overflow-hidden rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.16)]"
+      style={{
+        width: pageSize ? pageSize.widthPt * scale : placeholderWidth,
+        minHeight: pageSize ? pageSize.heightPt * scale : placeholderHeight,
+      }}
+    >
+      <canvas ref={canvasRef} className={shouldRender && !hasError ? "block bg-white" : "hidden"} />
+      {isPageReady && pageSize && bboxRecords.length ? (
+        <BBoxOverlay
+          key={`${segmentId}:${pageNo}`}
+          records={bboxRecords}
+          pageNo={pageNo}
+          pageWidthPt={pageSize.widthPt}
+          pageHeightPt={pageSize.heightPt}
+          renderedWidth={pageSize.width}
+          renderedHeight={pageSize.height}
+          animateLock={shouldAnimateBBox}
+        />
+      ) : null}
+      {!shouldRender || isRendering ? (
+        <div className="absolute inset-0 grid place-items-center bg-white/70 text-slate-400" aria-hidden="true">
+          {shouldRender ? <Loader2 className="animate-spin" size={22} /> : <span className="text-[10px] font-black">PAGE {pageNo}</span>}
+        </div>
+      ) : null}
+      {hasError ? (
+        <div className="absolute inset-0 grid place-items-center bg-white text-xs font-bold text-red-600">第 {pageNo} 页渲染失败</div>
+      ) : null}
+    </section>
   );
 }
 
@@ -1296,6 +1575,7 @@ function BBoxOverlay({
   pageHeightPt,
   renderedWidth,
   renderedHeight,
+  animateLock = true,
 }: {
   records: PreviewBBoxRecord[];
   pageNo: number;
@@ -1303,6 +1583,7 @@ function BBoxOverlay({
   pageHeightPt: number;
   renderedWidth: number;
   renderedHeight: number;
+  animateLock?: boolean;
 }) {
   const scaleX = renderedWidth / pageWidthPt;
   const scaleY = renderedHeight / pageHeightPt;
@@ -1315,7 +1596,8 @@ function BBoxOverlay({
       {rects.map((rect, index) => (
         <div
           key={index}
-          className={`${styles.bboxLock} absolute rounded-[8px] border-2 border-blue-500 bg-blue-500/10`}
+          data-citation-bbox={index === 0 ? "" : undefined}
+          className={`${animateLock ? styles.bboxLock : styles.bboxStable} absolute rounded-[8px] border-2 border-blue-500 bg-blue-500/10`}
           style={{
             left: rect.left,
             top: rect.top,
