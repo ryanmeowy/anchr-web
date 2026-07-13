@@ -157,9 +157,7 @@ export function buildPreviewRequest({
     ?? sourceContext?.citations?.find((item) => item.citationIndex === normalizedCitationIndex);
   const chunk = citation?.chunks.find((item) => item.segmentId === segmentId) ?? citation?.chunks[0];
   const why = chunk?.why;
-  const hasWhy = why?.score != null
-    || Boolean(why?.hitSources?.length)
-    || Boolean(why?.matchSummary);
+  const reason = why?.reason ?? why?.matchSummary ?? citation?.reason;
   const sourceType = sourceContext?.sourceType
     ?? (source === "search" ? "SEARCH" : source === "ask" ? "ASK" : undefined);
 
@@ -172,16 +170,8 @@ export function buildPreviewRequest({
     citationInfo: {
       segmentId,
       citationIndex: String(citation?.citationIndex ?? normalizedCitationIndex),
-      ...(citation?.reason ? { reason: citation.reason } : {}),
-      ...(hasWhy
-        ? {
-            why: {
-              ...(why?.score != null ? { score: String(why.score) } : {}),
-              ...(why?.hitSources?.length ? { hitSources: why.hitSources } : {}),
-              ...(why?.matchSummary ? { matchSummary: why.matchSummary } : {}),
-            },
-          }
-        : {}),
+      ...(reason ? { reason } : {}),
+      ...(citation?.chunks?.length ? { chunks: citation.chunks } : {}),
     },
   };
 }
@@ -196,9 +186,18 @@ export function saveRecentCitationPreviewNavigation(item: RecentCitation, index:
   const sourceType = normalizedSourceType === "ASK" || normalizedSourceType === "SEARCH"
     ? normalizedSourceType
     : undefined;
+  const chunks = item.chunks?.length
+    ? item.chunks
+    : [{
+        segmentId: item.segmentId,
+        snippet: item.snippet ?? undefined,
+        pageNo: item.anchor?.pageNo,
+        chunkOrder: item.anchor?.chunkOrder,
+        anchor: item.anchor ?? undefined,
+      }];
   const contextKey = savePreviewNavigation({
     source: "library",
-    navigationMode: "NONE",
+    navigationMode: chunks.length > 1 ? "CITATION" : "NONE",
     recordId: item.recordId,
     sourceType,
     sourceId: item.sourceId ?? undefined,
@@ -210,10 +209,7 @@ export function saveRecentCitationPreviewNavigation(item: RecentCitation, index:
       kbId: item.kbId ?? undefined,
       fileName: item.fileName ?? undefined,
       reason: item.citationReason ?? undefined,
-      chunks: [{
-        segmentId: item.segmentId,
-        snippet: item.snippet ?? undefined,
-      }],
+      chunks,
     }],
   });
   const params = new URLSearchParams({

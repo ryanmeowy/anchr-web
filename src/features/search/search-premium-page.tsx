@@ -2313,6 +2313,7 @@ function searchResultToCitation(item: SearchResult): PreviewCitation {
   const chunks = item.topChunks?.length
     ? item.topChunks.map((chunk) => ({
         segmentId: chunk.segmentId,
+        title: chunk.title,
         pageNo: chunk.pageNo ?? chunk.anchor?.pageNo ?? undefined,
         chunkOrder: chunk.chunkOrder ?? chunk.anchor?.chunkOrder ?? undefined,
         content: chunk.content,
@@ -2329,6 +2330,7 @@ function searchResultToCitation(item: SearchResult): PreviewCitation {
       }))
     : [{
         segmentId: item.segmentId ?? "",
+        title: item.title,
         pageNo: item.pageNo ?? item.anchor?.pageNo ?? undefined,
         chunkOrder: item.anchor?.chunkOrder ?? undefined,
         content: item.content,

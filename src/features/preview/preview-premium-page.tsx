@@ -63,21 +63,25 @@ function mergePreviewChunk(item: PreviewSegment | undefined, chunk: CitationChun
   }
   const pageNo = chunk.pageNo ?? chunk.anchor?.pageNo ?? undefined;
   const chunkOrder = chunk.chunkOrder ?? chunk.anchor?.chunkOrder ?? undefined;
+  const isInitiallyLoadedSegment = chunk.segmentId === item.segmentId;
+  const citationReason = chunk.why?.reason ?? chunk.why?.matchSummary;
   return {
     ...item,
     segmentId: chunk.segmentId,
+    title: chunk.title ?? (isInitiallyLoadedSegment ? item.title : undefined),
     content: chunk.content ?? chunk.snippet ?? "",
     anchor: {
       ...item.anchor,
-      ...(pageNo != null ? { pageNo } : {}),
-      ...(chunkOrder != null ? { chunkOrder } : {}),
+      pageNo,
+      chunkOrder,
       bbox: chunk.anchor?.bbox ?? [],
       ...(chunk.anchor?.imageWidth != null ? { imageWidth: chunk.anchor.imageWidth } : {}),
       ...(chunk.anchor?.imageHeight != null ? { imageHeight: chunk.anchor.imageHeight } : {}),
     },
     citationContext: {
       ...item.citationContext,
-      ...(chunk.why?.matchSummary ? { citationReason: chunk.why.matchSummary } : {}),
+      citationReason: citationReason
+        ?? (isInitiallyLoadedSegment ? item.citationContext?.citationReason : undefined),
     },
   } satisfies PreviewSegment;
 }
@@ -353,6 +357,7 @@ function PreviewContent({
   assetDetails?: AssetPreview;
 }) {
   const previewType = getPreviewType(item);
+  const visibleCitationIndex = from === "library" ? undefined : citationIndex;
   const previewShellRef = useRef<HTMLDivElement | null>(null);
   const previewScrollerRef = useRef<HTMLDivElement | null>(null);
   const [pdfPage, setPdfPage] = useState(item.anchor?.pageNo ?? 1);
@@ -635,7 +640,7 @@ function PreviewContent({
               item={item}
               pageNo={pdfPage}
               scale={pdfScale}
-              citationIndex={citationIndex}
+              citationIndex={visibleCitationIndex}
               onPageCountChange={setPdfPageCount}
               onPageSizeChange={setPdfPageSize}
               onDocumentChange={setPdfDoc}
@@ -643,12 +648,12 @@ function PreviewContent({
           ) : previewType === "IMAGE" && item.previewUrl ? (
             <ImagePreview
               item={item}
-              citationIndex={citationIndex}
+              citationIndex={visibleCitationIndex}
             />
           ) : assetDetails && item.previewUrl ? (
             <AssetTextPreview item={item} />
           ) : (
-            <TextPreview item={item} citationIndex={citationIndex} />
+            <TextPreview item={item} citationIndex={visibleCitationIndex} />
           )}
         </div>
       </section>
@@ -775,7 +780,7 @@ function CitationSidebar({
     >
       <div className="grid min-w-0 content-start gap-3.5 max-[1240px]:grid-cols-2 max-[860px]:grid-cols-1">
       <SidePanel>
-        <PanelLabel label="WHY THIS CITATION" value={`#${citationIndex}`} />
+        <PanelLabel label="WHY THIS CITATION" value={from === "library" ? undefined : `#${citationIndex}`} />
         <div className="mt-3.5 min-w-0 rounded-[8px] border border-amber-500/35 bg-amber-400/10 p-3.5 text-[13px] leading-[1.7] text-[var(--premium-ink-soft)] [overflow-wrap:anywhere]">
           <b className="text-[var(--premium-ink)] [overflow-wrap:anywhere]">
             {reason}
@@ -799,12 +804,13 @@ function CitationSidebar({
           <InfoRow label="知识库" value={item.kbName ?? item.kbId ?? "-"} />
           <InfoRow label="页码" value={item.anchor?.pageNo ? `第 ${item.anchor.pageNo} 页` : "-"} />
           <InfoRow label="章节" value={item.title ?? "-"} />
-          <InfoRow label="引用位置" value={formatCitationPosition(citationIndex, item)} />
-          <AssetCitationIndexRow
-            citations={context?.citations ?? []}
-            currentCitationIndex={citationIndex}
-            onSelect={onAssetCitationSelect}
-          />
+          {from !== "library" ? (
+            <AssetCitationIndexRow
+              citations={context?.citations ?? []}
+              currentCitationIndex={citationIndex}
+              onSelect={onAssetCitationSelect}
+            />
+          ) : null}
         </div>
       </SidePanel>
 
@@ -987,7 +993,7 @@ function PdfPreview({
   item: PreviewSegment;
   pageNo: number;
   scale: number;
-  citationIndex: number;
+  citationIndex?: number;
   onPageCountChange: (count: number) => void;
   onPageSizeChange: (size: PdfPageSize | null) => void;
   onDocumentChange: (doc: PdfDocumentProxy | null) => void;
@@ -1243,7 +1249,7 @@ function ImagePreview({
   citationIndex,
 }: {
   item: PreviewSegment;
-  citationIndex: number;
+  citationIndex?: number;
 }) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [imageSize, setImageSize] = useState<{
@@ -1310,7 +1316,7 @@ function BBoxOverlay({
   pageHeightPt: number;
   renderedWidth: number;
   renderedHeight: number;
-  citationIndex: number;
+  citationIndex?: number;
 }) {
   const scaleX = renderedWidth / pageWidthPt;
   const scaleY = renderedHeight / pageHeightPt;
@@ -1331,7 +1337,7 @@ function BBoxOverlay({
             height: rect.height,
           }}
         >
-          {index === 0 ? (
+          {index === 0 && citationIndex != null ? (
             <span className="absolute -right-4 -top-4 grid size-[34px] place-items-center rounded-[8px] bg-amber-400 text-sm font-black text-[#1c1400] shadow-[0_14px_32px_rgba(123,76,0,0.28)]">
               {citationIndex}
             </span>
@@ -1342,7 +1348,7 @@ function BBoxOverlay({
   );
 }
 
-function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIndex: number }) {
+function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIndex?: number }) {
   const content = item.content || item.ocrSummary || item.title || "当前片段暂无可展示文本。";
 
   return (
@@ -1360,9 +1366,11 @@ function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIn
           data-preview-segment-id={item.segmentId}
           className={`${styles.highlight} relative rounded-[8px] border-2 border-amber-400 bg-amber-300/10 p-[18px] text-[#101214]`}
         >
-          <span className="absolute -right-4 -top-4 grid size-[34px] place-items-center rounded-[8px] bg-amber-400 font-black text-[#1c1400]">
-            {citationIndex}
-          </span>
+          {citationIndex != null ? (
+            <span className="absolute -right-4 -top-4 grid size-[34px] place-items-center rounded-[8px] bg-amber-400 font-black text-[#1c1400]">
+              {citationIndex}
+            </span>
+          ) : null}
           {renderEmText(content)}
         </div>
       </div>
@@ -1528,11 +1536,6 @@ function renderEmText(text: string) {
 
 function stripEmTags(text: string) {
   return text.replace(/<\/?em\b[^>]*>/gi, "");
-}
-
-function formatCitationPosition(citationIndex: number, item?: PreviewSegment) {
-  const title = item?.title ? `（${item.title}）` : "";
-  return `段落 ${citationIndex}${title}`;
 }
 
 function formatPreviewExpiry(expiresAt?: number | null) {

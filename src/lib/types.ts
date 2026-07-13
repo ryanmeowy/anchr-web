@@ -177,6 +177,8 @@ export type RecentCitation = {
   sessionId?: string | null;
   citationIndex?: string | null;
   question?: string | null;
+  anchor?: PreviewAnchor | null;
+  chunks?: CitationChunk[] | null;
 };
 
 export type RecentSearch = {
@@ -319,6 +321,7 @@ export type SearchResult = {
   assetId?: string;
   sourceRef?: string;
   segmentType?: string;
+  title?: string;
   assetType: SearchAssetType;
   content?: string;
   snippet?: string;
@@ -362,6 +365,7 @@ export type SearchResult = {
   totalHits?: number;
   topChunks?: Array<{
     segmentId: string;
+    title?: string;
     content?: string;
     snippet?: string;
     pageNo?: number | null;
@@ -380,6 +384,7 @@ export type PreviewAnchor = {
 
 export type CitationChunk = {
   segmentId: string;
+  title?: string;
   pageNo?: number | null;
   chunkOrder?: number | null;
   content?: string;
@@ -396,6 +401,7 @@ export type CitationChunk = {
       ocr?: boolean;
     } | null;
     matchSummary?: string | null;
+    reason?: string | null;
   } | null;
 };
 
@@ -468,11 +474,7 @@ export type PreviewCitationInfo = {
   segmentId?: string;
   citationIndex?: string;
   reason?: string;
-  why?: {
-    score?: string;
-    hitSources?: string[];
-    matchSummary?: string;
-  };
+  chunks?: CitationChunk[];
 };
 
 export type PreviewRequest = {
