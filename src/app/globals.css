@@ -45,6 +45,55 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.premium-theme-glyph,
+.premium-theme-sun,
+.premium-theme-beams,
+.premium-theme-moon-cutout {
+  transform-origin: center;
+}
+
+.premium-theme-sun {
+  transition: transform 500ms cubic-bezier(0.5, 1.25, 0.75, 1.25);
+}
+
+.premium-theme-beams {
+  stroke-linecap: round;
+  stroke-width: 2px;
+  transition:
+    transform 500ms cubic-bezier(0.5, 1.5, 0.75, 1.25),
+    opacity 500ms cubic-bezier(0.25, 0, 0.3, 1);
+}
+
+.premium-theme-moon-cutout {
+  transition: cx 250ms cubic-bezier(0, 0, 0, 1);
+}
+
+button[data-theme="dark"] .premium-theme-sun {
+  transform: scale(1.75);
+  transition-duration: 250ms;
+  transition-timing-function: cubic-bezier(0.25, 0, 0.3, 1);
+}
+
+button[data-theme="dark"] .premium-theme-beams {
+  opacity: 0;
+  transform: rotate(-25deg) scale(0.7);
+  transition-duration: 150ms;
+}
+
+button[data-theme="dark"] .premium-theme-moon-cutout {
+  cx: 17;
+  transition-delay: 250ms;
+  transition-duration: 500ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-theme-sun,
+  .premium-theme-beams,
+  .premium-theme-moon-cutout {
+    transition: none;
+  }
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -79,7 +128,8 @@ a {
   color: var(--premium-ink);
 }
 
-.premium-theme[data-premium-theme="dark"] {
+.premium-theme[data-premium-theme="dark"],
+.dark .premium-theme {
   --premium-bg: #070908;
   --premium-bg-grid: rgba(244, 247, 236, 0.055);
   --premium-ink: #f4f7ec;
@@ -583,40 +633,50 @@ a {
   animation: askPremiumSpin 760ms linear infinite;
 }
 
-.ask-premium-page[data-premium-theme="dark"] {
+.ask-premium-page[data-premium-theme="dark"],
+.dark .ask-premium-page {
   background: var(--premium-bg);
   color: var(--premium-ink);
 }
 
-.ask-premium-page[data-premium-theme="dark"] .ask-premium-grid-bg {
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-grid-bg,
+.dark .ask-premium-page .ask-premium-grid-bg {
   background-image:
     linear-gradient(var(--premium-bg-grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--premium-bg-grid) 1px, transparent 1px);
 }
 
-.ask-premium-page[data-premium-theme="dark"] .ask-premium-glow-bg {
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-glow-bg,
+.dark .ask-premium-page .ask-premium-glow-bg {
   background:
     radial-gradient(circle at 80% 8%, var(--premium-glow-primary), transparent 28rem),
     radial-gradient(circle at 15% 88%, var(--premium-glow-secondary), transparent 30rem),
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.035), transparent 34rem);
 }
 
-.ask-premium-page[data-premium-theme="dark"] .ask-premium-shell {
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-shell,
+.dark .ask-premium-page .ask-premium-shell {
   border-color: var(--premium-line);
   background: rgba(10, 12, 11, 0.76);
   box-shadow: var(--premium-shadow);
 }
 
-.ask-premium-page[data-premium-theme="dark"] .ask-premium-history {
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-history,
+.dark .ask-premium-page .ask-premium-history {
   border-color: var(--premium-line);
   background: rgba(15, 17, 16, 0.78);
 }
 
-.ask-premium-page[data-premium-theme="dark"] .ask-premium-main {
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-main,
+.dark .ask-premium-page .ask-premium-main {
   background:
     linear-gradient(90deg, rgba(13, 15, 14, 0.92), rgba(13, 15, 14, 0.64)),
     radial-gradient(circle at 84% 4%, var(--premium-glow-primary), transparent 27rem),
     radial-gradient(circle at 10% 86%, var(--premium-glow-secondary), transparent 30rem);
+}
+
+.dark .premium-configuration-state-page {
+  background: #070908;
 }
 
 .imports-premium-page .imports-panel {
@@ -1234,17 +1294,171 @@ a {
   scrollbar-width: thin;
 }
 
-.library-health-panel {
+.library-activity-panel {
+  position: relative;
+  isolation: isolate;
   background:
-    radial-gradient(circle at 105% -5%, rgba(187, 255, 102, 0.12), transparent 15rem),
-    linear-gradient(145deg, #111613, #090c0a 72%);
+    linear-gradient(145deg, rgba(187, 255, 102, 0.055), transparent 42%),
+    #0b0f0d;
+  box-shadow:
+    0 22px 54px rgba(6, 9, 7, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
-.library-health-orbit {
-  animation: libraryHealthOrbit 12s linear infinite;
+.library-activity-panel[data-activity-kind="questions"] {
+  background:
+    linear-gradient(145deg, rgba(49, 88, 255, 0.08), transparent 42%),
+    #0b0f0d;
+}
+
+.library-activity-scroll {
+  mask-image: linear-gradient(to bottom, black 0, black calc(100% - 16px), transparent 100%);
+}
+
+.library-activity-item {
+  color: white;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.025);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.library-activity-item:hover {
+  border-color: rgba(187, 255, 102, 0.36);
+  background-color: rgba(187, 255, 102, 0.055);
   box-shadow:
-    0 0 0 28px rgba(255, 255, 255, 0.018),
-    0 0 0 56px rgba(255, 255, 255, 0.012);
+    inset 3px 0 0 var(--premium-accent),
+    0 12px 28px rgba(0, 0, 0, 0.16);
+}
+
+.library-activity-panel[data-activity-kind="questions"] .library-activity-item:hover {
+  border-color: rgba(49, 88, 255, 0.48);
+  background-color: rgba(49, 88, 255, 0.08);
+  box-shadow:
+    inset 3px 0 0 var(--premium-blue),
+    0 12px 28px rgba(0, 0, 0, 0.16);
+}
+
+.library-activity-index,
+.library-activity-header-icon,
+.library-activity-count,
+.library-activity-tag {
+  color: var(--premium-accent);
+  background: rgba(187, 255, 102, 0.12);
+}
+
+.library-activity-count {
+  border: 1px solid rgba(187, 255, 102, 0.24);
+  box-shadow: 0 0 24px rgba(187, 255, 102, 0.09);
+}
+
+.library-activity-panel[data-activity-kind="questions"] .library-activity-index,
+.library-activity-panel[data-activity-kind="questions"] .library-activity-header-icon,
+.library-activity-panel[data-activity-kind="questions"] .library-activity-count {
+  color: #aebcff;
+  background: rgba(49, 88, 255, 0.18);
+}
+
+.library-activity-panel[data-activity-kind="questions"] .library-activity-count {
+  border-color: rgba(49, 88, 255, 0.34);
+  box-shadow: 0 0 24px rgba(49, 88, 255, 0.12);
+}
+
+.library-activity-item:hover .library-activity-arrow {
+  color: #111315;
+  background: var(--premium-accent);
+}
+
+.library-citation-item {
+  min-height: 88px;
+  grid-template-columns: 36px minmax(0, 1fr) 28px;
+  gap: 12px;
+  padding: 11px 12px;
+}
+
+.library-citation-index {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(187, 255, 102, 0.18);
+  align-self: center;
+}
+
+.library-citation-content {
+  gap: 5px;
+}
+
+.library-citation-meta {
+  min-height: 18px;
+}
+
+.library-citation-type {
+  min-height: 20px;
+  gap: 4px;
+  padding: 0 8px 0 6px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.library-citation-time {
+  gap: 5px;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.library-citation-title {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.library-citation-context {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.library-citation-context-part {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.library-citation-context-part > svg {
+  flex: 0 0 auto;
+  color: rgba(187, 255, 102, 0.72);
+}
+
+.library-citation-context-part > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-citation-context-part.is-question {
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  padding-left: 8px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.library-citation-arrow {
+  width: 28px;
+  height: 28px;
+  align-self: center;
+}
+
+.library-activity-panel[data-activity-kind="questions"] .library-activity-item:hover .library-activity-arrow {
+  color: white;
+  background: var(--premium-blue);
+}
+
+.library-health-panel {
+  background: linear-gradient(145deg, #111613, #090c0a 72%);
 }
 
 .library-health-snapshot {
@@ -1316,12 +1530,6 @@ a {
   }
 }
 
-@keyframes libraryHealthOrbit {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @keyframes libraryHealthSnapshotIn {
   from {
     opacity: 0.45;
@@ -1338,7 +1546,6 @@ a {
   .library-document-command,
   .library-document-card,
   .library-document-orbit,
-  .library-health-orbit,
   .library-health-snapshot {
     animation: none;
   }
@@ -1348,7 +1555,8 @@ a {
   .library-document-command button,
   .library-kb-card,
   .library-kb-card *,
-  .library-health-panel * {
+  .library-health-panel *,
+  .library-activity-panel * {
     scroll-behavior: auto;
     transition-duration: 0.01ms !important;
   }

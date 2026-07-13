@@ -2,22 +2,28 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Activity,
   AlertTriangle,
   Archive,
   ArrowLeft,
   ArrowRight,
+  ArrowUpRight,
   Check,
   CheckCircle2,
   Clock3,
+  Database,
   ChevronLeft,
   ChevronRight,
   Edit3,
   Eye,
+  FileText,
   Grid3X3,
   History,
   List,
   Loader2,
+  MessageCircle,
   Plus,
+  Quote,
   Search,
   SlidersHorizontal,
   Trash2,
@@ -1929,10 +1935,14 @@ function RecentCitationPanel({
   };
 
   return (
-    <section className="flex h-[320px] min-h-0 flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近引用">
-      <PanelLabel label="RECENT CITATIONS" value={String(items.length)} dark />
+    <section className="library-activity-panel flex h-[320px] min-h-0 flex-col overflow-hidden rounded-[8px] border border-white/10 px-4 pb-4 pt-3 text-white" data-activity-kind="citations" aria-label="最近引用">
+      <ActivityPanelHeader
+        label="RECENT CITATIONS"
+        count={items.length}
+        icon={<Quote size={15} strokeWidth={2.4} />}
+      />
       <div
-        className="mt-2.5 grid min-h-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
+        className="library-activity-scroll relative z-10 mt-3 grid min-h-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
         onScroll={handleScroll}
         onWheel={handleWheel}
       >
@@ -1953,21 +1963,39 @@ function CitationItem({ item, index }: { item: RecentCitation; index: number }) 
     <button
       type="button"
       onClick={() => router.push(saveRecentCitationPreviewNavigation(item, index))}
-      className="grid w-full gap-1.5 rounded-[8px] border border-white/10 bg-white/10 p-2.5 text-left transition hover:-translate-x-0.5 hover:bg-white/[0.14]"
+      className="library-activity-item library-citation-item group grid w-full items-center rounded-[8px] border border-white/10 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-accent)]"
     >
-      <div className="flex flex-wrap gap-1">
-        <span className="rounded-full bg-[rgba(187,255,102,0.16)] px-2 py-0.5 text-[10px] font-black text-[var(--premium-accent)]">{fileExtension(item.fileName)}</span>
-        <span className="rounded-full bg-[rgba(187,255,102,0.16)] px-2 py-0.5 text-[10px] font-black text-[var(--premium-accent)]">#{index + 1}</span>
-      </div>
-      <strong className="line-clamp-1 break-words text-xs">{item.fileName || "未命名文件"}</strong>
-      <div className="flex min-w-0 items-center gap-2 text-[11px] leading-4">
-        <span className="max-w-[42%] shrink-0 truncate text-white/70">{item.kbName || "未知知识库"}</span>
-        <span aria-hidden="true" className="shrink-0 text-white/35">|</span>
-        <p className="min-w-0 flex-1 truncate text-white/85">{item.question || "未记录问题"}</p>
-      </div>
-      <time className="text-[10px] leading-4 text-white/55" dateTime={item.openedAt}>
-        {formatDateTime(item.openedAt)}
-      </time>
+      <span className="library-activity-index library-citation-index grid place-items-center rounded-[8px] text-[11px] font-black" aria-hidden="true">
+        {String(index + 1).padStart(2, "0")}
+      </span>
+      <span className="library-citation-content grid min-w-0">
+        <span className="library-citation-meta flex min-w-0 items-center justify-between gap-3">
+          <span className="library-activity-tag library-citation-type inline-flex items-center rounded-full font-black">
+            <FileText size={11} strokeWidth={2.2} aria-hidden="true" />
+            {fileExtension(item.fileName)}
+          </span>
+          <time className="library-citation-time inline-flex shrink-0 items-center text-white/50" dateTime={item.openedAt}>
+            <Clock3 size={11} strokeWidth={2} aria-hidden="true" />
+            {formatDateTime(item.openedAt)}
+          </time>
+        </span>
+        <strong className="library-citation-title truncate" title={item.fileName || "未命名文件"}>
+          {item.fileName || "未命名文件"}
+        </strong>
+        <span className="library-citation-context min-w-0 text-white/55">
+          <span className="library-citation-context-part" title={item.kbName || "未知知识库"}>
+            <Database size={11} strokeWidth={2} aria-hidden="true" />
+            <span>{item.kbName || "未知知识库"}</span>
+          </span>
+          <span className="library-citation-context-part is-question" title={item.question || "未记录问题"}>
+            <MessageCircle size={11} strokeWidth={2} aria-hidden="true" />
+            <span>{item.question || "未记录问题"}</span>
+          </span>
+        </span>
+      </span>
+      <span className="library-activity-arrow library-citation-arrow grid place-items-center rounded-full border border-white/10 text-white/55" aria-hidden="true">
+        <ArrowUpRight size={14} />
+      </span>
     </button>
   );
 }
@@ -2000,35 +2028,73 @@ function RecentQuestionPanel({
   };
 
   return (
-    <section className="flex h-[320px] min-h-0 flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="最近问过">
-      <PanelLabel label="RECENT QUESTIONS" value={String(items.length)} dark />
+    <section className="library-activity-panel flex h-[320px] min-h-0 flex-col overflow-hidden rounded-[8px] border border-white/10 px-4 pb-4 pt-3 text-white" data-activity-kind="questions" aria-label="最近问过">
+      <ActivityPanelHeader
+        label="RECENT QUESTIONS"
+        count={items.length}
+        icon={<MessageCircle size={15} strokeWidth={2.4} />}
+      />
       <div
-        className="mt-2.5 grid min-h-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
+        className="library-activity-scroll relative z-10 mt-3 grid min-h-0 flex-1 content-start gap-2 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,0.22)_transparent] [scrollbar-width:thin]"
         onScroll={handleScroll}
         onWheel={handleWheel}
       >
         {isLoading ? <DarkState label="加载最近提问" /> : null}
         {isError ? <DarkState label="最近提问暂不可用" /> : null}
         {!isLoading && !isError && items.length === 0 ? <DarkState label="暂无最近提问" /> : null}
-        {items.map((item, index) => <QuestionItem key={`${item.turnId}-${index}`} item={item} />)}
+        {items.map((item, index) => <QuestionItem key={`${item.turnId}-${index}`} item={item} index={index} />)}
         {isFetchingNextPage ? <DarkState label="加载更多" /> : null}
       </div>
     </section>
   );
 }
 
-function QuestionItem({ item }: { item: RecentQuestion }) {
+function QuestionItem({ item, index }: { item: RecentQuestion; index: number }) {
   const params = new URLSearchParams();
   if (item.sessionId) params.set("session", item.sessionId);
   if (item.turnId) params.set("turn", item.turnId);
   const query = params.toString();
   const href = query ? `/ask?${query}` : "/ask";
+  const knowledgeBases = (item.knowledgeBaseNames ?? item.kbScope ?? []).slice(0, 2).join(" / ") || "全部知识库";
 
   return (
-    <Link href={href} className="grid min-h-16 content-center gap-1.5 rounded-[8px] border border-white/10 bg-white/10 p-2.5 transition hover:-translate-x-0.5 hover:bg-white/[0.14]">
-      <strong className="line-clamp-2 break-words text-xs leading-5">{item.question || "未命名问题"}</strong>
-      <p className="line-clamp-1 text-[11px] leading-4 text-white/70">{(item.knowledgeBaseNames ?? item.kbScope ?? []).slice(0, 2).join(" / ") || "全部知识库"}</p>
+    <Link
+      href={href}
+      className="library-activity-item group grid min-h-16 grid-cols-[28px_minmax(0,1fr)_20px] items-center gap-2 rounded-[8px] border border-white/10 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]"
+    >
+      <span className="library-activity-index grid size-7 place-items-center rounded-full text-[10px] font-black" aria-hidden="true">
+        {String(index + 1).padStart(2, "0")}
+      </span>
+      <span className="grid min-w-0 gap-1">
+        <strong className="line-clamp-2 break-words text-xs leading-4">{item.question || "未命名问题"}</strong>
+        <span className="line-clamp-1 text-[10px] leading-4 text-white/55">{knowledgeBases}</span>
+      </span>
+      <span className="library-activity-arrow grid size-5 place-items-center rounded-full border border-white/10 text-white/55" aria-hidden="true">
+        <ArrowUpRight size={12} />
+      </span>
     </Link>
+  );
+}
+
+function ActivityPanelHeader({
+  label,
+  count,
+  icon,
+}: {
+  label: string;
+  count: number;
+  icon: ReactNode;
+}) {
+  return (
+    <header className="relative z-10 flex min-w-0 items-center justify-between gap-3 border-b border-white/10 pb-3">
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="library-activity-header-icon grid size-6 shrink-0 place-items-center rounded-full" aria-hidden="true">{icon}</span>
+        <h2 className="truncate text-xs font-black leading-none">{label}</h2>
+      </span>
+      <span className="library-activity-count grid size-9 shrink-0 place-items-center rounded-full text-xs font-black" aria-label={`${count} 条`}>
+        {String(count).padStart(2, "0")}
+      </span>
+    </header>
   );
 }
 
@@ -2051,22 +2117,19 @@ function HealthPanel({
     : 0;
 
   return (
-    <section className="library-health-panel relative isolate min-h-[184px] overflow-hidden rounded-[8px] border border-white/10 text-[#f4f7ec] shadow-[0_28px_70px_rgba(17,19,21,0.24)]" aria-live="polite" aria-label="知识库健康度">
-      <span className="library-health-orbit pointer-events-none absolute -right-[70px] -top-[76px] size-[210px] rounded-full border border-[rgba(187,255,102,0.26)]" aria-hidden="true" />
-      <div className="relative z-10 grid gap-3 p-3">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <p className="m-0 text-[11px] font-black text-white/55">KB OVERVIEW</p>
-          <span className="inline-flex items-center gap-2 text-[10px] font-black text-[var(--premium-accent)]">
-            <i className="size-[7px] rounded-full bg-current shadow-[0_0_0_5px_rgba(187,255,102,0.1)]" aria-hidden="true" />
-            LIVE
+    <section className="library-health-panel relative isolate min-h-[184px] overflow-hidden rounded-[8px] border border-white/10 text-[#f4f7ec] shadow-[0_28px_70px_rgba(17,19,21,0.24)]" aria-live="polite" aria-busy={isLoading} aria-label="知识库健康度">
+      <div className="relative z-10 grid gap-2.5 px-3 pb-3 pt-2.5">
+        <header className="flex min-w-0 items-center gap-2 border-b border-white/10 pb-2">
+          <span className="library-activity-header-icon grid size-6 shrink-0 place-items-center rounded-full" aria-hidden="true">
+            <Activity size={15} strokeWidth={2.4} />
           </span>
-        </div>
+          <h2 className="truncate text-xs font-black leading-none">KB OVERVIEW</h2>
+        </header>
 
         {!selectedKb ? <DarkState label="选择知识库查看健康度" /> : null}
-        {selectedKb && isLoading ? <DarkState label="加载健康状态" /> : null}
         {selectedKb && isError ? <DarkState label="健康状态暂不可用" /> : null}
         {selectedKb && !isLoading && !isError && health ? (
-          <div key={health.kbId} className="library-health-snapshot grid min-w-0 gap-3">
+          <div key={health.kbId} className="library-health-snapshot grid min-w-0 gap-2.5">
             <div className="flex min-w-0 items-end gap-3">
               <h2 className="min-w-0 truncate text-xl font-black leading-none" title={health.kbName || selectedKb.name}>
                 {health.kbName || selectedKb.name}
@@ -2079,7 +2142,7 @@ function HealthPanel({
               <HealthMetric value={formatNumber(segmentIndexed)} label="INDEXED" accent />
             </div>
 
-            <section className="grid gap-2 border-t border-white/10 pt-2.5" aria-label="Segment 索引完成率">
+            <section className="grid gap-2 border-t border-white/10 pt-2" aria-label="Segment 索引完成率">
               <div className="flex items-center justify-between gap-3 text-[11px] font-black">
                 <strong>SEGMENT INDEX COVERAGE</strong>
                 <span className="text-[9px] text-white/55">{coverage.toFixed(1)}%</span>
@@ -2092,7 +2155,7 @@ function HealthPanel({
               </div>
             </section>
 
-            <section className="grid gap-2 border-t border-white/10 pt-2.5" aria-label="文件类型占比">
+            <section className="grid gap-2 border-t border-white/10 pt-2" aria-label="文件类型占比">
               <div className="flex items-center justify-between gap-3 text-[11px] font-black">
                 <strong>FILE TYPE MIX</strong>
                 <span className="text-[9px] text-white/55">{sourceTypes.length} TYPES</span>
@@ -2171,17 +2234,6 @@ function HealthMetric({ value, label, accent = false }: { value: string; label: 
       </strong>
       <span className="text-[9px] font-black text-white/55">{label}</span>
     </article>
-  );
-}
-
-function PanelLabel({ label, value, dark = false }: { label: string; value: string; dark?: boolean }) {
-  return (
-    <p className={[
-      "m-0 flex items-center justify-between gap-3 text-xs font-black leading-5",
-      dark ? "text-white/60" : "text-[var(--premium-muted)]",
-    ].join(" ")}>
-      {label} <span className="truncate">{value}</span>
-    </p>
   );
 }
 
