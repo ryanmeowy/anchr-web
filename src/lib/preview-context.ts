@@ -1,30 +1,49 @@
 "use client";
 
-import type { ConversationCitation, PreviewRequest, RecentCitation, SearchAnswer } from "./types";
+import type { CitationChunk, ConversationCitation, PreviewRequest, RecentCitation, SearchAnswer } from "./types";
 
 const STORAGE_PREFIX = "anchr.preview.context.";
 const RESTORE_PREFIX = "anchr.preview.restore.";
 
 export type PreviewSource = "ask" | "search" | "library";
+export type PreviewNavigationMode = "CITATION" | "NONE";
 
 export type PreviewCitation = {
   citationIndex?: number;
-  segmentId?: string;
   assetId?: string;
   kbId?: string;
   fileName?: string;
-  pageNo?: number;
-  snippet?: string;
   reason?: string;
-  why?: {
-    score?: number | null;
-    hitSources?: string[];
-    matchSummary?: string | null;
-  } | null;
+  chunks: CitationChunk[];
 };
+
+export function buildChunkNavigation(citation: PreviewCitation | undefined, segmentId: string) {
+  const chunks = [...(citation?.chunks ?? [])].sort(compareChunkPosition);
+  const currentPosition = chunks.findIndex((chunk) => chunk.segmentId === segmentId);
+
+  return {
+    chunks,
+    currentPosition,
+    previous: currentPosition > 0 ? chunks[currentPosition - 1] : undefined,
+    next: currentPosition >= 0 && currentPosition < chunks.length - 1
+      ? chunks[currentPosition + 1]
+      : undefined,
+  };
+}
+
+function compareChunkPosition(left: CitationChunk, right: CitationChunk) {
+  return compareOptionalPosition(left.pageNo ?? left.anchor?.pageNo, right.pageNo ?? right.anchor?.pageNo)
+    || compareOptionalPosition(left.chunkOrder ?? left.anchor?.chunkOrder, right.chunkOrder ?? right.anchor?.chunkOrder)
+    || left.segmentId.localeCompare(right.segmentId);
+}
+
+function compareOptionalPosition(left?: number | null, right?: number | null) {
+  return (left ?? Number.MAX_SAFE_INTEGER) - (right ?? Number.MAX_SAFE_INTEGER);
+}
 
 export type PreviewNavigationPayload<TReturnState = unknown> = {
   source: PreviewSource;
+  navigationMode: PreviewNavigationMode;
   recordId?: string;
   sourceType?: PreviewRequest["sourceType"];
   sourceId?: string;
@@ -36,7 +55,7 @@ export type PreviewNavigationPayload<TReturnState = unknown> = {
 };
 
 export type PreviewNavigationContext<TReturnState = unknown> = PreviewNavigationPayload<TReturnState> & {
-  version: 1;
+  version: 3;
   createdAt: number;
 };
 
@@ -48,7 +67,7 @@ export function savePreviewNavigation<TReturnState>(payload: PreviewNavigationPa
   const key = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
   const context: PreviewNavigationContext<TReturnState> = {
     ...payload,
-    version: 1,
+    version: 3,
     createdAt: Date.now(),
   };
 
@@ -63,7 +82,8 @@ export function readPreviewNavigation<TReturnState = unknown>(key: string | null
     return null;
   }
 
-  return readJson<PreviewNavigationContext<TReturnState>>(`${STORAGE_PREFIX}${key}`);
+  const context = readJson<PreviewNavigationContext<TReturnState>>(`${STORAGE_PREFIX}${key}`);
+  return context?.version === 3 ? context : null;
 }
 
 export function readPreviewRestoreState<TReturnState = unknown>(source: PreviewSource) {
@@ -90,26 +110,21 @@ export function clearPreviewRestoreState(source: PreviewSource) {
 
 export function normalizeConversationCitations(citations: ConversationCitation[] | undefined) {
   return (citations ?? []).map((item, index) => ({
-    citationIndex: index + 1,
-    segmentId: item.segmentId,
+    citationIndex: item.citationIndex ?? index + 1,
     assetId: item.assetId,
+    kbId: item.kbId,
     fileName: item.fileName,
-    pageNo: item.pageNo,
-    snippet: item.snippet,
-    why: item.why,
+    chunks: item.chunks ?? [],
   }));
 }
 
 export function normalizeSearchCitations(citations: SearchAnswer["citations"] | undefined) {
   return (citations ?? []).map((item, index) => ({
     citationIndex: item.citationIndex ?? index + 1,
-    segmentId: item.segmentId,
     assetId: item.assetId,
     kbId: item.kbId,
     fileName: item.fileName,
-    pageNo: item.pageNo,
-    snippet: item.snippet,
-    why: item.why,
+    chunks: item.chunks ?? [],
   }));
 }
 
@@ -136,11 +151,12 @@ export function buildPreviewRequest({
     ? citationIndex
     : 1;
   const citation = sourceContext?.citations?.find(
-    (item) => item.segmentId === segmentId && item.citationIndex === normalizedCitationIndex,
+    (item) => item.citationIndex === normalizedCitationIndex && item.chunks.some((chunk) => chunk.segmentId === segmentId),
   )
-    ?? sourceContext?.citations?.find((item) => item.segmentId === segmentId)
+    ?? sourceContext?.citations?.find((item) => item.chunks.some((chunk) => chunk.segmentId === segmentId))
     ?? sourceContext?.citations?.find((item) => item.citationIndex === normalizedCitationIndex);
-  const why = citation?.why;
+  const chunk = citation?.chunks.find((item) => item.segmentId === segmentId) ?? citation?.chunks[0];
+  const why = chunk?.why;
   const hasWhy = why?.score != null
     || Boolean(why?.hitSources?.length)
     || Boolean(why?.matchSummary);
@@ -182,6 +198,7 @@ export function saveRecentCitationPreviewNavigation(item: RecentCitation, index:
     : undefined;
   const contextKey = savePreviewNavigation({
     source: "library",
+    navigationMode: "NONE",
     recordId: item.recordId,
     sourceType,
     sourceId: item.sourceId ?? undefined,
@@ -189,12 +206,14 @@ export function saveRecentCitationPreviewNavigation(item: RecentCitation, index:
     question: item.question ?? undefined,
     citations: [{
       citationIndex,
-      segmentId: item.segmentId,
       assetId: item.assetId ?? undefined,
       kbId: item.kbId ?? undefined,
       fileName: item.fileName ?? undefined,
-      snippet: item.snippet ?? undefined,
       reason: item.citationReason ?? undefined,
+      chunks: [{
+        segmentId: item.segmentId,
+        snippet: item.snippet ?? undefined,
+      }],
     }],
   });
   const params = new URLSearchParams({

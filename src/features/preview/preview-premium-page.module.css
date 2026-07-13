@@ -10,10 +10,6 @@
   animation: previewPremiumGlow 2.6s cubic-bezier(0.19, 1, 0.22, 1) infinite alternate;
 }
 
-.contextHighlight {
-  animation: previewContextHighlight 2.4s cubic-bezier(0.19, 1, 0.22, 1) both;
-}
-
 .meterFill {
   animation: previewPremiumGrow 1000ms cubic-bezier(0.19, 1, 0.22, 1) 260ms both;
 }
@@ -55,29 +51,6 @@
   }
 }
 
-@keyframes previewContextHighlight {
-  0% {
-    opacity: 0;
-    box-shadow: 0 0 0 3px rgba(36, 89, 255, 0.08);
-    transform: scale(0.985);
-  }
-
-  18%,
-  72% {
-    opacity: 1;
-    box-shadow:
-      0 0 0 8px rgba(36, 89, 255, 0.14),
-      0 20px 52px rgba(36, 89, 255, 0.2);
-    transform: scale(1);
-  }
-
-  100% {
-    opacity: 0;
-    box-shadow: 0 0 0 12px rgba(36, 89, 255, 0);
-    transform: scale(1.01);
-  }
-}
-
 @keyframes previewPremiumGrow {
   from {
     width: 18%;
@@ -92,7 +65,6 @@
   .reveal,
   .pulse,
   .highlight,
-  .contextHighlight,
   .meterFill {
     animation-duration: 1ms;
     animation-iteration-count: 1;

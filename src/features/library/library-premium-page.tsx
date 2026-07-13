@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Archive,
   ArrowLeft,
   ArrowRight,
@@ -19,6 +20,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  Trash2,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -659,12 +661,14 @@ function KnowledgeBaseDocumentView({
   onBack: () => void;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const documentListRef = useRef<HTMLElement | null>(null);
   const [keyword, setKeyword] = useState("");
   const [typeFilter, setTypeFilter] = useState<"ALL" | LibraryDocumentType>("ALL");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [documentPage, setDocumentPage] = useState(1);
   const [documentPageSize, setDocumentPageSize] = useState<number>(DOCUMENT_GRID_PAGE_SIZES[0]);
+  const [deleteTarget, setDeleteTarget] = useState<LibraryDocumentItem | null>(null);
   const deferredDocumentKeyword = useDeferredValue(keyword.trim());
   const documentsQuery = useQuery({
     queryKey: [
@@ -692,6 +696,22 @@ function KnowledgeBaseDocumentView({
   const documentSegmentTotal = documentsQuery.data?.segmentTotal ?? 0;
   const documentTotalPages = Math.max(1, Math.ceil(documentTotal / documentPageSize));
   const activeDocumentPage = Math.min(documentPage, documentTotalPages);
+  const deleteMutation = useMutation({
+    mutationFn: (assetId: string) => apiClient.deleteKnowledgeBaseDocument(knowledgeBase.id, assetId),
+    onSuccess: async () => {
+      setDeleteTarget(null);
+      if (documents.length === 1 && documentPage > 1) {
+        setDocumentPage((page) => Math.max(1, page - 1));
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["kbs", knowledgeBase.id, "documents"] }),
+        queryClient.invalidateQueries({ queryKey: ["kbs", "stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["kbs", "health", knowledgeBase.id] }),
+        queryClient.invalidateQueries({ queryKey: ["kbs", "premium"] }),
+        queryClient.invalidateQueries({ queryKey: ["activity", "recent-citations"] }),
+      ]);
+    },
+  });
 
   const handleDocumentViewModeChange = (nextViewMode: ViewMode) => {
     setViewMode(nextViewMode);
@@ -715,7 +735,24 @@ function KnowledgeBaseDocumentView({
     router.push(`/preview/asset/${encodeURIComponent(document.id)}?${params.toString()}`);
   };
 
+  const handleRequestDelete = (document: LibraryDocumentItem) => {
+    deleteMutation.reset();
+    setDeleteTarget(document);
+  };
+
+  const handleCancelDelete = () => {
+    if (deleteMutation.isPending) return;
+    deleteMutation.reset();
+    setDeleteTarget(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteTarget || deleteMutation.isPending) return;
+    deleteMutation.mutate(deleteTarget.id);
+  };
+
   return (
+    <>
     <main className="ask-premium-main library-document-view min-h-0 min-w-0 overflow-auto bg-[linear-gradient(100deg,rgba(255,255,255,0.88),rgba(255,255,255,0.4)),radial-gradient(circle_at_84%_8%,rgba(187,255,102,0.34),transparent_28rem)] px-4 py-4 sm:px-5 lg:px-5" aria-label={`${knowledgeBase.name} 文档`}>
       <div className="mx-auto grid w-full max-w-[1500px] gap-4">
         <section className="library-document-command relative overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-4 text-white shadow-[var(--premium-tight-shadow)] sm:p-5">
@@ -815,17 +852,29 @@ function KnowledgeBaseDocumentView({
           ) : viewMode === "grid" ? (
             <div className="library-document-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {documents.map((document, index) => (
-                <DocumentCard key={document.id} document={document} index={index} onPreview={() => handlePreview(document)} />
+                <DocumentCard
+                  key={document.id}
+                  document={document}
+                  index={index}
+                  onPreview={() => handlePreview(document)}
+                  onDelete={() => handleRequestDelete(document)}
+                />
               ))}
             </div>
           ) : (
             <div className="overflow-x-auto rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] shadow-[var(--premium-tight-shadow)]">
-              <div className="grid min-w-[760px] grid-cols-[minmax(0,1fr)_100px_100px_168px_100px] gap-4 border-b border-[var(--premium-line)] px-4 py-3 text-[10px] font-black text-[var(--premium-muted)]">
-                <span>文档名称</span><span>类型</span><span>版本</span><span>入库时间</span><span className="text-right">预览</span>
+              <div className="grid min-w-[780px] grid-cols-[minmax(0,1fr)_100px_100px_168px_120px] gap-4 border-b border-[var(--premium-line)] px-4 py-3 text-[10px] font-black text-[var(--premium-muted)]">
+                <span>文档名称</span><span>类型</span><span>版本</span><span>入库时间</span><span className="text-right">操作</span>
               </div>
               <div className="divide-y divide-[var(--premium-line)]">
                 {documents.map((document, index) => (
-                  <DocumentListItem key={document.id} document={document} index={index} onPreview={() => handlePreview(document)} />
+                  <DocumentListItem
+                    key={document.id}
+                    document={document}
+                    index={index}
+                    onPreview={() => handlePreview(document)}
+                    onDelete={() => handleRequestDelete(document)}
+                  />
                 ))}
               </div>
             </div>
@@ -847,6 +896,16 @@ function KnowledgeBaseDocumentView({
         </section>
       </div>
     </main>
+    {deleteTarget ? (
+      <DocumentDeleteDialog
+        document={deleteTarget}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error instanceof Error ? deleteMutation.error.message : null}
+        onCancel={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -957,62 +1016,79 @@ function DocumentCard({
   document,
   index,
   onPreview,
+  onDelete,
 }: {
   document: LibraryDocumentItem;
   index: number;
   onPreview: () => void;
+  onDelete: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onPreview}
-      disabled={!document.previewAvailable}
-      title={document.previewAvailable ? `预览 ${document.name}` : documentPreviewUnavailableLabel(document)}
+    <article
       style={{ animationDelay: `${Math.min(index, 6) * 58}ms` }}
-      className={[
-        "library-document-card group relative grid min-h-[230px] overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] p-4 text-left shadow-[var(--premium-tight-shadow)] transition duration-500 enabled:hover:-translate-y-1 enabled:hover:border-[var(--premium-line-strong)] enabled:hover:shadow-[0_24px_56px_rgba(17,19,21,0.14)] disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]",
-        index === 0 ? "sm:col-span-2 xl:col-span-1" : "",
-      ].join(" ")}
-      aria-label={`预览 ${document.name}`}
+      className={index === 0 ? "relative min-h-[230px] sm:col-span-2 xl:col-span-1" : "relative min-h-[230px]"}
     >
-      <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 origin-left scale-x-0 bg-[var(--premium-accent)] transition-transform duration-500 group-hover:scale-x-100 group-focus-visible:scale-x-100" />
-      <span aria-hidden="true" className="absolute -right-14 -top-14 size-36 rounded-full border border-[var(--premium-line)] transition duration-500 group-hover:scale-125 group-hover:border-[rgba(49,88,255,0.28)]" />
-      <span className="relative z-10 flex items-start justify-between gap-3">
-        <FileTypeIcon fileName={document.name} className="shadow-[0_10px_28px_rgba(17,19,21,0.1)]" />
-        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2.5 py-1 text-[10px] font-black text-[var(--premium-ink-soft)]">
-          <History size={12} /> V{document.version}
+      <button
+        type="button"
+        onClick={onPreview}
+        disabled={!document.previewAvailable}
+        title={document.previewAvailable ? `预览 ${document.name}` : documentPreviewUnavailableLabel(document)}
+        className="library-document-card group relative grid h-full min-h-[230px] w-full overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] p-4 text-left shadow-[var(--premium-tight-shadow)] transition duration-500 enabled:hover:-translate-y-1 enabled:hover:border-[var(--premium-line-strong)] enabled:hover:shadow-[0_24px_56px_rgba(17,19,21,0.14)] disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]"
+        aria-label={`预览 ${document.name}`}
+      >
+        <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 origin-left scale-x-0 bg-[var(--premium-accent)] transition-transform duration-500 group-hover:scale-x-100 group-focus-visible:scale-x-100" />
+        <span aria-hidden="true" className="absolute -right-14 -top-14 size-36 rounded-full border border-[var(--premium-line)] transition duration-500 group-hover:scale-125 group-hover:border-[rgba(49,88,255,0.28)]" />
+        <span className="relative z-10 flex items-start justify-between gap-3 pr-10">
+          <FileTypeIcon fileName={document.name} className="shadow-[0_10px_28px_rgba(17,19,21,0.1)]" />
+          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2.5 py-1 text-[10px] font-black text-[var(--premium-ink-soft)]">
+            <History size={12} /> V{document.version}
+          </span>
         </span>
-      </span>
-      <span className="relative z-10 mt-7 min-w-0">
-        <span className="mb-2 flex items-center gap-2">
-          <span className="rounded-full bg-[var(--premium-blue-soft)] px-2 py-1 text-[9px] font-black text-[var(--premium-blue)]">{document.type}</span>
-          <span className="text-[10px] font-bold text-[var(--premium-muted)]">{document.size} · {document.segments} 片段</span>
+        <span className="relative z-10 mt-7 min-w-0">
+          <span className="mb-2 flex items-center gap-2">
+            <span className="rounded-full bg-[var(--premium-blue-soft)] px-2 py-1 text-[9px] font-black text-[var(--premium-blue)]">{document.type}</span>
+            <span className="text-[10px] font-bold text-[var(--premium-muted)]">{document.size} · {document.segments} 片段</span>
+          </span>
+          <strong className="line-clamp-2 break-words text-[17px] font-black leading-[1.18] text-[var(--premium-ink)]">{document.name}</strong>
         </span>
-        <strong className="line-clamp-2 break-words text-[17px] font-black leading-[1.18] text-[var(--premium-ink)]">{document.name}</strong>
-      </span>
-      <span className="relative z-10 mt-auto flex items-end justify-between gap-3 border-t border-[var(--premium-line)] pt-3">
-        <span className="min-w-0 text-[10px] text-[var(--premium-muted)]">
-          <span className="mb-1 flex items-center gap-1.5 font-bold"><Clock3 size={12} /> 入库时间</span>
-          <time className="block truncate font-black text-[var(--premium-ink-soft)]" dateTime={document.importedAt}>{formatDateTime(document.importedAt)}</time>
+        <span className="relative z-10 mt-auto flex items-end justify-between gap-3 border-t border-[var(--premium-line)] pt-3">
+          <span className="min-w-0 text-[10px] text-[var(--premium-muted)]">
+            <span className="mb-1 flex items-center gap-1.5 font-bold"><Clock3 size={12} /> 入库时间</span>
+            <time className="block truncate font-black text-[var(--premium-ink-soft)]" dateTime={document.importedAt}>{formatDateTime(document.importedAt)}</time>
+          </span>
+          <span className="grid min-h-9 shrink-0 place-items-center rounded-full bg-[var(--premium-ink)] px-3 text-[10px] font-black text-[var(--premium-bg)] transition duration-500 group-enabled:group-hover:translate-x-0.5 group-enabled:group-hover:bg-[var(--premium-blue)] group-enabled:group-hover:text-white">
+            {document.previewAvailable ? <Eye size={15} /> : statusText(document.parseStatus)}
+          </span>
         </span>
-        <span className="grid min-h-9 shrink-0 place-items-center rounded-full bg-[var(--premium-ink)] px-3 text-[10px] font-black text-[var(--premium-bg)] transition duration-500 group-enabled:group-hover:translate-x-0.5 group-enabled:group-hover:bg-[var(--premium-blue)] group-enabled:group-hover:text-white">
-          {document.previewAvailable ? <Eye size={15} /> : statusText(document.parseStatus)}
-        </span>
-      </span>
-    </button>
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="absolute right-3 top-3 z-20 grid size-8 place-items-center rounded-[8px] border border-rose-200 bg-rose-50/95 text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:border-rose-400 hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 dark:border-rose-500/25 dark:bg-rose-500/15 dark:text-rose-300"
+        aria-label={`删除 ${document.name}`}
+        title={`删除 ${document.name}`}
+      >
+        <Trash2 size={14} />
+      </button>
+    </article>
   );
 }
 
-function DocumentListItem({ document, index, onPreview }: { document: LibraryDocumentItem; index: number; onPreview: () => void }) {
+function DocumentListItem({
+  document,
+  index,
+  onPreview,
+  onDelete,
+}: {
+  document: LibraryDocumentItem;
+  index: number;
+  onPreview: () => void;
+  onDelete: () => void;
+}) {
   return (
-    <button
-      type="button"
-      onClick={onPreview}
-      disabled={!document.previewAvailable}
-      title={document.previewAvailable ? `预览 ${document.name}` : documentPreviewUnavailableLabel(document)}
+    <div
       style={{ animationDelay: `${Math.min(index, 6) * 48}ms` }}
-      className="library-document-card group grid min-h-16 w-full min-w-[760px] grid-cols-[minmax(0,1fr)_100px_100px_168px_100px] items-center gap-4 px-4 py-2 text-left transition duration-300 enabled:hover:bg-[var(--premium-panel-strong)] disabled:cursor-not-allowed disabled:opacity-65 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--premium-blue)]"
-      aria-label={`预览 ${document.name}`}
+      className="library-document-card group grid min-h-16 w-full min-w-[780px] grid-cols-[minmax(0,1fr)_100px_100px_168px_120px] items-center gap-4 px-4 py-2 text-left transition duration-300 hover:bg-[var(--premium-panel-strong)]"
     >
       <span className="flex min-w-0 items-center gap-3">
         <FileTypeIcon fileName={document.name} compact />
@@ -1024,10 +1100,99 @@ function DocumentListItem({ document, index, onPreview }: { document: LibraryDoc
       <span className="text-[11px] font-black text-[var(--premium-blue)]">{document.type}</span>
       <span className="inline-flex w-fit items-center gap-1 rounded-full bg-[var(--premium-panel-muted)] px-2 py-1 text-[10px] font-black text-[var(--premium-ink-soft)]"><History size={11} /> V{document.version}</span>
       <time className="truncate text-[11px] font-bold text-[var(--premium-muted)]" dateTime={document.importedAt}>{formatDateTime(document.importedAt)}</time>
-      <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-black text-[var(--premium-ink-soft)] transition group-enabled:group-hover:translate-x-1 group-enabled:group-hover:text-[var(--premium-blue)]">
-        {document.previewAvailable ? <>预览 <Eye size={14} /></> : statusText(document.parseStatus)}
+      <span className="ml-auto flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={onPreview}
+          disabled={!document.previewAvailable}
+          title={document.previewAvailable ? `预览 ${document.name}` : documentPreviewUnavailableLabel(document)}
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 text-[10px] font-black text-[var(--premium-ink-soft)] transition hover:bg-[var(--premium-blue-soft)] hover:text-[var(--premium-blue)] disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          {document.previewAvailable ? <>预览 <Eye size={14} /></> : statusText(document.parseStatus)}
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="grid size-8 place-items-center rounded-[8px] text-rose-600 transition hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/15"
+          aria-label={`删除 ${document.name}`}
+          title={`删除 ${document.name}`}
+        >
+          <Trash2 size={14} />
+        </button>
       </span>
-    </button>
+    </div>
+  );
+}
+
+function DocumentDeleteDialog({
+  document,
+  pending,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  document: LibraryDocumentItem;
+  pending: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="document-delete-title"
+    >
+      <div className="w-full max-w-[400px] rounded-[8px] border border-[var(--premium-line)] bg-[rgba(255,253,245,0.96)] p-4 shadow-[var(--premium-menu-shadow)] backdrop-blur-xl dark:bg-[var(--premium-elevated)]">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-[8px] bg-rose-600 text-white shadow-[0_14px_32px_rgba(225,29,72,0.2)]">
+              <AlertTriangle size={18} />
+            </span>
+            <div className="min-w-0">
+              <h2 id="document-delete-title" className="text-[18px] font-black leading-none text-[var(--premium-ink)]">删除文档</h2>
+              <p className="mt-2 text-xs font-bold leading-[1.6] text-[var(--premium-muted)]">
+                确认删除“<strong className="break-all text-[var(--premium-ink)]">{document.name}</strong>”？文档将从知识库和检索范围中移除。
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={pending}
+            className="grid size-8 shrink-0 place-items-center rounded-[8px] text-[var(--premium-muted)] hover:bg-white/70 disabled:opacity-50 dark:hover:bg-[var(--premium-panel-muted)]"
+            aria-label="关闭"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        {error ? (
+          <p className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-300">
+            删除失败：{error}
+          </p>
+        ) : null}
+        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={pending}
+            className="inline-flex min-h-10 flex-1 items-center justify-center rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-4 text-sm font-black text-[var(--premium-ink)] disabled:opacity-50"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={pending}
+            className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-[8px] bg-rose-600 px-4 text-sm font-black text-white transition hover:bg-rose-700 disabled:opacity-60"
+          >
+            {pending ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={15} />}
+            {pending ? "删除中" : "确认删除"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

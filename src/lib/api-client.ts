@@ -8,6 +8,7 @@ import type {
   CapabilityConnectionTestResult,
   CapabilityParams,
   ConversationAnswerMode,
+  ConversationAnswerStatus,
   ConversationCitation,
   ConversationMessageList,
   ConversationSession,
@@ -55,7 +56,7 @@ type StreamMessageCallbacks = {
   onTrace?: (event: { stage?: string; message?: string; answerMode?: ConversationAnswerMode | string }) => void;
   onDelta?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number }) => void;
 };
 
 type ConversationMessageRequest = {
@@ -215,7 +216,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "done") {
-    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
+    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number }>(data) ?? {});
     return;
   }
 
@@ -278,6 +279,11 @@ export const apiClient = {
   previewAsset: (kbId: string, assetId: string) =>
     request<AssetPreview>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(assetId)}/preview`,
+    ),
+  deleteKnowledgeBaseDocument: (kbId: string, assetId: string) =>
+    request<null>(
+      `/api/v1/kbs/${encodeURIComponent(kbId)}/documents/${encodeURIComponent(assetId)}`,
+      { method: "DELETE" },
     ),
   getElasticsearchHealth: () =>
     request<ElasticsearchHealth>("/api/v1/health/elasticsearch"),
