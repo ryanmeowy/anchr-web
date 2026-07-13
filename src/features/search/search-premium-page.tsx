@@ -4,6 +4,7 @@ import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowRight,
+  ArrowUpRight,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -13,10 +14,12 @@ import {
   Copy,
   Database,
   Folder,
+  History,
   Loader2,
   RefreshCcw,
   Search,
   Sparkles,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -40,7 +43,7 @@ import {
   saveSearchAssetScope,
   type AssetScope,
 } from "@/lib/asset-scope";
-import { formatFileSize, formatNumber } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import {
   clearPreviewRestoreState,
@@ -50,7 +53,6 @@ import {
   type PreviewCitation,
 } from "@/lib/preview-context";
 import type {
-  ElasticsearchHealth,
   KnowledgeBase,
   RecentSearch,
   SearchAnswer,
@@ -175,14 +177,6 @@ export function SearchPremiumPage() {
     queryFn: apiClient.ingestionCapabilities,
     refetchOnWindowFocus: false,
   });
-  const elasticsearchHealthQuery = useQuery({
-    queryKey: ["health", "elasticsearch"],
-    queryFn: apiClient.getElasticsearchHealth,
-    refetchInterval: 30_000,
-    refetchOnWindowFocus: true,
-    retry: 1,
-  });
-
   const recentSearchQuery = useInfiniteQuery({
     queryKey: ["activity", "recent-search", "premium", RECENT_SEARCH_PAGE_SIZE],
     queryFn: ({ pageParam }) => apiClient.recentSearch(RECENT_SEARCH_PAGE_SIZE, pageParam),
@@ -701,15 +695,6 @@ export function SearchPremiumPage() {
                   isFetchingNextPage={recentSearchQuery.isFetchingNextPage}
                   onLoadMore={() => recentSearchQuery.fetchNextPage()}
                   onSelect={handleRecentSearchSelect}
-                />
-                <SearchHealthPanel
-                  health={elasticsearchHealthQuery.data}
-                  error={elasticsearchHealthQuery.error}
-                  isLoading={elasticsearchHealthQuery.isLoading}
-                  isFetching={elasticsearchHealthQuery.isFetching}
-                  onRetry={() => {
-                    void elasticsearchHealthQuery.refetch();
-                  }}
                 />
               </aside>
             </main>
@@ -1315,8 +1300,8 @@ function FilterPanel({
   const selectedLabel = formatSelectedKbLabel(selectedKbIds, kbById);
 
   return (
-    <section className="search-premium-filter premium-surface min-h-0 rounded-[8px] p-2.5" aria-label="筛选范围">
-      <PanelLabel label="FILTER SCOPE" />
+    <section className="search-premium-filter min-h-0 rounded-[8px] border border-white/10 px-4 pb-4 pt-3 text-white" aria-label="筛选范围">
+      <SearchSidePanelHeader label="FILTER SCOPE" icon={<SlidersHorizontal size={15} strokeWidth={2.4} />} />
       <div className="search-premium-filter-stack">
         <FilterBlock title="知识库">
           <KnowledgeBasePicker
@@ -1757,8 +1742,8 @@ function RecentSearchPanel({
   };
 
   return (
-    <section className="search-premium-recent premium-surface flex min-h-0 flex-col rounded-[8px] p-2.5" aria-label="最近搜索">
-      <PanelLabel label="RECENT SEARCHES" value={items.length ? String(items.length) : undefined} />
+    <section className="search-premium-recent flex min-h-0 flex-col rounded-[8px] border border-white/10 px-4 pb-4 pt-3 text-white" aria-label="最近搜索">
+      <SearchSidePanelHeader label="RECENT SEARCHES" count={items.length} icon={<History size={15} strokeWidth={2.4} />} />
       <div className="search-premium-recent-list min-h-0 flex-1" onScroll={handleScroll}>
         {isLoading ? <MiniLoading label="加载最近搜索" /> : null}
         {isError ? <span className="text-[10px] text-[var(--premium-muted)]">最近搜索暂不可用</span> : null}
@@ -1772,7 +1757,7 @@ function RecentSearchPanel({
             onClick={() => onSelect(item)}
             className="search-premium-recent-item"
           >
-            <span className="search-premium-recent-num">{index + 1}</span>
+            <span className="search-premium-recent-num" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
             <span className="search-premium-recent-body">
               <strong>{item.query || "未命名搜索"}</strong>
               <span>
@@ -1781,7 +1766,10 @@ function RecentSearchPanel({
                 {formatRelativeTime(item.searchedAt)}
               </span>
             </span>
-            <span className="search-premium-recent-hit">{formatNumber(item.total)}</span>
+            <span className="search-premium-recent-trail">
+              <span className="search-premium-recent-hit">{formatNumber(item.total)}</span>
+              <span className="search-premium-recent-arrow" aria-hidden="true"><ArrowUpRight size={12} /></span>
+            </span>
           </button>
         ))}
         {isFetchingNextPage ? <MiniLoading label="加载更多" /> : null}
@@ -1790,258 +1778,28 @@ function RecentSearchPanel({
   );
 }
 
-type SearchHealthState = "loading" | "error" | "offline" | "green" | "yellow" | "red" | "unknown";
-
-type SearchHealthView = {
-  state: SearchHealthState;
-  title: string;
-  grade: string;
-  summary: string;
-  connectionLabel: string;
-};
-
-function SearchHealthPanel({
-  health,
-  error,
-  isLoading,
-  isFetching,
-  onRetry,
-}: {
-  health?: ElasticsearchHealth;
-  error: Error | null;
-  isLoading: boolean;
-  isFetching: boolean;
-  onRetry: () => void;
-}) {
-  const view = getSearchHealthView(health, error, isLoading);
-  const connectionState = health?.connected
-    ? "online"
-    : health
-      ? "offline"
-      : isLoading
-        ? "checking"
-        : error
-          ? "error"
-          : "unknown";
-  const hasMetrics = Boolean(health?.connected);
-  const nodeCount = hasMetrics ? health?.nodeCount : undefined;
-  const dataNodeCount = hasMetrics ? health?.dataNodeCount : undefined;
-  const activeShards = hasMetrics ? health?.activeShards : undefined;
-  const unassignedShards = hasMetrics ? health?.unassignedShards : undefined;
-  const docsCount = hasMetrics ? health?.indices?.docsCount : undefined;
-  const storeSizeBytes = hasMetrics ? health?.indices?.storeSizeBytes : undefined;
-
-  return (
-    <section
-      className="search-premium-health premium-surface rounded-[8px] p-2.5"
-      aria-label="ES 服务健康信息"
-      aria-busy={isLoading || isFetching}
-      data-health-state={view.state}
-      data-connection-state={connectionState}
-    >
-      <div className="search-premium-health-content">
-        <div className="search-premium-health-header">
-          <p>ES SERVICE HEALTH</p>
-          <button
-            type="button"
-            className="search-premium-health-connection"
-            onClick={onRetry}
-            disabled={isFetching}
-            aria-label={isFetching ? "正在刷新 ES 健康状态" : "刷新 ES 健康状态"}
-            title="刷新 ES 健康状态"
-          >
-            <span>{view.connectionLabel}</span>
-          </button>
-        </div>
-        <div className="search-premium-health-main">
-          <span className="search-premium-health-orb" aria-hidden="true">
-            {view.state === "loading" ? (
-              <Loader2 size={24} className="search-premium-health-spinner" />
-            ) : view.state === "error" || view.state === "offline" ? (
-              <AlertCircle size={25} />
-            ) : (
-              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                <path d="M8 9.5 14 6l6 3.5v7L14 20l-6-3.5v-7Z" stroke="currentColor" strokeWidth="1.5" />
-                <path
-                  d="m8.5 9.8 5.5 3.1 5.5-3.1M14 13v6.4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <circle cx="8" cy="9.5" r="2" fill="currentColor" />
-                <circle cx="20" cy="9.5" r="2" fill="currentColor" />
-                <circle cx="14" cy="20" r="2" fill="currentColor" />
-              </svg>
-            )}
-          </span>
-          <div className="search-premium-health-readout">
-            <span className="search-premium-health-kicker">CLUSTER STATUS</span>
-            <div className="search-premium-health-status-row">
-              <strong>{view.title}</strong>
-              <span className="search-premium-health-grade">{view.grade}</span>
-            </div>
-            <p className="search-premium-health-summary" title={view.summary}>{view.summary}</p>
-          </div>
-        </div>
-        <div className="search-premium-health-stats">
-          <HealthMetric
-            value={formatHealthCount(nodeCount)}
-            label="节点"
-            detail={dataNodeCount === undefined ? "等待状态数据" : `${formatNumber(dataNodeCount)} 个数据节点`}
-            title={
-              nodeCount === undefined
-                ? undefined
-                : `节点总数 ${formatNumber(nodeCount)}，数据节点 ${dataNodeCount === undefined ? "—" : formatNumber(dataNodeCount)}`
-            }
-          />
-          <HealthMetric
-            value={formatHealthCount(activeShards)}
-            label="活跃分片"
-            detail={unassignedShards === undefined ? "等待状态数据" : `${formatNumber(unassignedShards)} 个未分配`}
-            title={
-              activeShards === undefined
-                ? undefined
-                : `活跃分片 ${formatNumber(activeShards)}，未分配分片 ${unassignedShards === undefined ? "—" : formatNumber(unassignedShards)}`
-            }
-            alert={Boolean(unassignedShards)}
-          />
-          <HealthMetric
-            value={formatCompactHealthCount(docsCount)}
-            label="文档"
-            detail={storeSizeBytes === undefined ? "等待状态数据" : `占用 ${formatFileSize(storeSizeBytes)}`}
-            title={
-              docsCount === undefined
-                ? undefined
-                : `文档 ${formatNumber(docsCount)} 条，占用 ${storeSizeBytes === undefined ? "—" : formatFileSize(storeSizeBytes)}`
-            }
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HealthMetric({
-  value,
+function SearchSidePanelHeader({
   label,
-  detail,
-  title,
-  alert = false,
+  icon,
+  count,
 }: {
-  value: string;
   label: string;
-  detail: string;
-  title?: string;
-  alert?: boolean;
+  icon: ReactNode;
+  count?: number;
 }) {
   return (
-    <div className={alert ? "search-premium-health-stat is-alert" : "search-premium-health-stat"} title={title}>
-      <span className="search-premium-health-stat-primary">
-        <b>{value}</b>
-        <em>{label}</em>
+    <header className="search-premium-side-header relative z-10 flex min-w-0 items-center justify-between gap-3 border-b border-white/10 pb-3">
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="search-premium-side-header-icon grid size-6 shrink-0 place-items-center rounded-full" aria-hidden="true">{icon}</span>
+        <h2 className="truncate text-xs font-black leading-none">{label}</h2>
       </span>
-      <small>{detail}</small>
-    </div>
+      {count !== undefined ? (
+        <span className="search-premium-side-count grid size-9 shrink-0 place-items-center rounded-full text-xs font-black" aria-label={`${count} 条`}>
+          {String(count).padStart(2, "0")}
+        </span>
+      ) : null}
+    </header>
   );
-}
-
-function getSearchHealthView(
-  health: ElasticsearchHealth | undefined,
-  error: Error | null,
-  isLoading: boolean,
-): SearchHealthView {
-  if (isLoading && !health) {
-    return {
-      state: "loading",
-      title: "正在检测",
-      grade: "CHECKING",
-      summary: "正在连接 Elasticsearch…",
-      connectionLabel: "CHECKING",
-    };
-  }
-
-  if (error && !health) {
-    return {
-      state: "error",
-      title: "状态未知",
-      grade: "ERROR",
-      summary: error.message || "ES 健康接口暂不可用",
-      connectionLabel: "UNAVAILABLE",
-    };
-  }
-
-  if (!health) {
-    return {
-      state: "unknown",
-      title: "状态未知",
-      grade: "UNKNOWN",
-      summary: "暂未获取 Elasticsearch 状态",
-      connectionLabel: "UNKNOWN",
-    };
-  }
-
-  if (!health.connected) {
-    return {
-      state: "offline",
-      title: "连接中断",
-      grade: "OFFLINE",
-      summary: health.error || "Elasticsearch 当前无法连接",
-      connectionLabel: "OFFLINE",
-    };
-  }
-
-  const status = health.status?.toLowerCase();
-  if (status === "green") {
-    return {
-      state: "green",
-      title: "运行正常",
-      grade: "GREEN",
-      summary: "Elasticsearch 已连接 · 搜索可用",
-      connectionLabel: "ONLINE",
-    };
-  }
-
-  if (status === "yellow") {
-    return {
-      state: "yellow",
-      title: "需要关注",
-      grade: "YELLOW",
-      summary: "部分副本分片尚未分配",
-      connectionLabel: "ONLINE",
-    };
-  }
-
-  if (status === "red") {
-    return {
-      state: "red",
-      title: "服务异常",
-      grade: "RED",
-      summary: "主分片异常，搜索结果可能不完整",
-      connectionLabel: "ONLINE",
-    };
-  }
-
-  return {
-    state: "unknown",
-    title: "状态未知",
-    grade: status?.toUpperCase() || "UNKNOWN",
-    summary: "Elasticsearch 已连接，集群状态未知",
-    connectionLabel: "ONLINE",
-  };
-}
-
-function formatHealthCount(value?: number) {
-  return value === undefined ? "—" : formatNumber(value);
-}
-
-function formatCompactHealthCount(value?: number) {
-  if (value === undefined) return "—";
-  if (Math.abs(value) < 1_000) return formatNumber(value);
-
-  const divisor = Math.abs(value) >= 1_000_000 ? 1_000_000 : 1_000;
-  const suffix = divisor === 1_000_000 ? "M" : "K";
-  const compact = value / divisor;
-  return `${compact >= 100 || Number.isInteger(compact) ? compact.toFixed(0) : compact.toFixed(1)}${suffix}`;
 }
 
 function PanelLabel({ label, value }: { label: string; value?: string }) {
