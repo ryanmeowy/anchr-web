@@ -640,16 +640,12 @@ function PreviewContent({
               item={item}
               pageNo={pdfPage}
               scale={pdfScale}
-              citationIndex={visibleCitationIndex}
               onPageCountChange={setPdfPageCount}
               onPageSizeChange={setPdfPageSize}
               onDocumentChange={setPdfDoc}
             />
           ) : previewType === "IMAGE" && item.previewUrl ? (
-            <ImagePreview
-              item={item}
-              citationIndex={visibleCitationIndex}
-            />
+            <ImagePreview item={item} />
           ) : assetDetails && item.previewUrl ? (
             <AssetTextPreview item={item} />
           ) : (
@@ -985,7 +981,6 @@ function PdfPreview({
   item,
   pageNo,
   scale,
-  citationIndex,
   onPageCountChange,
   onPageSizeChange,
   onDocumentChange,
@@ -993,7 +988,6 @@ function PdfPreview({
   item: PreviewSegment;
   pageNo: number;
   scale: number;
-  citationIndex?: number;
   onPageCountChange: (count: number) => void;
   onPageSizeChange: (size: PdfPageSize | null) => void;
   onDocumentChange: (doc: PdfDocumentProxy | null) => void;
@@ -1095,13 +1089,13 @@ function PdfPreview({
         <canvas ref={canvasRef} className="block bg-white" />
         {pageSize ? (
           <BBoxOverlay
+            key={`${item.segmentId}:${pageNo}`}
             records={item.anchor?.bbox ?? []}
             pageNo={pageNo}
             pageWidthPt={pageSize.widthPt}
             pageHeightPt={pageSize.heightPt}
             renderedWidth={pageSize.width}
             renderedHeight={pageSize.height}
-            citationIndex={citationIndex}
           />
         ) : null}
         {isRendering ? (
@@ -1244,13 +1238,7 @@ function renderPdfPage(page: PdfPageProxy, canvas: HTMLCanvasElement | null, sca
   };
 }
 
-function ImagePreview({
-  item,
-  citationIndex,
-}: {
-  item: PreviewSegment;
-  citationIndex?: number;
-}) {
+function ImagePreview({ item }: { item: PreviewSegment }) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [imageSize, setImageSize] = useState<{
     naturalWidth: number;
@@ -1287,13 +1275,13 @@ function ImagePreview({
         />
         {imageSize ? (
           <BBoxOverlay
+            key={`${item.segmentId}:${item.anchor?.pageNo ?? 1}`}
             records={item.anchor?.bbox ?? []}
             pageNo={item.anchor?.pageNo ?? 1}
             pageWidthPt={item.anchor?.imageWidth ?? imageSize.naturalWidth}
             pageHeightPt={item.anchor?.imageHeight ?? imageSize.naturalHeight}
             renderedWidth={imageSize.renderedWidth}
             renderedHeight={imageSize.renderedHeight}
-            citationIndex={citationIndex}
           />
         ) : null}
       </div>
@@ -1308,7 +1296,6 @@ function BBoxOverlay({
   pageHeightPt,
   renderedWidth,
   renderedHeight,
-  citationIndex,
 }: {
   records: PreviewBBoxRecord[];
   pageNo: number;
@@ -1316,7 +1303,6 @@ function BBoxOverlay({
   pageHeightPt: number;
   renderedWidth: number;
   renderedHeight: number;
-  citationIndex?: number;
 }) {
   const scaleX = renderedWidth / pageWidthPt;
   const scaleY = renderedHeight / pageHeightPt;
@@ -1328,21 +1314,15 @@ function BBoxOverlay({
     <div className="pointer-events-none absolute inset-0">
       {rects.map((rect, index) => (
         <div
-          key={`${rect.left}-${rect.top}-${index}`}
-          className={`${styles.highlight} absolute rounded-[8px] border-2 border-amber-400 bg-amber-300/15`}
+          key={index}
+          className={`${styles.bboxLock} absolute rounded-[8px] border-2 border-blue-500 bg-blue-500/10`}
           style={{
             left: rect.left,
             top: rect.top,
             width: rect.width,
             height: rect.height,
           }}
-        >
-          {index === 0 && citationIndex != null ? (
-            <span className="absolute -right-4 -top-4 grid size-[34px] place-items-center rounded-[8px] bg-amber-400 text-sm font-black text-[#1c1400] shadow-[0_14px_32px_rgba(123,76,0,0.28)]">
-              {citationIndex}
-            </span>
-          ) : null}
-        </div>
+        />
       ))}
     </div>
   );
