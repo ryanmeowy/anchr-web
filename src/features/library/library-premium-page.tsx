@@ -389,8 +389,8 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                 />
               </main>
             ) : (
-            <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-visible bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:items-stretch lg:px-5">
-              <section className="flex min-h-0 min-w-0 flex-col lg:h-full" aria-label="我的知识库">
+            <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-visible bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:px-5">
+              <section className="flex min-h-0 min-w-0 flex-col" aria-label="我的知识库">
                 <div className="mb-5 grid shrink-0 grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <form
                     className="premium-focusable flex min-h-11 min-w-0 items-center gap-3 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2 pl-4 shadow-[0_12px_32px_rgba(17,19,21,0.07)] backdrop-blur-xl transition"
@@ -475,7 +475,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                     ) : null}
 
                     {canShowResults && !showEmptyResults && viewMode === "grid" ? (
-                      <div className="library-card-grid grid grid-cols-1 gap-3 lg:h-full lg:min-h-0 xl:grid-cols-3 xl:grid-rows-2">
+                      <div className="library-card-grid grid grid-cols-1 gap-3 xl:grid-cols-3">
                         {gridItems.map((item, index) => (
                           <KnowledgeBaseCard
                             key={item.id}
@@ -492,7 +492,10 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                             updateError={item.id === editingKbId && updateMutation.error instanceof Error ? updateMutation.error.message : null}
                             archiveError={item.id === archiveConfirmKbId && archiveMutation.error instanceof Error ? archiveMutation.error.message : null}
                             onSelect={() => handleOpenKnowledgeBase(item)}
-                            onHover={() => setHoveredKbId(item.id)}
+                            onHover={() => {
+                              setHoveredKbId(item.id);
+                              setSelectedKbIdValue(item.id);
+                            }}
                             onHoverEnd={() => setHoveredKbId(null)}
                             onStartEdit={() => handleStartEdit(item)}
                             onCancelEdit={handleCancelEdit}
@@ -528,7 +531,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                     ) : null}
 
                     {canShowResults && !showEmptyResults && viewMode === "list" ? (
-                      <div className="flex h-full min-h-0 flex-col overflow-x-auto rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] shadow-[var(--premium-tight-shadow)]">
+                      <div className="flex min-h-0 flex-col overflow-x-auto rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] shadow-[var(--premium-tight-shadow)]">
                         <div className="grid min-w-[860px] grid-cols-[minmax(0,1fr)_92px_112px_136px_184px] items-center gap-4 border-b border-[var(--premium-line)] px-5 py-3 text-xs font-black text-[var(--premium-muted)]">
                           <span>知识库</span>
                           <span className="text-center">文档</span>
@@ -536,7 +539,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                           <span className="text-center">更新时间</span>
                           <span className="text-center">操作</span>
                         </div>
-                        <div className="grid min-h-0 min-w-[860px] flex-1 grid-rows-6 divide-y divide-[var(--premium-line)]">
+                        <div className="grid min-h-0 min-w-[860px] auto-rows-[92px] divide-y divide-[var(--premium-line)]">
                           {items.map((item, index) => (
                             <KnowledgeBaseListRow
                               key={item.id}
@@ -552,7 +555,10 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                               updateError={item.id === editingKbId && updateMutation.error instanceof Error ? updateMutation.error.message : null}
                               archiveError={item.id === archiveConfirmKbId && archiveMutation.error instanceof Error ? archiveMutation.error.message : null}
                               onSelect={() => handleOpenKnowledgeBase(item)}
-                              onHover={() => setHoveredKbId(item.id)}
+                              onHover={() => {
+                                setHoveredKbId(item.id);
+                                setSelectedKbIdValue(item.id);
+                              }}
                               onHoverEnd={() => setHoveredKbId(null)}
                               onStartEdit={() => handleStartEdit(item)}
                               onCancelEdit={handleCancelEdit}
@@ -1338,7 +1344,7 @@ function KnowledgeBaseCard({
         if (!event.currentTarget.contains(event.relatedTarget)) onHoverEnd();
       }}
       className={[
-        "library-kb-card group relative grid h-full min-h-[254px] grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 overflow-hidden rounded-[8px] border p-2.5 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(17,19,21,0.13)] lg:min-h-0",
+        "library-kb-card group relative grid h-full min-h-[254px] grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 overflow-hidden rounded-[8px] border p-2.5 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(17,19,21,0.13)]",
         selected ? "border-[var(--premium-line-strong)] bg-[var(--premium-panel-strong)] ring-1 ring-black/5 dark:ring-white/10" : "border-[var(--premium-line)] bg-[var(--premium-panel)]",
       ].join(" ")}
     >
@@ -1759,7 +1765,7 @@ function CreateKnowledgeBaseCard({
 }: CreateKnowledgeBaseProps) {
   if (expanded) {
     return (
-      <div className="library-create-kb-card grid h-full min-h-[254px] gap-2 rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-white p-2.5 text-[var(--premium-ink)] shadow-[var(--premium-tight-shadow)] dark:border-white/30 dark:bg-[#101214] dark:text-white lg:min-h-0">
+      <div className="library-create-kb-card grid h-full min-h-[254px] gap-2 rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-white p-2.5 text-[var(--premium-ink)] shadow-[var(--premium-tight-shadow)] dark:border-white/30 dark:bg-[#101214] dark:text-white">
         <div className="flex items-center gap-2 font-black text-[var(--premium-blue)] dark:text-[var(--premium-accent)]">
           <Plus size={20} />
           新建知识库
@@ -1784,7 +1790,7 @@ function CreateKnowledgeBaseCard({
     <button
       type="button"
       onClick={onExpand}
-      className="library-create-kb-card grid h-full min-h-[254px] place-items-center rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-white p-3 text-center text-[var(--premium-ink)] shadow-[var(--premium-tight-shadow)] transition hover:-translate-y-1 hover:border-[var(--premium-blue)] hover:bg-[#f9faf7] dark:border-white/30 dark:bg-[#101214] dark:text-white dark:hover:border-[var(--premium-accent)] dark:hover:bg-[#171a1c] lg:min-h-0"
+      className="library-create-kb-card grid h-full min-h-[254px] place-items-center rounded-[8px] border border-dashed border-[var(--premium-line-strong)] bg-white p-3 text-center text-[var(--premium-ink)] shadow-[var(--premium-tight-shadow)] transition hover:-translate-y-1 hover:border-[var(--premium-blue)] hover:bg-[#f9faf7] dark:border-white/30 dark:bg-[#101214] dark:text-white dark:hover:border-[var(--premium-accent)] dark:hover:bg-[#171a1c]"
     >
       <span>
         <span className="mx-auto mb-2 grid size-12 place-items-center rounded-full bg-[#101214] text-white shadow-[0_14px_30px_rgba(17,19,21,0.18)] dark:bg-white dark:text-[#101214] dark:shadow-[0_14px_30px_rgba(0,0,0,0.3)]">
@@ -2037,47 +2043,134 @@ function HealthPanel({
   isLoading: boolean;
   isError: boolean;
 }) {
-  const score = Math.max(0, Math.min(100, health?.score ?? 0));
   const sourceTypes = health?.sourceTypes ?? [];
+  const segmentTotal = health?.segments.total ?? 0;
+  const segmentIndexed = health?.segments.indexed ?? 0;
+  const coverage = segmentTotal > 0
+    ? Math.min(100, Math.max(0, (segmentIndexed / segmentTotal) * 100))
+    : 0;
 
   return (
-    <section className="flex h-full flex-col rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-3 text-white shadow-[var(--premium-tight-shadow)]" aria-label="知识库健康度">
-      <PanelLabel label="LIBRARY HEALTH" value={health?.status ?? selectedKb?.status ?? "READY"} dark />
-      <div className="mt-2.5 grid min-h-0 flex-1 gap-2.5">
+    <section className="library-health-panel relative isolate min-h-[184px] overflow-hidden rounded-[8px] border border-white/10 text-[#f4f7ec] shadow-[0_28px_70px_rgba(17,19,21,0.24)]" aria-live="polite" aria-label="知识库健康度">
+      <span className="library-health-orbit pointer-events-none absolute -right-[70px] -top-[76px] size-[210px] rounded-full border border-[rgba(187,255,102,0.26)]" aria-hidden="true" />
+      <div className="relative z-10 grid gap-3 p-3">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <p className="m-0 text-[11px] font-black text-white/55">KB OVERVIEW</p>
+          <span className="inline-flex items-center gap-2 text-[10px] font-black text-[var(--premium-accent)]">
+            <i className="size-[7px] rounded-full bg-current shadow-[0_0_0_5px_rgba(187,255,102,0.1)]" aria-hidden="true" />
+            LIVE
+          </span>
+        </div>
+
         {!selectedKb ? <DarkState label="选择知识库查看健康度" /> : null}
         {selectedKb && isLoading ? <DarkState label="加载健康状态" /> : null}
         {selectedKb && isError ? <DarkState label="健康状态暂不可用" /> : null}
-        {selectedKb && !isLoading && !isError ? (
-          <>
-            <div className="flex items-end justify-between gap-3">
-              <strong className="text-[clamp(34px,4.6vw,58px)] font-black leading-[0.88]">{score}%</strong>
-              <span className="max-w-[140px] text-[11px] leading-4 text-white/70">
-                {health?.kbName ?? selectedKb.name} 的索引、片段与导入状态综合评分。
-              </span>
+        {selectedKb && !isLoading && !isError && health ? (
+          <div key={health.kbId} className="library-health-snapshot grid min-w-0 gap-3">
+            <div className="flex min-w-0 items-end gap-3">
+              <h2 className="min-w-0 truncate text-xl font-black leading-none" title={health.kbName || selectedKb.name}>
+                {health.kbName || selectedKb.name}
+              </h2>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/10" aria-label={`健康度 ${score}%`}>
-              <span className="block h-full rounded-full bg-[linear-gradient(90deg,var(--premium-blue),var(--premium-accent))] transition-[width] duration-500" style={{ width: `${score}%` }} />
+
+            <div className="grid grid-cols-3 gap-2" aria-label="知识库总量">
+              <HealthMetric value={formatNumber(health.documents.total)} label="DOCUMENTS" />
+              <HealthMetric value={formatNumber(segmentTotal)} label="SEGMENTS" />
+              <HealthMetric value={formatNumber(segmentIndexed)} label="INDEXED" accent />
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              {sourceTypes.length ? sourceTypes.slice(0, 3).map((source) => (
-                <HealthMetric key={source.type} value={`${Math.round(source.percentage)}%`} label={source.label || source.type} />
-              )) : (
-                <HealthMetric value="0%" label="暂无来源类型" />
+
+            <section className="grid gap-2 border-t border-white/10 pt-2.5" aria-label="Segment 索引完成率">
+              <div className="flex items-center justify-between gap-3 text-[11px] font-black">
+                <strong>SEGMENT INDEX COVERAGE</strong>
+                <span className="text-[9px] text-white/55">{coverage.toFixed(1)}%</span>
+              </div>
+              <div className="flex h-2 overflow-hidden rounded-full bg-white/[0.09]">
+                <span
+                  className="block rounded-full bg-[linear-gradient(90deg,var(--premium-blue),var(--premium-accent))] transition-[width] duration-700 ease-out"
+                  style={{ width: `${coverage}%` }}
+                />
+              </div>
+            </section>
+
+            <section className="grid gap-2 border-t border-white/10 pt-2.5" aria-label="文件类型占比">
+              <div className="flex items-center justify-between gap-3 text-[11px] font-black">
+                <strong>FILE TYPE MIX</strong>
+                <span className="text-[9px] text-white/55">{sourceTypes.length} TYPES</span>
+              </div>
+              <div className="flex h-2 overflow-hidden rounded-full bg-white/[0.09]" aria-hidden="true">
+                {sourceTypes.map((source) => (
+                  <span
+                    key={source.type}
+                    className="library-health-type-slice h-full min-w-0"
+                    style={{ backgroundColor: healthSourceColor(source.type), flexGrow: Math.max(0, source.count), flexBasis: 0 }}
+                  />
+                ))}
+              </div>
+              {sourceTypes.length ? (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                  {sourceTypes.map((source) => {
+                    const label = healthSourceLabel(source.type, source.label);
+
+                    return (
+                      <span key={source.type} className="grid min-w-0 grid-cols-[7px_minmax(0,1fr)_auto] items-center gap-2 text-[10px] text-white/55">
+                        <i className="size-[7px] rounded-full" style={{ backgroundColor: healthSourceColor(source.type) }} aria-hidden="true" />
+                        <span className="truncate" title={label}>{label}</span>
+                        <strong className="text-white">{Math.max(0, source.percentage)}%</strong>
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="m-0 text-[10px] text-white/55">暂无文件类型数据</p>
               )}
-            </div>
-          </>
+            </section>
+          </div>
+        ) : null}
+        {selectedKb && !isLoading && !isError && !health ? (
+          <DarkState label="暂无健康状态数据" />
         ) : null}
       </div>
     </section>
   );
 }
 
-function HealthMetric({ value, label }: { value: string; label: string }) {
+const HEALTH_SOURCE_COLORS: Record<string, string> = {
+  PDF: "#bbff66",
+  MARKDOWN: "#3158ff",
+  MD: "#3158ff",
+  IMAGE: "#f4f7ec",
+  TXT: "#aab2ac",
+};
+const HEALTH_FALLBACK_COLORS = ["#ffb366", "#8ec5ff", "#d7a9ff", "#ff8f9c"];
+
+function healthSourceColor(type: string) {
+  const normalizedType = type.toUpperCase();
+  const knownColor = HEALTH_SOURCE_COLORS[normalizedType];
+  if (knownColor) return knownColor;
+
+  const colorIndex = Array.from(normalizedType).reduce((total, character) => total + character.charCodeAt(0), 0);
+  return HEALTH_FALLBACK_COLORS[colorIndex % HEALTH_FALLBACK_COLORS.length];
+}
+
+function healthSourceLabel(type: string, label: string) {
+  const value = (label || type || "OTHER").toUpperCase();
+  return value === "MARKDOWN" ? "MD" : value;
+}
+
+function HealthMetric({ value, label, accent = false }: { value: string; label: string; accent?: boolean }) {
   return (
-    <span className="min-h-12 rounded-[8px] border border-white/10 bg-white/10 p-2 text-[10px] text-white/60">
-      <b className="mb-0.5 block break-words text-sm text-white">{value}</b>
-      {label}
-    </span>
+    <article className="min-w-0 rounded-[8px] border border-white/10 bg-white/[0.055] px-2.5 py-2.5">
+      <strong
+        className={[
+          "mb-1.5 block overflow-hidden text-ellipsis text-[clamp(18px,1.55vw,22px)] font-black leading-[0.9]",
+          accent ? "text-[var(--premium-accent)]" : "text-white",
+        ].join(" ")}
+        title={value}
+      >
+        {value}
+      </strong>
+      <span className="text-[9px] font-black text-white/55">{label}</span>
+    </article>
   );
 }
 

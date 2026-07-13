@@ -105,8 +105,7 @@ export function AskPremiumPage() {
   const [selectedKbIdsValue, setSelectedKbIdsValue] = useState<string[] | null>(initialKbId ? [initialKbId] : null);
   const [selectedAnswerMode, setSelectedAnswerMode] = useState<ConversationAnswerMode>("STRICT");
   const [selectedGenerationConfigId, setSelectedGenerationConfigId] = useState<number | null>(null);
-  const [activeSessionId, setActiveSessionId] = useState("");
-  const initialSessionAppliedRef = useRef(false);
+  const [activeSessionId, setActiveSessionId] = useState(initialSessionId);
   const [conversations, setConversations] = useState<ConversationSession[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
@@ -242,6 +241,11 @@ export function AskPremiumPage() {
   useEffect(() => {
     const handoff = consumeAssetScopeHandoff("ask");
     const restored = readPreviewRestoreState<AskPremiumReturnState>("ask");
+    if (initialTurnId) {
+      clearPreviewRestoreState("ask");
+      return;
+    }
+
     if (!restored?.context.returnState) {
       if (handoff?.sessionId) {
         window.requestAnimationFrame(() => {
@@ -270,7 +274,7 @@ export function AskPremiumPage() {
       if (messageScrollRef.current) messageScrollRef.current.scrollTop = state.messageScrollTop;
       if (listScrollRef.current) listScrollRef.current.scrollTop = state.conversationListScrollTop;
     });
-  }, []);
+  }, [initialTurnId]);
 
   const loadConversations = useCallback(async (cursor?: string | null, append = false) => {
     if (append) setIsLoadingMoreConversations(true);
@@ -394,23 +398,9 @@ export function AskPremiumPage() {
   }, [activeSessionId, hasLoadedActiveMessages]);
 
   useEffect(() => {
+    if (initialTurnId && activeSessionId === initialSessionId) return;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [activeSessionId, activeMessages.length, lastActiveMessageContent]);
-
-  useEffect(() => {
-    if (!initialSessionId || initialSessionAppliedRef.current) return;
-    initialSessionAppliedRef.current = true;
-
-    const frame = window.requestAnimationFrame(() => {
-      setActiveSessionId(initialSessionId);
-      setMessageError(null);
-      setStreamError(null);
-      setOpenMenuSessionId(null);
-      setRenamingSessionId(null);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [initialSessionId]);
+  }, [initialTurnId, initialSessionId, activeSessionId, activeMessages.length, lastActiveMessageContent]);
 
   useEffect(() => {
     if (!initialTurnId || !initialSessionId || activeSessionId !== initialSessionId || isLoadingMessages) return;
@@ -419,7 +409,7 @@ export function AskPremiumPage() {
     const node = document.querySelector(`[data-turn-id="${CSS.escape(initialTurnId)}"]`);
     if (!node) return;
 
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    node.scrollIntoView({ behavior: "auto", block: "center" });
     const frame = window.requestAnimationFrame(() => setHighlightedTurnId(initialTurnId));
     const timer = window.setTimeout(() => setHighlightedTurnId(null), 2500);
 
