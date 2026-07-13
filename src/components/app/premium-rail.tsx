@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, MessageSquare, Moon, Search, Settings, Sun, UserRound } from "lucide-react";
+import { Download, MessageSquare, Search, Settings, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore, type ComponentType, type SVGProps } from "react";
@@ -12,6 +12,28 @@ function LibraryPrototypeIcon(props: SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
       <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z" />
+    </svg>
+  );
+}
+
+function ThemeSwitchGlyph() {
+  return (
+    <svg className="premium-theme-glyph" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+      <mask id="anchr-theme-moon-mask">
+        <rect x="0" y="0" width="100%" height="100%" fill="white" />
+        <circle className="premium-theme-moon-cutout" cx="24" cy="10" r="6" fill="black" />
+      </mask>
+      <circle className="premium-theme-sun" cx="12" cy="12" r="6" mask="url(#anchr-theme-moon-mask)" fill="currentColor" />
+      <g className="premium-theme-beams" stroke="currentColor">
+        <line x1="12" y1="1" x2="12" y2="3" />
+        <line x1="12" y1="21" x2="12" y2="23" />
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+        <line x1="1" y1="12" x2="3" y2="12" />
+        <line x1="21" y1="12" x2="23" y2="12" />
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+      </g>
     </svg>
   );
 }
@@ -98,34 +120,17 @@ export function PremiumRail({
             </span>
           </Link>
         ) : null}
-        <div className="hidden h-20 w-11 shrink-0 grid-rows-2 overflow-hidden rounded-full border border-white/15 bg-white/10 lg:grid">
-          <button
-            type="button"
-            className={[
-              "grid place-items-center transition",
-              theme === "light" ? "bg-white text-blue-600" : "text-white/70 hover:bg-white/10 hover:text-white",
-            ].join(" ")}
-            aria-label="浅色主题"
-            aria-pressed={theme === "light"}
-            title="浅色主题"
-            onClick={() => onThemeChange("light")}
-          >
-            <Sun size={16} strokeWidth={1.9} />
-          </button>
-          <button
-            type="button"
-            className={[
-              "grid place-items-center transition",
-              theme === "dark" ? "bg-white text-blue-600" : "text-white/70 hover:bg-white/10 hover:text-white",
-            ].join(" ")}
-            aria-label="深色主题"
-            aria-pressed={theme === "dark"}
-            title="深色主题"
-            onClick={() => onThemeChange("dark")}
-          >
-            <Moon size={15} strokeWidth={1.9} />
-          </button>
-        </div>
+        <button
+          type="button"
+          className="relative hidden size-11 shrink-0 place-items-center border-0 bg-transparent text-white/72 hover:text-white focus-visible:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#bbff66] lg:grid"
+          data-theme={theme}
+          aria-label={theme === "dark" ? "切换为浅色主题" : "切换为深色主题"}
+          aria-pressed={theme === "dark"}
+          title={theme === "dark" ? "切换为浅色主题" : "切换为深色主题"}
+          onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")}
+        >
+          <ThemeSwitchGlyph />
+        </button>
       </div>
     </aside>
   );

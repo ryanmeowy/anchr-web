@@ -294,7 +294,7 @@ export function PremiumConfigurationGate({
   statuses: PremiumConfigurationStatus[];
 }) {
   return (
-    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
+    <div className={`premium-configuration-state-page grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
         <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
           <Info size={24} />
@@ -316,7 +316,7 @@ export function PremiumConfigurationGate({
 
 export function PremiumSystemConfigurationGate({ theme }: { theme: PremiumThemeMode }) {
   return (
-    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
+    <div className={`premium-configuration-state-page grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
         <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
           <Info size={24} />
@@ -386,7 +386,7 @@ export function PremiumIndexGate({
               : "索引尚未就绪。";
 
   return (
-    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
+    <div className={`premium-configuration-state-page grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
         <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
           <Info size={24} />
@@ -423,7 +423,7 @@ function PremiumIndexStatusError({
   onRetry: () => void;
 }) {
   return (
-    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
+    <div className={`premium-configuration-state-page grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
         <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
           <Info size={24} />
@@ -452,7 +452,7 @@ function PremiumConfigurationState({
   description: string;
 }) {
   return (
-    <div className={`grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
+    <div className={`premium-configuration-state-page grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface grid w-full max-w-[420px] place-items-center rounded-[8px] p-6 text-center">
         <div className="mb-4 grid size-12 place-items-center rounded-[8px] bg-[#111315] text-white dark:bg-white dark:text-[#111315]">
           {icon}
