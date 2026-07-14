@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
-  Database,
   Edit3,
   Folder,
   Loader2,
@@ -89,6 +88,7 @@ type AskPremiumReturnState = {
 
 const CONVERSATION_PAGE_SIZE = 50;
 const HISTORY_LIMIT = 100;
+const ASK_TRACE_HINT_SEEN_KEY = "anchr.ask.trace-hint-seen";
 const ANSWER_MODES: Array<{ value: ConversationAnswerMode; label: string; detail: string }> = [
   { value: "STRICT", label: "严格回答", detail: "证据门槛最高，证据不足时拒答" },
   { value: "SUMMARY", label: "摘要回答", detail: "更短输出，保留核心证据" },
@@ -126,7 +126,8 @@ export function AskPremiumPage() {
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([]);
-  const [traceCollapsed, setTraceCollapsed] = useState(false);
+  const [traceCollapsed, setTraceCollapsed] = useState(true);
+  const [traceHintVisible, setTraceHintVisible] = useState(false);
   const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
   const [assetNameCache, setAssetNameCache] = useState<Record<string, string>>({});
   const [scopeNotice, setScopeNotice] = useState<string | null>(null);
@@ -157,6 +158,25 @@ export function AskPremiumPage() {
     });
 
     return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        if (window.localStorage.getItem(ASK_TRACE_HINT_SEEN_KEY) !== "1") {
+          window.localStorage.setItem(ASK_TRACE_HINT_SEEN_KEY, "1");
+          setTraceHintVisible(true);
+        }
+      } catch {
+        setTraceHintVisible(true);
+      }
+    });
+
+    const timer = window.setTimeout(() => setTraceHintVisible(false), 10_000);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -859,7 +879,7 @@ export function AskPremiumPage() {
           </aside>
 
           <main className="ask-premium-main flex min-h-0 min-w-0 flex-col bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)]">
-            <header className="ask-premium-hero relative grid min-h-[112px] items-center gap-3 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:px-5">
+            <header className="ask-premium-hero relative grid min-h-[112px] items-center gap-3 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05]">
                 ASK
               </div>
@@ -869,10 +889,6 @@ export function AskPremiumPage() {
                   ASK / {selectedAnswerMode} ANSWER MODE
                 </p>
                 <h1 className="max-w-[720px] text-[clamp(28px,3.2vw,42px)] font-black leading-none">Anchor Your Answer</h1>
-              </div>
-              <div className="ask-premium-scope-chip relative z-10 inline-flex h-10 max-w-full items-center gap-2.5 rounded-full border border-black/10 bg-white/80 px-3.5 text-xs font-bold text-slate-700 shadow-[0_10px_24px_rgba(17,19,21,0.07)]">
-                <Database size={15} />
-                <span className="truncate">{selectedKbLabel} · {selectedAnswerModeLabel}</span>
               </div>
             </header>
 
@@ -1046,7 +1062,11 @@ export function AskPremiumPage() {
             citationCount={citationCount}
             traceEvents={traceEvents}
             collapsed={traceCollapsed}
-            onToggle={() => setTraceCollapsed((value) => !value)}
+            showHint={traceHintVisible}
+            onToggle={() => {
+              setTraceHintVisible(false);
+              setTraceCollapsed((value) => !value);
+            }}
           />
         </div>
       </div>
@@ -1061,6 +1081,7 @@ function TracePanel({
   citationCount,
   traceEvents,
   collapsed,
+  showHint,
   onToggle,
 }: {
   answerMode: ConversationAnswerMode;
@@ -1069,6 +1090,7 @@ function TracePanel({
   citationCount: number;
   traceEvents: TraceEvent[];
   collapsed: boolean;
+  showHint: boolean;
   onToggle: () => void;
 }) {
   const answerModeProgress = {
@@ -1093,6 +1115,12 @@ function TracePanel({
       >
         {collapsed ? <ChevronLeft size={17} /> : <ChevronRight size={17} />}
       </button>
+      {collapsed && showHint ? (
+        <div className="ask-premium-trace-hint" role="status">
+          <span aria-hidden="true" />
+          点击这里展开 Session Context
+        </div>
+      ) : null}
 
       <div className="ask-premium-trace-content">
         <p className="ask-premium-trace-heading flex items-center justify-between text-xs font-black text-white/60">
@@ -1465,7 +1493,7 @@ function PremiumChatBubble({
         <div className="relative max-w-[680px]">
           {editing ? (
             <form
-              className="ask-premium-user-editor grid gap-3 rounded-[8px] px-3 py-2.5 text-[14px] font-semibold leading-6 text-[#111315]"
+              className="ask-premium-user-editor grid gap-3 rounded-[8px] px-3 py-2.5 text-[14px] font-normal leading-6 text-[#111315]"
               onSubmit={(event) => {
                 event.preventDefault();
                 submitEdit();
@@ -1486,7 +1514,7 @@ function PremiumChatBubble({
                     submitEdit();
                   }
                 }}
-                className="ask-premium-user-edit-textarea min-h-[76px] w-full resize-y border-0 bg-transparent p-0 text-[14px] font-semibold leading-6 text-[#111315] outline-none"
+                className="ask-premium-user-edit-textarea min-h-[76px] w-full resize-y border-0 bg-transparent p-0 text-[14px] font-normal leading-6 text-[#111315] outline-none"
               />
               <div className="flex justify-end gap-2">
                 <button
@@ -1507,7 +1535,7 @@ function PremiumChatBubble({
             </form>
           ) : (
             <>
-              <div className="ask-premium-user-text max-w-[680px] whitespace-pre-wrap break-words text-left text-[14px] font-semibold leading-6 text-[#111315]">
+              <div className="ask-premium-user-text max-w-[680px] whitespace-pre-wrap break-words text-left text-[14px] font-normal leading-6 text-[#111315]">
                 {message.content}
               </div>
               <div className="ask-premium-user-actions" aria-label="消息操作">
@@ -1609,7 +1637,7 @@ function PremiumChatBubble({
                 key={`${citation.assetId ?? citation.fileName ?? index}-${index}`}
                 onClick={() => onPreviewCitation(message, citation, index, question)}
                 disabled={!citation.chunks?.length}
-                className="ask-premium-citation inline-flex min-h-[30px] items-center gap-2 rounded-full border border-black/10 bg-[#f7f7f2]/85 px-2.5 text-[11px] font-black text-[#111315] transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
+                className="ask-premium-citation inline-flex min-h-[30px] items-center gap-2 rounded-full border border-black/10 bg-[#f7f7f2]/85 px-2.5 text-[11px] font-normal text-[#111315] transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
                 title={`[${citation.citationIndex ?? index + 1}] ${citation.fileName ?? "引用来源"}${citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}`}
               >
                 <span className="min-w-0 truncate">
