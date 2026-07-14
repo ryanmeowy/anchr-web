@@ -1803,7 +1803,7 @@ function CreateKnowledgeBaseCard({
           <Plus size={24} />
         </span>
         <strong className="block text-base font-black">新建知识库</strong>
-        <span className="mx-auto mt-1.5 block max-w-[330px] text-xs leading-5 text-[var(--premium-muted)] dark:text-white/55">上传文件或连接数据源，让新的业务上下文进入可检索、可引用、可问答的资产流。</span>
+        <span className="mx-auto mt-1.5 block max-w-[330px] text-xs leading-5 text-[var(--premium-muted)] dark:text-white/55">上传文件，让新的业务上下文进入可检索、可引用、可问答的资产流。</span>
       </span>
     </button>
   );
@@ -2060,17 +2060,17 @@ function QuestionItem({ item, index }: { item: RecentQuestion; index: number }) 
   return (
     <Link
       href={href}
-      className="library-activity-item group grid min-h-16 grid-cols-[28px_minmax(0,1fr)_20px] items-center gap-2 rounded-[8px] border border-white/10 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]"
+      className="library-activity-item library-question-item group grid min-h-[76px] grid-cols-[36px_minmax(0,1fr)_28px] items-center gap-3 rounded-[8px] border border-white/10 px-3 py-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]"
     >
-      <span className="library-activity-index grid size-7 place-items-center rounded-full text-[10px] font-black" aria-hidden="true">
+      <span className="library-activity-index grid size-9 shrink-0 place-items-center rounded-full text-[10px] font-black" aria-hidden="true">
         {String(index + 1).padStart(2, "0")}
       </span>
-      <span className="grid min-w-0 gap-1">
-        <strong className="line-clamp-2 break-words text-xs leading-4">{item.question || "未命名问题"}</strong>
-        <span className="line-clamp-1 text-[10px] leading-4 text-white/55">{knowledgeBases}</span>
+      <span className="grid min-w-0 overflow-hidden">
+        <strong className="block truncate text-xs leading-5" title={item.question || "未命名问题"}>{item.question || "未命名问题"}</strong>
+        <span className="block truncate text-[10px] leading-5 text-white/55" title={knowledgeBases}>{knowledgeBases}</span>
       </span>
-      <span className="library-activity-arrow grid size-5 place-items-center rounded-full border border-white/10 text-white/55" aria-hidden="true">
-        <ArrowUpRight size={12} />
+      <span className="library-activity-arrow grid size-7 shrink-0 place-items-center rounded-full border border-white/10 text-white/55" aria-hidden="true">
+        <ArrowUpRight size={14} />
       </span>
     </Link>
   );

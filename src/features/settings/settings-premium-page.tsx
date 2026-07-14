@@ -611,7 +611,7 @@ export function SettingsPremiumPage() {
       <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,var(--premium-glow-primary),transparent_28rem),radial-gradient(circle_at_14%_92%,var(--premium-glow-secondary),transparent_30rem)]" />
 
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
+        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
 
           <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
@@ -1891,6 +1891,7 @@ function maskToken(t: string): string {
 function SecurityPanel() {
   const storedToken = useAccessTokenSnapshot();
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
+  const [savingToken, setSavingToken] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const token = tokenDraft ?? storedToken ?? "";
@@ -1930,21 +1931,47 @@ function SecurityPanel() {
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => {
+          disabled={savingToken}
+          onClick={async () => {
+            const normalizedToken = token.trim();
+            setSavingToken(true);
             try {
-              saveAccessToken(token);
+              if (!normalizedToken) {
+                clearAccessToken();
+                setTokenDraft("");
+                setSaveError(null);
+                setSaved(true);
+                window.setTimeout(() => setSaved(false), 2000);
+                return;
+              }
+
+              const validation = await apiClient.validateAccessToken(normalizedToken);
+              if (!validation.valid || validation.role === "GUEST") {
+                clearAccessToken();
+                throw new Error(validation.role === "GUEST" ? "访客 Token 不会保存" : "Token 无效");
+              }
+              if (validation.role !== "ADMIN" && validation.role !== "USER") {
+                clearAccessToken();
+                throw new Error("Token 角色无效");
+              }
+
+              saveAccessToken(normalizedToken, validation.role);
               setTokenDraft(null);
               setSaveError(null);
               setSaved(true);
               window.setTimeout(() => setSaved(false), 2000);
-            } catch (error) {
+            } catch {
+              clearAccessToken();
               setSaved(false);
-              setSaveError(getErrorMessage(error, "请稍后重试"));
+              setSaveError(null);
+            } finally {
+              setSavingToken(false);
             }
           }}
           className={BUTTON_PRIMARY_CLASS}
         >
-          <span className={ACTION_BUTTON_LABEL_CLASS}>保存</span>
+          {savingToken ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
+          <span className={ACTION_BUTTON_LABEL_CLASS}>{savingToken ? "校验中" : "保存"}</span>
         </button>
         <button
           type="button"

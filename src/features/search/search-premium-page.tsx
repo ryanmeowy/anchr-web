@@ -123,10 +123,9 @@ type SearchPremiumReturnState = {
   resultsScrollTop: number;
 };
 
-type ResultGroup = {
-  kbId: string;
-  title: string;
-  items: SearchResult[];
+type DisplayResult = {
+  item: SearchResult;
+  knowledgeBaseName: string;
 };
 
 export function SearchPremiumPage() {
@@ -463,8 +462,8 @@ export function SearchPremiumPage() {
     () => normalizeSearchCitations(searchData?.answer?.citations),
     [searchData?.answer?.citations],
   );
-  const resultGroups = useMemo(
-    () => groupResults(searchData?.items ?? [], kbById),
+  const displayResults = useMemo(
+    () => buildDisplayResults(searchData?.items ?? [], kbById),
     [kbById, searchData?.items],
   );
   const insight = useMemo(
@@ -504,7 +503,7 @@ export function SearchPremiumPage() {
       />
 
       <div className="relative min-h-screen p-0 lg:p-6">
-        <div className="search-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
+        <div className="search-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
 
           <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
@@ -619,7 +618,7 @@ export function SearchPremiumPage() {
                     ) : (
                       <ResultsPanel
                         ref={resultsScrollRef}
-                        groups={resultGroups}
+                        results={displayResults}
                         hasMore={Boolean(searchData?.nextCursor)}
                         isAppending={isAppending}
                         onLoadMore={handleLoadMore}
@@ -852,24 +851,20 @@ const AnswerPanel = function AnswerPanel({
 };
 
 const ResultsPanel = function ResultsPanel({
-  groups,
+  results,
   hasMore,
   isAppending,
   onLoadMore,
   onPreview,
   ref,
 }: {
-  groups: ResultGroup[];
+  results: DisplayResult[];
   hasMore: boolean;
   isAppending: boolean;
   onLoadMore: () => void;
   onPreview: (item: SearchResult) => void;
   ref: React.Ref<HTMLDivElement>;
 }) {
-  const results = groups.flatMap((group) =>
-    group.items.map((item) => ({ item, knowledgeBaseName: group.title })),
-  );
-
   return (
     <div ref={ref} className="search-premium-results-scroll">
       {results.length ? (
@@ -1788,7 +1783,7 @@ function SearchSidePanelHeader({
   count?: number;
 }) {
   return (
-    <header className="search-premium-side-header relative z-10 flex min-w-0 items-center justify-between gap-3 border-b border-white/10 pb-3">
+    <header className="search-premium-side-header relative z-10 flex min-h-[49px] min-w-0 items-center justify-between gap-3 border-b border-white/10 pb-3">
       <span className="flex min-w-0 items-center gap-2">
         <span className="search-premium-side-header-icon grid size-6 shrink-0 place-items-center rounded-full" aria-hidden="true">{icon}</span>
         <h2 className="truncate text-xs font-black leading-none">{label}</h2>
@@ -2051,19 +2046,11 @@ function renderAnswerText(
   });
 }
 
-function groupResults(results: SearchResult[], kbById: Map<string, KnowledgeBase>): ResultGroup[] {
-  const groups = new Map<string, ResultGroup>();
-  results.forEach((item) => {
-    const kbId = item.kbId ?? "unknown";
-    const group = groups.get(kbId) ?? {
-      kbId,
-      title: kbById.get(kbId)?.name ?? "知识库",
-      items: [],
-    };
-    group.items.push(item);
-    groups.set(kbId, group);
-  });
-  return Array.from(groups.values());
+function buildDisplayResults(results: SearchResult[], kbById: Map<string, KnowledgeBase>): DisplayResult[] {
+  return results.map((item) => ({
+    item,
+    knowledgeBaseName: item.kbId ? kbById.get(item.kbId)?.name ?? "知识库" : "知识库",
+  }));
 }
 
 function searchResultToCitation(item: SearchResult): PreviewCitation {

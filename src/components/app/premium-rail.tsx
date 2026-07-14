@@ -1,10 +1,17 @@
 "use client";
 
-import { Download, MessageSquare, Search, Settings, UserRound } from "lucide-react";
+import { CircleUserRound, Download, MessageSquare, Search, Settings, ShieldCheck, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore, type ComponentType, type SVGProps } from "react";
-import { ACCESS_TOKEN_CHANGED_EVENT, getConfiguredAccessToken } from "@/lib/api-client";
+import { useEffect, useSyncExternalStore, type ComponentType, type SVGProps } from "react";
+import {
+  ACCESS_TOKEN_CHANGED_EVENT,
+  apiClient,
+  clearAccessToken,
+  getConfiguredAccessToken,
+  getConfiguredAccessTokenRole,
+  saveAccessToken,
+} from "@/lib/api-client";
 import type { PremiumThemeMode } from "@/lib/premium-theme";
 
 function LibraryPrototypeIcon(props: SVGProps<SVGSVGElement>) {
@@ -60,6 +67,10 @@ function getServerConfiguredAccessToken() {
   return null;
 }
 
+function getServerAccessTokenRole() {
+  return "GUEST" as const;
+}
+
 export function PremiumRail({
   theme,
   onThemeChange,
@@ -73,11 +84,44 @@ export function PremiumRail({
     getConfiguredAccessToken,
     getServerConfiguredAccessToken,
   );
-  const isGuest = configuredAccessToken === "";
+  const configuredRole = useSyncExternalStore(
+    subscribeConfiguredAccessToken,
+    getConfiguredAccessTokenRole,
+    getServerAccessTokenRole,
+  );
+  const userStatus = configuredRole === "ADMIN" ? "admin" : configuredRole === "USER" ? "user" : "guest";
+  const statusConfig = {
+    guest: { label: "访客", detail: "浏览权限", icon: UserRound, tone: "guest" },
+    admin: { label: "管理员", detail: "所有权限", icon: ShieldCheck, tone: "admin" },
+    user: { label: "用户", detail: "部分权限", icon: CircleUserRound, tone: "user" },
+  }[userStatus];
+  const StatusIcon = statusConfig.icon;
+
+  useEffect(() => {
+    if (!configuredAccessToken) return;
+    let cancelled = false;
+
+    void apiClient.validateAccessToken(configuredAccessToken)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.valid && result.role !== "GUEST") {
+          saveAccessToken(configuredAccessToken, result.role);
+          return;
+        }
+        clearAccessToken();
+      })
+      .catch(() => {
+        if (!cancelled) clearAccessToken();
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [configuredAccessToken]);
 
   return (
-    <aside className="flex items-center justify-between gap-3 overflow-x-auto border-b border-white/10 bg-[#111315] px-4 py-3 text-white lg:w-[72px] lg:flex-col lg:justify-start lg:overflow-visible lg:border-b-0 lg:border-r lg:px-3 lg:py-4" aria-label="主导航">
-      <Link href="/ask" className="grid size-12 shrink-0 place-items-center rounded-[8px] border border-white/20 bg-white text-xl font-black leading-none" aria-label="Anchr 首页">
+    <aside className="premium-rail flex items-center justify-between gap-3 overflow-x-auto border-b border-white/10 bg-[#111315] px-4 py-3 text-white lg:w-[60px] lg:flex-col lg:justify-start lg:overflow-visible lg:border-b-0 lg:border-r lg:px-2 lg:py-3" aria-label="主导航">
+      <Link href="/ask" className="grid size-10 shrink-0 place-items-center rounded-[8px] border border-white/20 bg-white text-lg font-black leading-none" aria-label="Anchr 首页">
         <span style={{ color: "#111315" }}>A</span>
       </Link>
       <nav className="flex gap-2 lg:mt-3 lg:grid lg:gap-2.5" aria-label="工作区">
@@ -90,39 +134,23 @@ export function PremiumRail({
               key={item.href}
               href={item.href}
               className={[
-                "relative grid size-11 shrink-0 place-items-center rounded-[8px] transition hover:-translate-y-0.5 hover:bg-white/10",
+                "relative grid size-10 shrink-0 place-items-center rounded-[8px] transition hover:-translate-y-0.5 hover:bg-white/10",
                 active ? "bg-white/10 text-white" : "text-white/65 hover:text-white",
               ].join(" ")}
               aria-label={item.label}
               title={item.label}
               aria-current={active ? "page" : undefined}
             >
-              {active ? <span className="absolute -left-3 h-6 w-1 rounded-full bg-[#bbff66]" /> : null}
+              {active ? <span className="absolute -left-2 h-6 w-1 rounded-full bg-[#bbff66]" /> : null}
               <Icon width={20} height={20} strokeWidth={1.9} />
             </Link>
           );
         })}
       </nav>
       <div className="ml-auto flex shrink-0 items-center gap-2 lg:mt-auto lg:ml-0 lg:grid">
-        {isGuest ? (
-          <Link
-            href="/settings"
-            className="group relative flex min-h-9 items-center gap-1.5 rounded-full border border-[#c9ff50]/30 bg-[#c9ff50]/10 px-2.5 text-[10px] font-black text-[#dfff9d] transition hover:bg-[#c9ff50]/20 lg:min-h-12 lg:w-11 lg:flex-col lg:justify-center lg:gap-0 lg:rounded-[8px] lg:px-1"
-            aria-label="访客模式，操作受限。前往设置配置 Token"
-            title="访客模式，操作受限"
-          >
-            <UserRound size={14} strokeWidth={2} aria-hidden="true" />
-            <span className="whitespace-nowrap lg:hidden">访客 · 部分操作受限</span>
-            <span className="hidden leading-3 lg:block">访客</span>
-            <span className="hidden text-[8px] leading-3 text-white/55 lg:block">受限</span>
-            <span className="pointer-events-none absolute bottom-full right-0 z-[120] mb-2 hidden whitespace-nowrap rounded-[6px] border border-white/15 bg-[#25282b] px-2.5 py-2 text-[10px] font-bold text-white shadow-xl group-hover:block group-focus-visible:block lg:bottom-auto lg:left-full lg:right-auto lg:ml-2">
-              访客模式，操作受限
-            </span>
-          </Link>
-        ) : null}
         <button
           type="button"
-          className="relative hidden size-11 shrink-0 place-items-center border-0 bg-transparent text-white/72 hover:text-white focus-visible:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#bbff66] lg:grid"
+          className="relative hidden size-10 shrink-0 place-items-center border-0 bg-transparent text-white/72 hover:text-white focus-visible:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#bbff66] lg:grid"
           data-theme={theme}
           aria-label={theme === "dark" ? "切换为浅色主题" : "切换为深色主题"}
           aria-pressed={theme === "dark"}
@@ -131,6 +159,19 @@ export function PremiumRail({
         >
           <ThemeSwitchGlyph />
         </button>
+        <Link
+          href="/settings"
+          className={`premium-user-status is-${statusConfig.tone} group relative flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-[10px] font-black transition lg:min-h-11 lg:w-10 lg:flex-col lg:justify-center lg:gap-0 lg:rounded-[8px] lg:px-1`}
+          aria-label={`${statusConfig.label}，${statusConfig.detail}。前往设置`}
+          title={`${statusConfig.label} · ${statusConfig.detail}`}
+        >
+          <StatusIcon size={15} strokeWidth={2} aria-hidden="true" />
+          <span className="whitespace-nowrap lg:hidden">{statusConfig.label} · {statusConfig.detail}</span>
+          <span className="hidden text-[9px] leading-3 lg:block">{statusConfig.label}</span>
+          <span className="pointer-events-none absolute bottom-full right-0 z-[120] mb-2 hidden whitespace-nowrap rounded-[6px] border border-white/15 bg-[#25282b] px-2.5 py-2 text-[10px] font-bold text-white shadow-xl group-hover:block group-focus-visible:block lg:bottom-auto lg:left-full lg:right-auto lg:ml-2">
+            {statusConfig.label} · {statusConfig.detail}
+          </span>
+        </Link>
       </div>
     </aside>
   );

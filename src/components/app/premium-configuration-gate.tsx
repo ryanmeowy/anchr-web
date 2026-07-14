@@ -249,7 +249,7 @@ export function PremiumConfigurationShell({
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
         <div
           className={[
-            "ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]",
+            "ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]",
             scrollContent ? "lg:h-[calc(100vh-48px)] lg:min-h-0" : "lg:min-h-[calc(100vh-48px)]",
           ].join(" ")}
         >

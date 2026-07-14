@@ -42,9 +42,14 @@ import type {
 } from "./types";
 
 export const ACCESS_TOKEN_STORAGE_KEY = "anchr.accessToken";
+export const ACCESS_TOKEN_ROLE_STORAGE_KEY = "anchr.accessTokenRole";
 const TOKEN_KEY = ACCESS_TOKEN_STORAGE_KEY;
+const TOKEN_ROLE_KEY = ACCESS_TOKEN_ROLE_STORAGE_KEY;
 const DEFAULT_GUEST_ACCESS_TOKEN = "xIu-ZTIfGSjRcWZpw23Le0c7SwAv1sjI";
 export const ACCESS_TOKEN_CHANGED_EVENT = "anchr:access-token-changed";
+
+export type AccessTokenRole = "ADMIN" | "USER" | "GUEST";
+export type TokenValidationResult = { valid: boolean; role: AccessTokenRole };
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
@@ -103,18 +108,31 @@ export function getAccessToken() {
   return getConfiguredAccessToken() || DEFAULT_GUEST_ACCESS_TOKEN;
 }
 
-export function saveAccessToken(token: string) {
+export function getConfiguredAccessTokenRole(): AccessTokenRole {
+  if (typeof window === "undefined") return "GUEST";
+  const role = window.localStorage.getItem(TOKEN_ROLE_KEY)?.trim().toUpperCase();
+  return role === "ADMIN" || role === "USER" ? role : "GUEST";
+}
+
+export function saveAccessToken(token: string, role: AccessTokenRole) {
   const normalizedToken = token.trim();
-  if (!normalizedToken || isBuiltinGuestAccessToken(normalizedToken)) {
+  if (!normalizedToken || isBuiltinGuestAccessToken(normalizedToken) || role === "GUEST") {
     clearAccessToken();
     return;
   }
+  const currentToken = window.localStorage.getItem(TOKEN_KEY)?.trim() ?? "";
+  const currentRole = window.localStorage.getItem(TOKEN_ROLE_KEY)?.trim().toUpperCase() ?? "";
+  if (currentToken === normalizedToken && currentRole === role) return;
+
   window.localStorage.setItem(TOKEN_KEY, normalizedToken);
+  window.localStorage.setItem(TOKEN_ROLE_KEY, role);
   emitAccessTokenChanged();
 }
 
 export function clearAccessToken() {
+  if (!window.localStorage.getItem(TOKEN_KEY) && !window.localStorage.getItem(TOKEN_ROLE_KEY)) return;
   window.localStorage.removeItem(TOKEN_KEY);
+  window.localStorage.removeItem(TOKEN_ROLE_KEY);
   emitAccessTokenChanged();
 }
 
@@ -246,6 +264,8 @@ function consumeSseChunk(chunk: string, callbacks: StreamMessageCallbacks) {
 }
 
 export const apiClient = {
+  validateAccessToken: (token: string) =>
+    request<TokenValidationResult>("/api/v1/auth/validate-token", { token }),
   recentQuestions: (limit = 10, cursor?: string | null) =>
     request<RecentQuestionList>(`/api/v1/activity/recent-questions?${activityQuery(limit, cursor)}`),
   recentCitations: (limit = 10, cursor?: string | null) =>
