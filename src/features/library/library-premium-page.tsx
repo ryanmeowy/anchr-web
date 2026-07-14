@@ -1803,7 +1803,7 @@ function CreateKnowledgeBaseCard({
           <Plus size={24} />
         </span>
         <strong className="block text-base font-black">新建知识库</strong>
-        <span className="mx-auto mt-1.5 block max-w-[330px] text-xs leading-5 text-[var(--premium-muted)] dark:text-white/55">上传文件或连接数据源，让新的业务上下文进入可检索、可引用、可问答的资产流。</span>
+        <span className="mx-auto mt-1.5 block max-w-[330px] text-xs leading-5 text-[var(--premium-muted)] dark:text-white/55">上传文件，让新的业务上下文进入可检索、可引用、可问答的资产流。</span>
       </span>
     </button>
   );
