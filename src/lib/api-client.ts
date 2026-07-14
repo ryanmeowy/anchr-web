@@ -361,19 +361,19 @@ export const apiClient = {
   searchKnowledgeBase: (body: SearchRequest) =>
     request<SearchPage>("/api/v1/search/kb", { method: "POST", body }),
   listConversations: (limit = 50, cursor?: string | null) =>
-    request<ConversationSessionList>(`/api/conversations?${conversationListQuery(limit, cursor)}`),
+    request<ConversationSessionList>(`/api/v1/conversations?${conversationListQuery(limit, cursor)}`),
   createConversation: (body: { title?: string | null; kbIds?: string[] }) =>
-    request<ConversationSession>("/api/conversations", {
+    request<ConversationSession>("/api/v1/conversations", {
       method: "POST",
       body,
     }),
   renameConversation: (sessionId: string, body: { title: string }) =>
-    request<ConversationSession>(`/api/conversations/${encodeURIComponent(sessionId)}`, {
+    request<ConversationSession>(`/api/v1/conversations/${encodeURIComponent(sessionId)}`, {
       method: "PATCH",
       body,
     }),
   deleteConversation: (sessionId: string) =>
-    request<null>(`/api/conversations/${encodeURIComponent(sessionId)}`, {
+    request<null>(`/api/v1/conversations/${encodeURIComponent(sessionId)}`, {
       method: "DELETE",
     }),
   sendMessageStream: async (
@@ -384,7 +384,7 @@ export const apiClient = {
   ) => {
     const basePath = process.env.NEXT_PUBLIC_API_BASE_PATH ?? "/backend";
     const token = getAccessToken();
-    const response = await fetch(`${basePath}/api/conversations/${encodeURIComponent(sessionId)}/messages/stream`, {
+    const response = await fetch(`${basePath}/api/v1/conversations/${encodeURIComponent(sessionId)}/messages/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -427,7 +427,7 @@ export const apiClient = {
   },
   listConversationMessages: (sessionId: string, limit = 100, beforeTurnId?: string | null) =>
     request<ConversationMessageList>(
-      `/api/conversations/${encodeURIComponent(sessionId)}/messages?${conversationMessagesQuery(limit, beforeTurnId)}`,
+      `/api/v1/conversations/${encodeURIComponent(sessionId)}/messages?${conversationMessagesQuery(limit, beforeTurnId)}`,
     ),
   previewSegment: (segmentId: string, body: PreviewRequest = {}) =>
     request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}`, {
