@@ -86,6 +86,42 @@ button[data-theme="dark"] .premium-theme-moon-cutout {
   transition-duration: 500ms;
 }
 
+.premium-user-status {
+  border: 1px solid rgba(86, 211, 255, 0.34);
+  background: rgba(86, 211, 255, 0.12);
+  color: #a8efff;
+}
+
+.premium-user-status:hover {
+  background: rgba(86, 211, 255, 0.22);
+  color: #d9f8ff;
+}
+
+.premium-user-status.is-guest {
+  border-color: rgba(201, 255, 80, 0.3);
+  background: rgba(201, 255, 80, 0.1);
+  color: #dfff9d;
+}
+
+.premium-user-status.is-guest:hover {
+  background: rgba(201, 255, 80, 0.2);
+}
+
+.premium-user-status.is-admin {
+  border-color: rgba(91, 123, 255, 0.4);
+  background: rgba(49, 88, 255, 0.16);
+  color: #c7d1ff;
+}
+
+.premium-user-status.is-admin:hover {
+  background: rgba(49, 88, 255, 0.28);
+}
+
+.premium-user-status:focus-visible {
+  outline: 2px solid #bbff66;
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .premium-theme-sun,
   .premium-theme-beams,
@@ -644,7 +680,7 @@ a {
   }
 
   .ask-premium-shell[data-trace-collapsed="true"] {
-    grid-template-columns: 72px 300px minmax(0, 1fr) 48px;
+    grid-template-columns: 60px 300px minmax(0, 1fr) 48px;
   }
 }
 

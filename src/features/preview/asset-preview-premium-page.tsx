@@ -62,7 +62,7 @@ export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
       />
 
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[72px_minmax(0,1fr)] lg:rounded-[8px]">
+        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
 
           <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">

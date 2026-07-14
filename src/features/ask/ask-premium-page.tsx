@@ -799,7 +799,7 @@ export function AskPremiumPage() {
 
       <div className="relative min-h-screen p-0 lg:p-6">
         <div
-          className="ask-premium-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[72px_300px_minmax(0,1fr)_350px] lg:grid-rows-none lg:rounded-[8px]"
+          className="ask-premium-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[60px_300px_minmax(0,1fr)_350px] lg:grid-rows-none lg:rounded-[8px]"
           data-trace-collapsed={traceCollapsed}
         >
           <PremiumRail theme={theme} onThemeChange={setTheme} />
