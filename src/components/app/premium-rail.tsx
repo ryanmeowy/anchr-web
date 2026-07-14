@@ -159,10 +159,9 @@ export function PremiumRail({
         >
           <ThemeSwitchGlyph />
         </button>
-        <Link
-          href="/settings"
+        <div
           className={`premium-user-status is-${statusConfig.tone} group relative flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-[10px] font-black transition lg:min-h-11 lg:w-10 lg:flex-col lg:justify-center lg:gap-0 lg:rounded-[8px] lg:px-1`}
-          aria-label={`${statusConfig.label}，${statusConfig.detail}。前往设置`}
+          aria-label={`${statusConfig.label}，${statusConfig.detail}`}
           title={`${statusConfig.label} · ${statusConfig.detail}`}
         >
           <StatusIcon size={15} strokeWidth={2} aria-hidden="true" />
@@ -171,7 +170,7 @@ export function PremiumRail({
           <span className="pointer-events-none absolute bottom-full right-0 z-[120] mb-2 hidden whitespace-nowrap rounded-[6px] border border-white/15 bg-[#25282b] px-2.5 py-2 text-[10px] font-bold text-white shadow-xl group-hover:block group-focus-visible:block lg:bottom-auto lg:left-full lg:right-auto lg:ml-2">
             {statusConfig.label} · {statusConfig.detail}
           </span>
-        </Link>
+        </div>
       </div>
     </aside>
   );

@@ -1097,7 +1097,11 @@ a {
   color: var(--premium-ink);
 }
 
-.ask-premium-page[data-premium-theme="dark"] .ask-premium-conversation-more,
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-conversation-more {
+  background: transparent;
+  color: rgba(244, 247, 236, 0.72);
+}
+
 .ask-premium-page[data-premium-theme="dark"] .ask-premium-rename {
   background: var(--premium-panel);
   color: rgba(244, 247, 236, 0.72);
@@ -1815,6 +1819,15 @@ a {
     0 9px 24px rgba(49, 88, 255, 0.13);
 }
 
+.preview-pdf-canvas,
+.preview-pdf-loading,
+.preview-pdf-thumbnail-frame {
+  transition:
+    filter 220ms ease,
+    background 220ms ease,
+    color 220ms ease;
+}
+
 .preview-premium-page[data-premium-theme="dark"] {
   --premium-panel: rgba(13, 18, 15, 0.96);
   --premium-panel-strong: #151b17;
@@ -1847,6 +1860,27 @@ a {
   box-shadow:
     0 0 0 3px rgba(187, 255, 102, 0.07),
     0 9px 26px rgba(187, 255, 102, 0.12);
+}
+
+.preview-premium-page[data-premium-theme="dark"] .preview-pdf-canvas {
+  filter: brightness(0.82) contrast(0.92) sepia(0.1) saturate(0.84);
+}
+
+.preview-premium-page[data-premium-theme="dark"] .preview-pdf-loading {
+  background: rgba(205, 203, 190, 0.88);
+  color: #586057;
+}
+
+.preview-premium-page[data-premium-theme="dark"] .preview-pdf-thumbnail-frame {
+  background: #d2d0c7;
+}
+
+.preview-premium-page[data-premium-theme="dark"] .preview-pdf-thumbnail-frame:hover,
+.preview-premium-page[data-premium-theme="dark"] .preview-pdf-thumbnail-frame[data-active="true"] {
+  border-color: rgba(187, 255, 102, 0.72);
+  box-shadow:
+    0 0 0 3px rgba(187, 255, 102, 0.08),
+    0 16px 38px rgba(187, 255, 102, 0.14);
 }
 
 .preview-premium-page[data-premium-theme="dark"] .preview-premium-main {
