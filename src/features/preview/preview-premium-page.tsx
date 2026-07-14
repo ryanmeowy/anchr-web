@@ -903,7 +903,7 @@ function CitationSidebar({
       <div className="grid min-w-0 content-start gap-3.5 max-[1240px]:grid-cols-2 max-[860px]:grid-cols-1">
       <SidePanel>
         <PanelLabel label="WHY THIS CITATION" value={from === "library" ? undefined : `#${citationIndex}`} />
-        <div className="mt-3.5 min-w-0 rounded-[8px] border border-amber-500/35 bg-amber-400/10 p-3.5 text-[13px] leading-[1.7] text-[var(--premium-ink-soft)] [overflow-wrap:anywhere]">
+        <div className="mt-3.5 min-w-0 rounded-[8px] p-3.5 text-[13px] leading-[1.7] text-[var(--premium-ink-soft)] [overflow-wrap:anywhere]">
           <b className="text-[var(--premium-ink)] [overflow-wrap:anywhere]">
             {reason}
           </b>
@@ -1747,7 +1747,7 @@ function AssetCitationIndexRow({
             className={[
               "inline-flex size-[38px] shrink-0 items-center justify-center rounded-[9px] border text-[14px] font-black transition",
               isCurrent
-                ? "border-amber-500 bg-amber-400/15 text-amber-800 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.08)]"
+                ? "border-[#9adf4c] bg-[#bbff66]/30 text-[#365313] shadow-[inset_0_0_0_1px_rgba(187,255,102,0.14)] dark:border-[#bbff66]/55 dark:bg-[#bbff66]/20 dark:text-[#dfffaa]"
                 : "border-blue-300 bg-blue-500/10 text-blue-600 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.06)] hover:-translate-y-0.5 hover:border-blue-500 hover:bg-blue-500/15",
               !citation.chunks.length ? "cursor-not-allowed opacity-45" : "",
             ].join(" ")}
