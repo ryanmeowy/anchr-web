@@ -499,7 +499,9 @@ a {
 }
 
 .ask-premium-citation {
+  max-width: 31%;
   min-height: 30px;
+  overflow: hidden;
   border-color: var(--premium-line);
   background: var(--premium-panel-muted);
   color: var(--premium-ink);
@@ -515,16 +517,19 @@ a {
 }
 
 .ask-premium-user-text {
+  border: 1px solid var(--premium-line);
+  border-radius: 16px;
+  background: var(--premium-panel-muted);
+  padding: 12px 16px;
   color: var(--premium-ink);
 }
 
 .ask-premium-user-actions {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
   display: flex;
+  min-height: 28px;
+  justify-content: flex-end;
   gap: 6px;
+  margin-top: 6px;
   pointer-events: none;
   opacity: 0;
   transform: translateY(2px);
@@ -631,6 +636,108 @@ a {
   border-top-color: var(--premium-accent);
   border-radius: 9999px;
   animation: askPremiumSpin 760ms linear infinite;
+}
+
+@media (min-width: 1024px) {
+  .ask-premium-shell {
+    transition: grid-template-columns 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .ask-premium-shell[data-trace-collapsed="true"] {
+    grid-template-columns: 72px 300px minmax(0, 1fr) 48px;
+  }
+}
+
+.ask-premium-conversation-frame {
+  max-width: 980px;
+  transition: max-width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ask-premium-conversation-frame[data-trace-collapsed="true"] {
+  max-width: 100%;
+}
+
+.ask-premium-trace-content {
+  display: flex;
+  width: 350px;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  opacity: 1;
+  transform: translateX(0);
+  visibility: visible;
+  transition:
+    opacity 180ms 120ms ease-out,
+    transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s;
+}
+
+.ask-premium-trace[data-collapsed="true"] .ask-premium-trace-content {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(28px);
+  visibility: hidden;
+  transition:
+    opacity 120ms ease-in,
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s 180ms;
+}
+
+.ask-premium-trace-heading {
+  padding-right: 36px;
+}
+
+.ask-premium-trace-toggle {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  transition:
+    right 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.ask-premium-trace-toggle:hover {
+  border-color: rgba(187, 255, 102, 0.38);
+  background: rgba(187, 255, 102, 0.14);
+  color: #bbff66;
+  transform: translateX(2px);
+}
+
+.ask-premium-trace-toggle:focus-visible {
+  outline: 2px solid #bbff66;
+  outline-offset: 2px;
+}
+
+.ask-premium-trace[data-collapsed="true"] .ask-premium-trace-toggle {
+  right: 8px;
+}
+
+.ask-premium-trace[data-collapsed="true"] .ask-premium-trace-toggle:hover {
+  transform: translateX(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-premium-shell,
+  .ask-premium-conversation-frame,
+  .ask-premium-trace-content,
+  .ask-premium-trace-toggle {
+    transition: none;
+  }
 }
 
 .ask-premium-page[data-premium-theme="dark"],

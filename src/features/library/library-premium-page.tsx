@@ -2060,17 +2060,17 @@ function QuestionItem({ item, index }: { item: RecentQuestion; index: number }) 
   return (
     <Link
       href={href}
-      className="library-activity-item group grid min-h-16 grid-cols-[28px_minmax(0,1fr)_20px] items-center gap-2 rounded-[8px] border border-white/10 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]"
+      className="library-activity-item library-question-item group grid min-h-[76px] grid-cols-[36px_minmax(0,1fr)_28px] items-center gap-3 rounded-[8px] border border-white/10 px-3 py-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]"
     >
-      <span className="library-activity-index grid size-7 place-items-center rounded-full text-[10px] font-black" aria-hidden="true">
+      <span className="library-activity-index grid size-9 shrink-0 place-items-center rounded-full text-[10px] font-black" aria-hidden="true">
         {String(index + 1).padStart(2, "0")}
       </span>
-      <span className="grid min-w-0 gap-1">
-        <strong className="line-clamp-2 break-words text-xs leading-4">{item.question || "未命名问题"}</strong>
-        <span className="line-clamp-1 text-[10px] leading-4 text-white/55">{knowledgeBases}</span>
+      <span className="grid min-w-0 overflow-hidden">
+        <strong className="block truncate text-xs leading-5" title={item.question || "未命名问题"}>{item.question || "未命名问题"}</strong>
+        <span className="block truncate text-[10px] leading-5 text-white/55" title={knowledgeBases}>{knowledgeBases}</span>
       </span>
-      <span className="library-activity-arrow grid size-5 place-items-center rounded-full border border-white/10 text-white/55" aria-hidden="true">
-        <ArrowUpRight size={12} />
+      <span className="library-activity-arrow grid size-7 shrink-0 place-items-center rounded-full border border-white/10 text-white/55" aria-hidden="true">
+        <ArrowUpRight size={14} />
       </span>
     </Link>
   );

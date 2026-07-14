@@ -3,6 +3,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Database,
   Edit3,
@@ -114,7 +116,6 @@ export function AskPremiumPage() {
   const [messagesBySession, setMessagesBySession] = useState<MessageCache>({});
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [messageError, setMessageError] = useState<string | null>(null);
-  const [highlightedTurnId, setHighlightedTurnId] = useState<string | null>(null);
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -125,6 +126,7 @@ export function AskPremiumPage() {
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([]);
+  const [traceCollapsed, setTraceCollapsed] = useState(false);
   const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
   const [assetNameCache, setAssetNameCache] = useState<Record<string, string>>({});
   const [scopeNotice, setScopeNotice] = useState<string | null>(null);
@@ -410,13 +412,6 @@ export function AskPremiumPage() {
     if (!node) return;
 
     node.scrollIntoView({ behavior: "auto", block: "center" });
-    const frame = window.requestAnimationFrame(() => setHighlightedTurnId(initialTurnId));
-    const timer = window.setTimeout(() => setHighlightedTurnId(null), 2500);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(timer);
-    };
   }, [initialTurnId, initialSessionId, activeSessionId, isLoadingMessages, activeMessages]);
 
   const handleConversationListScroll = () => {
@@ -803,7 +798,10 @@ export function AskPremiumPage() {
       ) : null}
 
       <div className="relative min-h-screen p-0 lg:p-6">
-        <div className="ask-premium-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[72px_300px_minmax(0,1fr)_350px] lg:grid-rows-none lg:rounded-[8px]">
+        <div
+          className="ask-premium-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[72px_300px_minmax(0,1fr)_350px] lg:grid-rows-none lg:rounded-[8px]"
+          data-trace-collapsed={traceCollapsed}
+        >
           <PremiumRail theme={theme} onThemeChange={setTheme} />
 
           <aside className="ask-premium-history flex min-h-0 flex-col border-b border-black/10 bg-[#f7f7f2]/75 p-4 lg:border-b-0 lg:border-r">
@@ -879,7 +877,10 @@ export function AskPremiumPage() {
             </header>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-5 lg:px-5">
-              <div className="mx-auto flex min-h-0 w-full max-w-[980px] flex-1 flex-col gap-4">
+              <div
+                className="ask-premium-conversation-frame mx-auto flex min-h-0 w-full flex-1 flex-col gap-4"
+                data-trace-collapsed={traceCollapsed}
+              >
                 <section ref={messageScrollRef} className="min-h-0 flex-1 overflow-auto pr-1">
                   <div className="relative grid gap-4">
                     {messageError ? (
@@ -897,7 +898,6 @@ export function AskPremiumPage() {
                           onPreviewCitation={handlePreviewCitation}
                           onSubmitUserEdit={(value) => sendMessage(value)}
                           canSubmitUserEdit={!streamingSessionId}
-                          highlighted={highlightedTurnId != null && highlightedTurnId === message.turnId}
                           assetNameCache={assetNameCache}
                         />
                       ))
@@ -1045,7 +1045,8 @@ export function AskPremiumPage() {
             modelLabel={activeGenerationConfig?.modelName || activeGenerationConfig?.baseUrl || "未配置模型"}
             citationCount={citationCount}
             traceEvents={traceEvents}
-            streaming={Boolean(streamingSessionId)}
+            collapsed={traceCollapsed}
+            onToggle={() => setTraceCollapsed((value) => !value)}
           />
         </div>
       </div>
@@ -1059,14 +1060,16 @@ function TracePanel({
   modelLabel,
   citationCount,
   traceEvents,
-  streaming,
+  collapsed,
+  onToggle,
 }: {
   answerMode: ConversationAnswerMode;
   selectedKbLabel: string;
   modelLabel: string;
   citationCount: number;
   traceEvents: TraceEvent[];
-  streaming: boolean;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   const answerModeProgress = {
     STRICT: "100%",
@@ -1075,47 +1078,64 @@ function TracePanel({
   } satisfies Record<ConversationAnswerMode, string>;
 
   return (
-    <aside className="ask-premium-trace hidden min-h-0 min-w-0 flex-col gap-4 border-l border-black/10 bg-[#111315] p-5 text-white lg:flex">
-      <p className="flex items-center justify-between text-xs font-black text-white/60">
-        SESSION CONTEXT <span>{streaming ? "LIVE" : "READY"}</span>
-      </p>
-      <section className="ask-premium-trace-hero grid min-w-0 gap-3 overflow-hidden rounded-[8px] border border-white/15 bg-white/10 p-4">
-        <span className="text-xs font-black text-white/60">ANSWER MODE</span>
-        <strong className="ask-premium-answer-mode-title block min-w-0 max-w-full break-words font-black leading-none">{answerMode}</strong>
-        <div className="ask-premium-answer-mode-bar h-2 w-full min-w-0 overflow-hidden rounded-full bg-white/10">
-          <span
-            className="block h-full rounded-full bg-[#bbff66] transition-[width] duration-300 ease-out"
-            style={{ width: answerModeProgress[answerMode] }}
-          />
-        </div>
-      </section>
-      <TraceCard label="MODEL" title={modelLabel} detail="Generation capability · 全局生效" />
-      <TraceCard label="KNOWLEDGE BASES" title={selectedKbLabel} detail="发送问题时作为当前问答范围" />
-      <TraceCard label="CITATIONS" title={`${citationCount} sources`} detail="来自 SSE citations 事件与历史消息" />
-      <section className="ask-premium-trace-timeline min-h-0 flex-1 rounded-[8px] border border-white/10 bg-white/10 p-4">
-        <div className="mb-3 text-xs font-black text-white/60">
-          TRACE TIMELINE
-        </div>
-        <div className="grid max-h-full gap-2 overflow-auto pr-1">
-          {traceEvents.length ? traceEvents.slice().reverse().map((event) => (
-            <div key={event.id} className="ask-premium-trace-event rounded-[8px] bg-black/20 p-3">
-              <div className="flex items-center justify-between gap-3 text-xs font-black text-[#bbff66]">
-                <span>{event.label}</span>
-                <span className="text-white/40">{new Date(event.at).toLocaleTimeString()}</span>
+    <aside
+      className="ask-premium-trace relative hidden min-h-0 min-w-0 overflow-hidden border-l border-black/10 bg-[#111315] text-white lg:block"
+      data-collapsed={collapsed}
+      aria-label="Session Context"
+    >
+      <button
+        type="button"
+        className="ask-premium-trace-toggle"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? "展开 Session Context" : "收起 Session Context"}
+        title={collapsed ? "展开 Session Context" : "收起 Session Context"}
+      >
+        {collapsed ? <ChevronLeft size={17} /> : <ChevronRight size={17} />}
+      </button>
+
+      <div className="ask-premium-trace-content">
+        <p className="ask-premium-trace-heading flex items-center justify-between text-xs font-black text-white/60">
+          SESSION CONTEXT
+        </p>
+        <section className="ask-premium-trace-hero grid min-w-0 gap-3 overflow-hidden rounded-[8px] border border-white/15 bg-white/10 p-4">
+          <span className="text-xs font-black text-white/60">ANSWER MODE</span>
+          <strong className="ask-premium-answer-mode-title block min-w-0 max-w-full break-words font-black leading-none">{answerMode}</strong>
+          <div className="ask-premium-answer-mode-bar h-2 w-full min-w-0 overflow-hidden rounded-full bg-white/10">
+            <span
+              className="block h-full rounded-full bg-[#bbff66] transition-[width] duration-300 ease-out"
+              style={{ width: answerModeProgress[answerMode] }}
+            />
+          </div>
+        </section>
+        <TraceCard label="MODEL" title={modelLabel} detail="Generation capability · 全局生效" />
+        <TraceCard label="KNOWLEDGE BASES" title={selectedKbLabel} detail="发送问题时作为当前问答范围" />
+        <TraceCard label="CITATIONS" title={`${citationCount} sources`} detail="来自 SSE citations 事件与历史消息" />
+        <section className="ask-premium-trace-timeline min-h-0 flex-1 rounded-[8px] border border-white/10 bg-white/10 p-4">
+          <div className="mb-3 text-xs font-black text-white/60">
+            TRACE TIMELINE
+          </div>
+          <div className="grid max-h-full gap-2 overflow-auto pr-1">
+            {traceEvents.length ? traceEvents.slice().reverse().map((event) => (
+              <div key={event.id} className="ask-premium-trace-event rounded-[8px] bg-black/20 p-3">
+                <div className="flex items-center justify-between gap-3 text-xs font-black text-[#bbff66]">
+                  <span>{event.label}</span>
+                  <span className="text-white/40">{new Date(event.at).toLocaleTimeString()}</span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-white/70">{event.detail}</p>
               </div>
-              <p className="mt-1 text-xs leading-5 text-white/70">{event.detail}</p>
-            </div>
-          )) : (
-            <div className="ask-premium-trace-empty rounded-[8px] bg-white/10 p-3 text-xs leading-5 text-white/60">
-              发送问题后展示 trace、delta、citations、done 或 error。
-            </div>
-          )}
+            )) : (
+              <div className="ask-premium-trace-empty rounded-[8px] bg-white/10 p-3 text-xs leading-5 text-white/60">
+                发送问题后展示 trace、delta、citations、done 或 error。
+              </div>
+            )}
+          </div>
+        </section>
+        <div className="flex gap-2 overflow-hidden border-t border-white/10 pt-4 text-xs text-white/70">
+          {["trace", "delta", "citation", "preview", "done"].map((item) => (
+            <span key={item} className="rounded-full bg-white/10 px-3 py-2">{item}</span>
+          ))}
         </div>
-      </section>
-      <div className="flex gap-2 overflow-hidden border-t border-white/10 pt-4 text-xs text-white/70">
-        {["trace", "delta", "citation", "preview", "done"].map((item) => (
-          <span key={item} className="rounded-full bg-white/10 px-3 py-2">{item}</span>
-        ))}
       </div>
     </aside>
   );
@@ -1369,7 +1389,6 @@ function PremiumChatBubble({
   onPreviewCitation,
   onSubmitUserEdit,
   canSubmitUserEdit = true,
-  highlighted,
   assetNameCache,
 }: {
   message: ChatMessage;
@@ -1382,7 +1401,6 @@ function PremiumChatBubble({
   ) => void;
   onSubmitUserEdit: (value: string) => void | Promise<void>;
   canSubmitUserEdit?: boolean;
-  highlighted?: boolean;
   assetNameCache: Record<string, string>;
 }) {
   const isUser = message.role === "user";
@@ -1489,7 +1507,7 @@ function PremiumChatBubble({
             </form>
           ) : (
             <>
-              <div className="ask-premium-user-text max-w-[680px] whitespace-pre-wrap break-words pb-8 pl-8 text-right text-[14px] font-semibold leading-6 text-[#111315]">
+              <div className="ask-premium-user-text max-w-[680px] whitespace-pre-wrap break-words text-left text-[14px] font-semibold leading-6 text-[#111315]">
                 {message.content}
               </div>
               <div className="ask-premium-user-actions" aria-label="消息操作">
@@ -1523,7 +1541,7 @@ function PremiumChatBubble({
   }
 
   return (
-    <article data-turn-id={message.turnId} className={["flex gap-2.5", highlighted ? "rounded-[10px] ring-2 ring-blue-500/70" : ""].join(" ")}>
+    <article data-turn-id={message.turnId} className="flex gap-2.5">
       <div className="ask-premium-assistant-avatar grid size-8 shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-none">
         <Sparkles size={15} />
       </div>
@@ -1592,9 +1610,12 @@ function PremiumChatBubble({
                 onClick={() => onPreviewCitation(message, citation, index, question)}
                 disabled={!citation.chunks?.length}
                 className="ask-premium-citation inline-flex min-h-[30px] items-center gap-2 rounded-full border border-black/10 bg-[#f7f7f2]/85 px-2.5 text-[11px] font-black text-[#111315] transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
+                title={`[${citation.citationIndex ?? index + 1}] ${citation.fileName ?? "引用来源"}${citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}`}
               >
-                [{citation.citationIndex ?? index + 1}] {citation.fileName ?? "引用来源"}
-                {citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}
+                <span className="min-w-0 truncate">
+                  [{citation.citationIndex ?? index + 1}] {citation.fileName ?? "引用来源"}
+                  {citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}
+                </span>
               </button>
             ))}
           </div>
