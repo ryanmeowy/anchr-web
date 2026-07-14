@@ -242,7 +242,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
                 <button
                   type="button"
                   onClick={handleBack}
-                  className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3.5 text-xs font-black text-[var(--premium-ink)] shadow-[0_10px_26px_rgba(17,19,21,0.08)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white"
+                  className="preview-control-action inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3.5 text-xs font-black text-[var(--premium-ink)] shadow-[0_10px_26px_rgba(17,19,21,0.08)] transition hover:-translate-y-0.5"
                 >
                   <ChevronLeft size={16} />
                   返回
@@ -660,11 +660,12 @@ function PreviewContent({
             className="grid gap-2 border-0 bg-transparent text-center text-[var(--premium-muted)]"
           >
             <span className={[
-              "grid h-[124px] w-[88px] place-items-center overflow-hidden rounded-[8px] border bg-white shadow-[0_12px_28px_rgba(16,18,20,0.10)] transition",
+              "preview-pdf-thumbnail-frame grid h-[124px] w-[88px] place-items-center overflow-hidden rounded-[8px] border bg-white shadow-[0_12px_28px_rgba(16,18,20,0.10)] transition",
               page === pdfPage
                 ? "border-[var(--premium-blue)] shadow-[0_18px_40px_rgba(36,89,255,0.18)] -translate-y-[3px]"
                 : "border-[var(--premium-line)] hover:-translate-y-[3px] hover:border-[var(--premium-blue)]",
             ].join(" ")}
+            data-active={page === pdfPage}
             >
               {previewType === "PDF" ? (
                 <PdfThumbnail pdfDoc={pdfDoc} pageNo={page} isActive={page === pdfPage} />
@@ -739,7 +740,7 @@ function PreviewContent({
               type="button"
               disabled={previewType !== "PDF"}
               onClick={fitPdfToWidth}
-              className="inline-flex min-h-[38px] items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-[13px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="preview-control-action inline-flex min-h-[38px] items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-[13px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
             >
               适宽
             </button>
@@ -842,7 +843,7 @@ function DocumentInfoSidebar({ asset }: { asset: AssetPreview }) {
               href={asset.previewUrl}
               target="_blank"
               rel="noreferrer"
-              className="mt-4 inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-[13px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white"
+              className="preview-source-action mt-4 inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-full border px-3 text-[13px] font-black transition hover:-translate-y-0.5"
             >
               打开原始文件
               <ExternalLink size={16} />
@@ -965,7 +966,7 @@ function CitationSidebar({
               href={item.previewUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-[13px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white"
+              className="preview-source-action inline-flex min-h-[42px] items-center justify-center gap-2 rounded-full border px-3 text-[13px] font-black transition hover:-translate-y-0.5"
             >
               打开原始文件
               <ExternalLink size={16} />
@@ -975,10 +976,10 @@ function CitationSidebar({
             <button
               type="button"
               onClick={() => onContinueWithAsset(item)}
-              className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-full border-0 bg-[var(--premium-ink)] px-4 text-[13px] font-black text-[var(--premium-bg)] shadow-[0_16px_38px_rgba(16,18,20,0.2)]"
+              className="preview-source-action inline-flex min-h-[42px] items-center justify-center gap-2 rounded-full border px-4 text-[13px] font-black transition hover:-translate-y-0.5"
             >
-              <MessageCircle size={16} />
               {from === "search" ? "在此资料中继续搜索" : "向此资料继续提问"}
+              <MessageCircle size={16} />
             </button>
           ) : null}
         </div>
@@ -1362,7 +1363,7 @@ function PdfContinuousPage({
         minHeight: pageSize ? pageSize.heightPt * scale : placeholderHeight,
       }}
     >
-      <canvas ref={canvasRef} className={shouldRender && !hasError ? "block bg-white" : "hidden"} />
+      <canvas ref={canvasRef} className={shouldRender && !hasError ? "preview-pdf-canvas block bg-white" : "hidden"} />
       {isPageReady && pageSize && bboxRecords.length ? (
         <BBoxOverlay
           key={`${segmentId}:${pageNo}`}
@@ -1376,7 +1377,7 @@ function PdfContinuousPage({
         />
       ) : null}
       {!shouldRender || isRendering ? (
-        <div className="absolute inset-0 grid place-items-center bg-white/70 text-slate-400" aria-hidden="true">
+        <div className="preview-pdf-loading absolute inset-0 grid place-items-center bg-white/70 text-slate-400" aria-hidden="true">
           {shouldRender ? <Loader2 className="animate-spin" size={22} /> : <span className="text-[10px] font-black">PAGE {pageNo}</span>}
         </div>
       ) : null}
@@ -1471,10 +1472,10 @@ function PdfThumbnail({ pdfDoc, pageNo, isActive }: { pdfDoc: PdfDocumentProxy |
       {!pdfDoc || hasError || !shouldRender ? <FileText size={18} /> : null}
       <canvas
         ref={canvasRef}
-        className={["bg-white", !pdfDoc || hasError || !shouldRender ? "hidden" : "block"].join(" ")}
+        className={["preview-pdf-canvas bg-white", !pdfDoc || hasError || !shouldRender ? "hidden" : "block"].join(" ")}
       />
       {isRendering && shouldRender ? (
-        <div className="absolute inset-0 grid place-items-center bg-white/60">
+        <div className="preview-pdf-loading absolute inset-0 grid place-items-center bg-white/60">
           <Loader2 className="animate-spin" size={16} />
         </div>
       ) : null}
@@ -1488,13 +1489,14 @@ function renderPdfPage(page: PdfPageProxy, canvas: HTMLCanvasElement | null, sca
   }
 
   const viewport = page.getViewport({ scale });
+  const outputScale = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2);
   const context = canvas.getContext("2d");
   if (!context) {
     throw new Error("Canvas context is unavailable");
   }
 
-  canvas.width = Math.floor(viewport.width);
-  canvas.height = Math.floor(viewport.height);
+  canvas.width = Math.floor(viewport.width * outputScale);
+  canvas.height = Math.floor(viewport.height * outputScale);
   canvas.style.width = `${Math.floor(viewport.width)}px`;
   canvas.style.height = `${Math.floor(viewport.height)}px`;
   context.save();
@@ -1502,7 +1504,12 @@ function renderPdfPage(page: PdfPageProxy, canvas: HTMLCanvasElement | null, sca
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.restore();
 
-  const renderTask = page.render({ canvas, canvasContext: context, viewport });
+  const renderTask = page.render({
+    canvas,
+    canvasContext: context,
+    viewport,
+    transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+  });
   const [x1, y1, x2, y2] = page.view;
   const size = {
     width: viewport.width,
@@ -1702,7 +1709,7 @@ function ToolButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="grid size-[38px] min-h-[38px] place-items-center rounded-full border border-transparent bg-transparent text-[var(--premium-muted)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+      className="preview-control-action grid size-[38px] min-h-[38px] place-items-center rounded-full border border-transparent bg-transparent text-[var(--premium-muted)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {children}
     </button>

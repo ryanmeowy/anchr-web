@@ -1376,7 +1376,6 @@ function PremiumConversationItem({
       >
         <span className="flex min-w-0 items-center justify-between gap-2">
           <strong className="truncate text-sm">{conversation.title || "新对话"}</strong>
-          {active ? <i className="size-2 rounded-full bg-[#bbff66] shadow-[0_0_0_5px_rgba(187,255,102,0.22)]" /> : null}
         </span>
         <span className="truncate text-xs text-slate-500">{conversation.lastMessagePreview || "继续追问这个会话"}</span>
       </button>
@@ -1387,7 +1386,7 @@ function PremiumConversationItem({
           setConfirmingDelete(false);
           onToggleMenu();
         }}
-        className="ask-premium-conversation-more absolute right-2 top-2 grid size-8 place-items-center rounded-[8px] bg-white/80 text-slate-500 opacity-0 shadow-sm transition group-hover:opacity-100"
+        className="ask-premium-conversation-more absolute right-2 top-2 grid size-8 place-items-center bg-transparent text-slate-500 opacity-0 transition hover:text-[var(--premium-ink)] group-hover:opacity-100"
         aria-label="会话操作"
       >
         <MoreHorizontal size={16} />

@@ -77,7 +77,7 @@ export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
                 <button
                   type="button"
                   onClick={handleBack}
-                  className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3.5 text-xs font-black text-[var(--premium-ink)] shadow-[0_10px_26px_rgba(17,19,21,0.08)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white"
+                  className="preview-control-action inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3.5 text-xs font-black text-[var(--premium-ink)] shadow-[0_10px_26px_rgba(17,19,21,0.08)] transition hover:-translate-y-0.5"
                 >
                   <ChevronLeft size={16} />
                   返回
