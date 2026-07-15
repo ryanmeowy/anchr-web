@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
@@ -41,6 +43,7 @@ import type {
   ConversationAnswerMode,
   ConversationAnswerStatus,
   ConversationCitation,
+  ConversationIntent,
   ConversationSession,
   ConversationTurn,
 } from "@/lib/types";
@@ -56,6 +59,7 @@ type ChatMessage = {
   answerMode?: ConversationAnswerMode | string;
   answerStatus?: ConversationAnswerStatus;
   answerFallbackReason?: string | null;
+  intent?: ConversationIntent;
   pending?: boolean;
   error?: string;
 };
@@ -583,12 +587,23 @@ export function AskPremiumPage() {
             addTraceEvent({
               type: "trace",
               label: event.stage ?? "trace",
-              detail: `${event.message ?? "started"} · ${event.answerMode ?? selectedAnswerMode}`,
+              detail: [
+                event.message ?? "started",
+                event.intentType,
+                event.confidence == null ? null : `confidence ${event.confidence.toFixed(2)}`,
+                event.answerMode,
+              ].filter(Boolean).join(" · "),
             });
             updateAssistantMessage(targetSessionId, assistantMessage.id, (message) => ({
               ...message,
               pending: true,
               answerMode: event.answerMode ?? message.answerMode,
+              intent: event.intentType ? {
+                ...message.intent,
+                type: event.intentType,
+                confidence: event.confidence,
+                retrievalRequired: event.intentType === "KB_QUERY",
+              } : message.intent,
               content: message.content || traceText(event.stage),
             }));
           },
@@ -637,6 +652,11 @@ export function AskPremiumPage() {
               answerMode: event.answerMode ?? message.answerMode,
               answerStatus: event.answerStatus ?? message.answerStatus ?? "ANSWERED",
               answerFallbackReason: event.fallbackReason ?? message.answerFallbackReason,
+              intent: event.intentType ? {
+                ...message.intent,
+                type: event.intentType,
+                retrievalRequired: event.retrievalExecuted ?? event.intentType === "KB_QUERY",
+              } : message.intent,
               content: stripTraceText(message.content) || "未生成回答。",
             }));
             setConversations((previous) => previous.map((item) => (
@@ -819,7 +839,7 @@ export function AskPremiumPage() {
 
       <div className="relative min-h-screen p-0 lg:p-6">
         <div
-          className="ask-premium-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[60px_300px_minmax(0,1fr)_350px] lg:grid-rows-none lg:rounded-[8px]"
+          className="ask-premium-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[60px_240px_minmax(0,1fr)_350px] lg:grid-rows-none lg:rounded-[8px]"
           data-trace-collapsed={traceCollapsed}
         >
           <PremiumRail theme={theme} onThemeChange={setTheme} />
@@ -946,13 +966,15 @@ export function AskPremiumPage() {
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        void handleSubmit();
-                      }
+                      if (event.key !== "Enter" || event.shiftKey) return;
+                      if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+
+                      event.preventDefault();
+                      if (canSubmit) void handleSubmit();
                     }}
+                    enterKeyHint="send"
                     placeholder="给 Anchr 发送消息"
-                    className="ask-premium-textarea max-h-40 min-h-[76px] w-full resize-y border-0 bg-transparent text-slate-950 outline-none placeholder:text-slate-400"
+                    className="ask-premium-textarea max-h-40 min-h-[52px] w-full resize-y border-0 bg-transparent text-slate-950 outline-none placeholder:text-slate-400"
                   />
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_48px] items-center gap-3 max-sm:block max-sm:w-full max-sm:max-w-full">
                     <div className="ask-premium-control-strip flex min-w-0 flex-wrap items-center gap-2 overflow-visible pr-1 max-sm:w-full max-sm:max-w-full max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overflow-y-hidden max-sm:pr-[58px] max-sm:pb-0 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden" data-composer-menu>
@@ -1370,14 +1392,15 @@ function PremiumConversationItem({
         onClick={onSelect}
         className={[
           "ask-premium-conversation-item",
-          "grid min-h-[72px] w-full gap-1 rounded-[8px] border p-3 text-left transition hover:translate-x-0.5",
+          "flex min-h-[48px] w-full items-center rounded-[8px] border p-3 text-left transition hover:translate-x-0.5",
           active ? "border-black/10 bg-white/80 text-[#111315]" : "border-transparent text-slate-700 hover:bg-white/70",
         ].join(" ")}
       >
-        <span className="flex min-w-0 items-center justify-between gap-2">
-          <strong className="truncate text-sm">{conversation.title || "新对话"}</strong>
+        <span className="flex min-w-0 flex-1 items-center">
+          <strong className="min-w-0 flex-1 overflow-hidden whitespace-nowrap pr-7 text-sm leading-5">
+            {conversation.title || "新对话"}
+          </strong>
         </span>
-        <span className="truncate text-xs text-slate-500">{conversation.lastMessagePreview || "继续追问这个会话"}</span>
       </button>
       <button
         type="button"
@@ -1618,8 +1641,24 @@ function PremiumChatBubble({
             ))}
           </div>
         ) : null}
-        <div className="ask-premium-answer-text whitespace-pre-wrap break-words text-[14px] leading-7 text-slate-700">
-          {message.pending && !stripTraceText(message.content) ? "正在生成回答..." : stripTraceText(message.content)}
+        <div className="ask-premium-answer-text break-words text-[14px] leading-7 text-slate-700">
+          {message.pending && !stripTraceText(message.content) ? (
+            "正在生成回答..."
+          ) : (
+            <MarkdownAnswer
+              content={stripTraceText(message.content)}
+              citationNumbers={(message.citations ?? []).flatMap((citation, index) => (
+                citation.chunks?.length ? [citation.citationIndex ?? index + 1] : []
+              ))}
+              onCitation={(citationNumber) => {
+                const citationIndex = message.citations?.findIndex(
+                  (citation, index) => (citation.citationIndex ?? index + 1) === citationNumber,
+                ) ?? -1;
+                const citation = citationIndex >= 0 ? message.citations?.[citationIndex] : undefined;
+                if (citation) onPreviewCitation(message, citation, citationIndex, question);
+              }}
+            />
+          )}
         </div>
         {message.answerStatus === "NO_EVIDENCE" ? (
           <div className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-200">当前检索内容不足以支持可靠回答，可补充关键词或限定资料范围后重试。</div>
@@ -1681,6 +1720,7 @@ function turnsToMessages(turns: ConversationTurn[]) {
       answerMode: turn.answerMode,
       answerStatus: turn.answerStatus ?? "ANSWERED",
       answerFallbackReason: turn.answerFallbackReason,
+      intent: turn.intent,
     });
 
     return messages;
@@ -1725,8 +1765,113 @@ async function copyTextToClipboard(value: string) {
 }
 
 function traceText(stage?: string) {
+  if (stage === "routing") return "__TRACE__正在判断问题类型...";
+  if (stage === "chat_generation") return "__TRACE__正在生成回复...";
   if (stage === "retrieval") return "__TRACE__正在检索知识库...";
   return "__TRACE__正在生成回答...";
+}
+
+type MarkdownAstNode = {
+  type: string;
+  value?: string;
+  url?: string;
+  children?: MarkdownAstNode[];
+};
+
+function MarkdownAnswer({
+  content,
+  citationNumbers,
+  onCitation,
+}: {
+  content: string;
+  citationNumbers: number[];
+  onCitation: (citationNumber: number) => void;
+}) {
+  const validCitationNumbers = new Set(citationNumbers);
+  return (
+    <div className="ask-premium-markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkInlineCitations]}
+        components={{
+          a: ({ children, href, ...props }) => {
+            const citationMatch = href?.match(/^#anchr-citation-(\d+)$/);
+            if (citationMatch) {
+              const citationNumber = Number(citationMatch[1]);
+              if (!validCitationNumbers.has(citationNumber)) {
+                return <>{children}</>;
+              }
+              return (
+                <button
+                  type="button"
+                  className="ask-premium-inline-citation"
+                  onClick={() => onCitation(citationNumber)}
+                  aria-label={`查看引用 ${citationNumber}`}
+                >
+                  {children}
+                </button>
+              );
+            }
+            return (
+              <a {...props} href={href} target="_blank" rel="noreferrer noopener">
+                {children}
+              </a>
+            );
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function remarkInlineCitations() {
+  return (tree: unknown) => {
+    if (isMarkdownNode(tree) && tree.children) transformCitationTextNodes(tree);
+  };
+}
+
+function transformCitationTextNodes(parent: MarkdownAstNode) {
+  if (!parent.children) return;
+  const transformed: MarkdownAstNode[] = [];
+
+  parent.children.forEach((node) => {
+    if (node.type === "text" && node.value) {
+      transformed.push(...splitCitationText(node.value));
+      return;
+    }
+    if (node.children && node.type !== "link" && node.type !== "linkReference") {
+      transformCitationTextNodes(node);
+    }
+    transformed.push(node);
+  });
+
+  parent.children = transformed;
+}
+
+function splitCitationText(value: string) {
+  const nodes: MarkdownAstNode[] = [];
+  const citationPattern = /\[(\d+)]/g;
+  let cursor = 0;
+  let match = citationPattern.exec(value);
+
+  while (match) {
+    if (match.index > cursor) nodes.push({ type: "text", value: value.slice(cursor, match.index) });
+    nodes.push({
+      type: "link",
+      url: `#anchr-citation-${match[1]}`,
+      children: [{ type: "text", value: match[0] }],
+    });
+    cursor = match.index + match[0].length;
+    match = citationPattern.exec(value);
+  }
+
+  if (cursor < value.length) nodes.push({ type: "text", value: value.slice(cursor) });
+  return nodes.length ? nodes : [{ type: "text", value }];
+}
+
+function isMarkdownNode(value: unknown): value is MarkdownAstNode {
+  return typeof value === "object" && value !== null && "type" in value;
 }
 
 function stripTraceText(value: string) {
