@@ -641,6 +641,7 @@ export type ConversationTurn = {
   answerMode?: string;
   answerStatus?: ConversationAnswerStatus;
   answerFallbackReason?: string | null;
+  intent?: ConversationIntent;
   citations?: ConversationCitation[];
   resultCards?: Array<{
     assetId?: string;
@@ -686,12 +687,22 @@ export type ConversationMessage = {
   answerStatus?: ConversationAnswerStatus;
   answerFallbackReason?: string | null;
   retrievalStage?: string;
+  intent?: ConversationIntent;
   citations?: ConversationCitation[];
-  suggestedQuestions?: string[];
   createdAt?: number;
 };
 
 export type ConversationAnswerStatus = "ANSWERED" | "NO_EVIDENCE" | "MODEL_FALLBACK";
+export type ConversationIntentType = "CHAT" | "KB_QUERY" | "OTHER";
+export type ConversationIntentSource = "RULE" | "MODEL" | "FALLBACK" | "DISABLED" | "LEGACY";
+export type ConversationIntent = {
+  type: ConversationIntentType;
+  confidence?: number;
+  reason?: string | null;
+  source?: ConversationIntentSource;
+  fallbackUsed?: boolean;
+  retrievalRequired?: boolean;
+};
 export type SegmentIndexStatus = {
   status: "NOT_READY" | "INITIALIZING" | "READY" | "REBUILDING";
   indexExists: boolean;

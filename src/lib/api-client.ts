@@ -10,6 +10,7 @@ import type {
   ConversationAnswerMode,
   ConversationAnswerStatus,
   ConversationCitation,
+  ConversationIntentType,
   ConversationMessageList,
   ConversationSession,
   ConversationSessionList,
@@ -58,10 +59,10 @@ type RequestOptions = {
 };
 
 type StreamMessageCallbacks = {
-  onTrace?: (event: { stage?: string; message?: string; answerMode?: ConversationAnswerMode | string }) => void;
+  onTrace?: (event: { stage?: string; message?: string; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number }) => void;
   onDelta?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean }) => void;
 };
 
 type ConversationMessageRequest = {
@@ -218,7 +219,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "trace") {
-    callbacks.onTrace?.(parseSseJson<{ stage?: string; message?: string; answerMode?: ConversationAnswerMode | string }>(data) ?? {});
+    callbacks.onTrace?.(parseSseJson<{ stage?: string; message?: string; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number }>(data) ?? {});
     return;
   }
 
@@ -234,7 +235,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "done") {
-    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number }>(data) ?? {});
+    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean }>(data) ?? {});
     return;
   }
 
