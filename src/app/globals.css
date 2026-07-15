@@ -461,7 +461,7 @@ a {
 }
 
 .ask-premium-composer .ask-premium-textarea {
-  min-height: 76px;
+  min-height: 52px;
   max-height: 160px;
   resize: vertical;
   font-size: 15px;

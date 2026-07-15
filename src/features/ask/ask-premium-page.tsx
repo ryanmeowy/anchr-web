@@ -974,7 +974,7 @@ export function AskPremiumPage() {
                     }}
                     enterKeyHint="send"
                     placeholder="给 Anchr 发送消息"
-                    className="ask-premium-textarea max-h-40 min-h-[76px] w-full resize-y border-0 bg-transparent text-slate-950 outline-none placeholder:text-slate-400"
+                    className="ask-premium-textarea max-h-40 min-h-[52px] w-full resize-y border-0 bg-transparent text-slate-950 outline-none placeholder:text-slate-400"
                   />
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_48px] items-center gap-3 max-sm:block max-sm:w-full max-sm:max-w-full">
                     <div className="ask-premium-control-strip flex min-w-0 flex-wrap items-center gap-2 overflow-visible pr-1 max-sm:w-full max-sm:max-w-full max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overflow-y-hidden max-sm:pr-[58px] max-sm:pb-0 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden" data-composer-menu>
