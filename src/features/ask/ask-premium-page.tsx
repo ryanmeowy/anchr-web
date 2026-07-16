@@ -11,7 +11,6 @@ import {
   Loader2,
   MoreHorizontal,
   Plus,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -104,6 +103,8 @@ const CONVERSATION_PAGE_SIZE = 50;
 const HISTORY_LIMIT = 100;
 const ASK_TRACE_HINT_SEEN_KEY = "anchr.ask.trace-hint-seen";
 const ASK_AGENT_ENABLED_KEY = "anchr.ask.agent-enabled";
+const ASK_HISTORY_COLLAPSED_KEY = "anchr.ask.history-collapsed";
+const ASK_TRACE_COLLAPSED_KEY = "anchr.ask.trace-collapsed";
 const ANSWER_MODES: Array<{ value: ConversationAnswerMode; label: string; detail: string }> = [
   { value: "STRICT", label: "严格回答", detail: "证据门槛最高，证据不足时拒答" },
   { value: "SUMMARY", label: "摘要回答", detail: "更短输出，保留核心证据" },
@@ -195,8 +196,9 @@ export function AskPremiumPage() {
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [liveAgentActivity, setLiveAgentActivity] = useState<LiveAgentActivity>({ steps: [] });
-  const [traceCollapsed, setTraceCollapsed] = useState(true);
+  const [traceCollapsed, setTraceCollapsed] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  const [layoutTransitionReady, setLayoutTransitionReady] = useState(false);
   const [traceHintVisible, setTraceHintVisible] = useState(false);
   const [agentEnabled, setAgentEnabled] = useState(false);
   const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
@@ -236,14 +238,23 @@ export function AskPremiumPage() {
   const agentAvailable = agentCapabilitiesQuery.data?.agentAvailable === true;
 
   useEffect(() => {
+    let transitionFrame: number | null = null;
     const frame = window.requestAnimationFrame(() => {
       setTheme(getInitialPremiumTheme());
       setThemeHydrated(true);
       setAssetNameCache(readAssetNameCache());
-      try { setAgentEnabled(window.localStorage.getItem(ASK_AGENT_ENABLED_KEY) === "1"); } catch { /* ignore */ }
+      try {
+        setAgentEnabled(window.localStorage.getItem(ASK_AGENT_ENABLED_KEY) === "1");
+        setHistoryCollapsed(window.localStorage.getItem(ASK_HISTORY_COLLAPSED_KEY) === "1");
+        setTraceCollapsed(window.localStorage.getItem(ASK_TRACE_COLLAPSED_KEY) === "1");
+      } catch { /* ignore */ }
+      transitionFrame = window.requestAnimationFrame(() => setLayoutTransitionReady(true));
     });
 
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (transitionFrame !== null) window.cancelAnimationFrame(transitionFrame);
+    };
   }, []);
 
   useEffect(() => {
@@ -1078,6 +1089,7 @@ export function AskPremiumPage() {
         <div
           className="ask-premium-shell ask-premium-chat-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[60px_280px_minmax(0,1fr)_350px] lg:grid-rows-none lg:rounded-[8px]"
           data-history-collapsed={historyCollapsed}
+          data-layout-transition-ready={layoutTransitionReady}
           data-trace-collapsed={traceCollapsed}
         >
           <PremiumRail theme={theme} onThemeChange={setTheme} />
@@ -1101,9 +1113,9 @@ export function AskPremiumPage() {
               <button
                 type="button"
                 onClick={handleNewConversation}
-                className="ask-premium-new-chat mb-4 flex min-h-12 w-full items-center justify-between rounded-[8px] bg-[#111315] px-4 text-sm font-black text-white transition hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(17,19,21,0.18)]"
+                className="ask-premium-new-chat mb-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-[12px] bg-[#111315] px-4 text-sm font-black text-white transition hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(17,19,21,0.18)]"
               >
-                新对话 <Plus size={18} />
+                <Plus size={17} /> 新对话
               </button>
               <div className="min-w-0 flex-1 pr-1 lg:pr-2">
               {isLoadingConversations ? (
@@ -1154,7 +1166,11 @@ export function AskPremiumPage() {
               type="button"
               onClick={() => {
                 setOpenMenuSessionId(null);
-                setHistoryCollapsed((value) => !value);
+                setHistoryCollapsed((value) => {
+                  const next = !value;
+                  try { window.localStorage.setItem(ASK_HISTORY_COLLAPSED_KEY, next ? "1" : "0"); } catch { /* ignore */ }
+                  return next;
+                });
               }}
               className="absolute left-0 top-1/2 z-30 hidden size-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-elevated)] text-[var(--premium-muted)] shadow-[0_8px_24px_rgba(17,19,21,0.14)] transition hover:border-[var(--premium-focus-line)] hover:text-[var(--premium-ink)] lg:grid"
               aria-expanded={!historyCollapsed}
@@ -1169,8 +1185,7 @@ export function AskPremiumPage() {
                 ASK
               </div>
               <div className="relative z-10 min-w-0">
-                <p className="ask-premium-kicker mb-1.5 inline-flex items-center gap-2 text-[10px] font-black text-blue-700">
-                  <span className="size-1.5 rounded-full bg-[#bbff66] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
+                <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                   ASK / {selectedAnswerMode} ANSWER MODE
                 </p>
                 <h1 className="max-w-[720px] text-[clamp(28px,3.2vw,42px)] font-black leading-none">Anchor Your Answer</h1>
@@ -1181,7 +1196,11 @@ export function AskPremiumPage() {
                   className="ask-premium-trace-toggle"
                   onClick={() => {
                     setTraceHintVisible(false);
-                    setTraceCollapsed((value) => !value);
+                    setTraceCollapsed((value) => {
+                      const next = !value;
+                      try { window.localStorage.setItem(ASK_TRACE_COLLAPSED_KEY, next ? "1" : "0"); } catch { /* ignore */ }
+                      return next;
+                    });
                   }}
                   aria-expanded={!traceCollapsed}
                   aria-label={traceCollapsed ? "展开 Session Context" : "收起 Session Context"}
@@ -1198,12 +1217,12 @@ export function AskPremiumPage() {
               </div>
             </header>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-5 lg:px-5">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 sm:px-5 lg:px-5">
               <div
-                className="ask-premium-conversation-frame mx-auto flex min-h-0 w-full flex-1 flex-col gap-4"
+                className="ask-premium-conversation-frame mx-auto flex min-h-0 w-full flex-1 flex-col gap-4 lg:w-[calc(100vw-780px)] lg:max-w-full"
                 data-trace-collapsed={traceCollapsed}
               >
-                <section ref={messageScrollRef} className="min-h-0 flex-1 overflow-auto pr-1">
+                <section ref={messageScrollRef} className="ask-premium-message-scroll min-h-0 flex-1 overflow-auto pr-1">
                   <div className="relative grid gap-4">
                     {messageError ? (
                       <ErrorBlock message={messageError} />
@@ -1234,7 +1253,7 @@ export function AskPremiumPage() {
 
                 <form
                   ref={composerFormRef}
-                  className="ask-premium-composer relative z-20 grid shrink-0 gap-3 rounded-[8px] border border-black/10 bg-white/90 p-3 shadow-[0_14px_38px_rgba(17,19,21,0.1)] backdrop-blur-xl"
+                  className="ask-premium-composer relative z-20 grid shrink-0 gap-3 rounded-[16px] border border-black/10 bg-white/90 p-3 shadow-[0_14px_38px_rgba(17,19,21,0.1)] backdrop-blur-xl"
                   onSubmit={(event) => {
                     event.preventDefault();
                     void handleSubmit();
@@ -1246,8 +1265,8 @@ export function AskPremiumPage() {
                       <AssetScopeChip scope={activeAssetScope} onClear={clearActiveAssetScope} />
                     </div>
                   ) : null}
-                  <label className="flex items-center justify-between text-xs font-black text-slate-500" htmlFor="ask-premium-input">
-                    MESSAGE <span>{selectedAnswerMode}</span>
+                  <label className="text-xs font-black text-slate-500" htmlFor="ask-premium-input">
+                    MESSAGE
                   </label>
                   <textarea
                     id="ask-premium-input"
@@ -1262,14 +1281,14 @@ export function AskPremiumPage() {
                     }}
                     enterKeyHint="send"
                     placeholder="给 Anchr 发送消息"
-                    className="ask-premium-textarea max-h-40 min-h-[52px] w-full resize-y border-0 bg-transparent text-slate-950 outline-none placeholder:text-slate-400"
+                    className="ask-premium-textarea max-h-40 min-h-[52px] w-full resize-none border-0 bg-transparent text-slate-950 outline-none placeholder:text-slate-400"
                   />
-                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_48px] items-center gap-3 max-sm:block max-sm:w-full max-sm:max-w-full">
-                    <div className="ask-premium-control-strip flex min-w-0 flex-wrap items-center gap-2 overflow-visible pr-1 max-sm:w-full max-sm:max-w-full max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overflow-y-visible max-sm:py-1 max-sm:pr-[58px] max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden" data-composer-menu>
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_42px] items-center gap-2.5 max-sm:block max-sm:w-full max-sm:max-w-full">
+                    <div className="ask-premium-control-strip flex min-w-0 flex-wrap items-center gap-1.5 overflow-visible pr-1 max-sm:w-full max-sm:max-w-full max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overflow-y-visible max-sm:py-1 max-sm:pr-[52px] max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden" data-composer-menu>
                       <ComposerButton
                         active={agentEnabled && agentAvailable}
                         disabled={!agentAvailable}
-                        icon={<Sparkles size={15} />}
+                        icon={<AiStarIcon />}
                         label={agentAvailable ? `Agent · ${agentEnabled ? "开启" : "关闭"}` : "Agent · 后端未开启"}
                         onClick={toggleAgent}
                       />
@@ -1299,7 +1318,7 @@ export function AskPremiumPage() {
                       type={isStreamingActiveSession ? "button" : "submit"}
                       onClick={canCancelActiveQuery ? () => void cancelActiveQuery() : undefined}
                       disabled={isStreamingActiveSession ? !canCancelActiveQuery : !canSubmit}
-                      className="ask-premium-send-button grid size-12 shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-[0_18px_40px_rgba(17,19,21,0.22)] transition hover:-translate-y-[3px] hover:scale-[1.04] hover:bg-blue-600 disabled:bg-[#111315] disabled:text-white disabled:opacity-100 disabled:shadow-[0_18px_40px_rgba(17,19,21,0.22)] max-sm:fixed max-sm:bottom-[76px] max-sm:left-[min(322px,calc(100vw-72px))] max-sm:z-[60] max-sm:size-[46px]"
+                      className="ask-premium-send-button grid size-[42px] shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-[0_12px_28px_rgba(17,19,21,0.2)] transition hover:-translate-y-0.5 hover:scale-[1.03] hover:bg-blue-600 disabled:bg-[#111315] disabled:text-white disabled:opacity-100 disabled:shadow-[0_12px_28px_rgba(17,19,21,0.2)] max-sm:fixed max-sm:bottom-[76px] max-sm:left-[min(322px,calc(100vw-72px))] max-sm:z-[60] max-sm:size-[42px]"
                       aria-label={canCancelActiveQuery ? "取消查询" : isStreamingActiveSession ? "生成中" : "发送"}
                       title={canCancelActiveQuery ? "取消查询" : isStreamingActiveSession ? "生成中" : "发送"}
                     >
@@ -1746,7 +1765,7 @@ function SessionContextToggleIcon({ collapsed }: { collapsed: boolean }) {
     >
       <rect x="3" y="4" width="18" height="16" rx="4" />
       {collapsed ? (
-        <rect x="15" y="7" width="3" height="10" rx="1.5" />
+        <path d="M17 7v10" />
       ) : (
         <path d="M15 4.5v15" />
       )}
@@ -1792,6 +1811,24 @@ function ModelControlIcon() {
   );
 }
 
+function AiStarIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.65"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 2.5c0 6.2-3.3 9.5-9.5 9.5 6.2 0 9.5 3.3 9.5 9.5 0-6.2 3.3-9.5 9.5-9.5-6.2 0-9.5-3.3-9.5-9.5Z" />
+    </svg>
+  );
+}
+
 function SendGlyph() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
@@ -1820,7 +1857,7 @@ const ComposerButton = forwardRef<HTMLButtonElement, {
       disabled={disabled}
       onClick={onClick}
       className={[
-        "ask-premium-control-button inline-flex h-[38px] min-h-[38px] min-w-0 shrink-0 cursor-pointer items-center gap-2 border px-3 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0",
+        "ask-premium-control-button inline-flex h-[34px] min-h-[34px] min-w-0 shrink-0 cursor-pointer items-center gap-1.5 border px-2.5 transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0",
         active ? "border-blue-600/30 bg-[#111315] text-white" : "border-black/10 bg-[#f7f7f2]/90 text-[#111315] hover:border-blue-600/30 hover:bg-[#111315] hover:text-white",
       ].join(" ")}
       aria-expanded={active}
@@ -1959,7 +1996,7 @@ function PremiumConversationItem({
         onClick={onSelect}
         className={[
           "ask-premium-conversation-item",
-          "flex min-h-[48px] w-full items-center rounded-[8px] border p-3 text-left transition",
+          "flex min-h-[48px] w-full items-center rounded-[12px] border p-3 text-left transition",
           active ? "border-black/10 bg-white/80 text-[#111315]" : "border-transparent text-slate-700 hover:bg-white/70",
         ].join(" ")}
       >
@@ -1995,7 +2032,7 @@ function PremiumConversationItem({
       {menuOpen && menuPosition ? createPortal(
         <div
           data-conversation-menu
-          className="ask-premium-conversation-menu fixed z-[100] grid w-32 gap-1 rounded-[8px] border border-black/10 bg-white p-1 shadow-[0_12px_34px_rgba(15,23,42,0.14)]"
+          className="ask-premium-conversation-menu fixed z-[100] grid w-32 gap-1 rounded-[12px] border border-black/10 bg-white p-1 shadow-[0_12px_34px_rgba(15,23,42,0.14)]"
           style={menuPosition}
         >
           {confirmingDelete ? (
@@ -2182,7 +2219,7 @@ function PremiumChatBubble({
   return (
     <article data-turn-id={message.turnId} className="flex gap-2.5">
       <div className="ask-premium-assistant-avatar grid size-8 shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-none">
-        <Sparkles size={15} />
+        <AiStarIcon />
       </div>
       <div className="ask-premium-assistant-content min-w-0 flex-1 py-1">
         <div className="mb-2 flex items-center justify-between gap-4">

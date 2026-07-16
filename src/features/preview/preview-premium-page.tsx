@@ -252,8 +252,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
                   返回
                 </button>
                 <section className="min-w-0">
-                  <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
-                    <span className={`${styles.pulse} size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]`} />
+                  <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                     PREVIEW / CITATION SOURCE
                   </p>
                   <h1 className="max-w-[900px] truncate text-[clamp(18px,2.6vw,36px)] font-black leading-none text-[var(--premium-ink)]">

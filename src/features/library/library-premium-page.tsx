@@ -364,8 +364,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
               </div>
               <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
-                  <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
-                    <span className="size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
+                  <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                     {openedKnowledgeBaseId ? "LIBRARY / KNOWLEDGE BASE / DOCUMENTS" : "LIBRARY / KNOWLEDGE ASSET COMMAND"}
                   </p>
                   <h1 className="max-w-[720px] text-[clamp(16px,2.4vw,34px)] font-black leading-none">
@@ -2067,7 +2066,7 @@ function QuestionItem({ item, index }: { item: RecentQuestion; index: number }) 
       </span>
       <span className="grid min-w-0 overflow-hidden">
         <strong className="block truncate text-xs leading-5" title={item.question || "未命名问题"}>{item.question || "未命名问题"}</strong>
-        <span className="block truncate text-[10px] leading-5 text-white/55" title={knowledgeBases}>{knowledgeBases}</span>
+        <span className="library-question-context block truncate text-[10px] leading-5 text-white/55" title={knowledgeBases}>{knowledgeBases}</span>
       </span>
       <span className="library-activity-arrow grid size-7 shrink-0 place-items-center rounded-full border border-white/10 text-white/55" aria-hidden="true">
         <ArrowUpRight size={14} />
@@ -2145,9 +2144,9 @@ function HealthPanel({
             <section className="grid gap-2 border-t border-white/10 pt-2" aria-label="Segment 索引完成率">
               <div className="flex items-center justify-between gap-3 text-[11px] font-black">
                 <strong>SEGMENT INDEX COVERAGE</strong>
-                <span className="text-[9px] text-white/55">{coverage.toFixed(1)}%</span>
+                <span className="library-health-muted text-[9px] text-white/55">{coverage.toFixed(1)}%</span>
               </div>
-              <div className="flex h-2 overflow-hidden rounded-full bg-white/[0.09]">
+              <div className="library-health-track flex h-2 overflow-hidden rounded-full bg-white/[0.09]">
                 <span
                   className="block rounded-full bg-[linear-gradient(90deg,var(--premium-blue),var(--premium-accent))] transition-[width] duration-700 ease-out"
                   style={{ width: `${coverage}%` }}
@@ -2158,9 +2157,9 @@ function HealthPanel({
             <section className="grid gap-2 border-t border-white/10 pt-2" aria-label="文件类型占比">
               <div className="flex items-center justify-between gap-3 text-[11px] font-black">
                 <strong>FILE TYPE MIX</strong>
-                <span className="text-[9px] text-white/55">{sourceTypes.length} TYPES</span>
+                <span className="library-health-muted text-[9px] text-white/55">{sourceTypes.length} TYPES</span>
               </div>
-              <div className="flex h-2 overflow-hidden rounded-full bg-white/[0.09]" aria-hidden="true">
+              <div className="library-health-track flex h-2 overflow-hidden rounded-full bg-white/[0.09]" aria-hidden="true">
                 {sourceTypes.map((source) => (
                   <span
                     key={source.type}
@@ -2175,16 +2174,16 @@ function HealthPanel({
                     const label = healthSourceLabel(source.type, source.label);
 
                     return (
-                      <span key={source.type} className="grid min-w-0 grid-cols-[7px_minmax(0,1fr)_auto] items-center gap-2 text-[10px] text-white/55">
+                      <span key={source.type} className="library-health-muted grid min-w-0 grid-cols-[7px_minmax(0,1fr)_auto] items-center gap-2 text-[10px] text-white/55">
                         <i className="size-[7px] rounded-full" style={{ backgroundColor: healthSourceColor(source.type) }} aria-hidden="true" />
                         <span className="truncate" title={label}>{label}</span>
-                        <strong className="text-white">{Math.max(0, source.percentage)}%</strong>
+                        <strong className="library-health-source-value text-white">{Math.max(0, source.percentage)}%</strong>
                       </span>
                     );
                   })}
                 </div>
               ) : (
-                <p className="m-0 text-[10px] text-white/55">暂无文件类型数据</p>
+                <p className="library-health-muted m-0 text-[10px] text-white/55">暂无文件类型数据</p>
               )}
             </section>
           </div>
@@ -2222,17 +2221,18 @@ function healthSourceLabel(type: string, label: string) {
 
 function HealthMetric({ value, label, accent = false }: { value: string; label: string; accent?: boolean }) {
   return (
-    <article className="min-w-0 rounded-[8px] border border-white/10 bg-white/[0.055] px-2.5 py-2.5">
+    <article className="library-health-metric min-w-0 rounded-[8px] border border-white/10 bg-white/[0.055] px-2.5 py-2.5">
       <strong
         className={[
-          "mb-1.5 block overflow-hidden text-ellipsis text-[clamp(18px,1.55vw,22px)] font-black leading-[0.9]",
+          "library-health-metric-value mb-1.5 block overflow-hidden text-ellipsis text-[clamp(18px,1.55vw,22px)] font-black leading-[0.9]",
           accent ? "text-[var(--premium-accent)]" : "text-white",
         ].join(" ")}
+        data-accent={accent}
         title={value}
       >
         {value}
       </strong>
-      <span className="text-[9px] font-black text-white/55">{label}</span>
+      <span className="library-health-metric-label text-[9px] font-black text-white/55">{label}</span>
     </article>
   );
 }
@@ -2249,7 +2249,7 @@ function InlineState({ label, compact = false, fill = false }: { label: string; 
 }
 
 function DarkState({ label }: { label: string }) {
-  return <div className="grid h-full place-items-center rounded-[8px] bg-white/10 p-2.5 text-xs text-white/60">{label}</div>;
+  return <div className="library-panel-state grid h-full place-items-center rounded-[8px] bg-white/10 p-2.5 text-xs text-white/60">{label}</div>;
 }
 
 function getVisiblePages(page: number, totalPages: number) {
