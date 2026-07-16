@@ -12,6 +12,10 @@ import type {
   ConversationCitation,
   ConversationIntentType,
   ConversationMessageList,
+  AgentRunActivity,
+  AgentTask,
+  ConversationCapabilities,
+  ConversationExecutionMode,
   ConversationSession,
   ConversationSessionList,
   ElasticsearchHealth,
@@ -56,13 +60,14 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   token?: string | null;
+  signal?: AbortSignal;
 };
 
 type StreamMessageCallbacks = {
-  onTrace?: (event: { stage?: string; message?: string; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number }) => void;
+  onTrace?: (event: { stage?: string; message?: string; runId?: string; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown> }) => void;
   onDelta?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string; workflowVersion?: string; agentTask?: AgentTask }) => void;
 };
 
 type ConversationMessageRequest = {
@@ -74,6 +79,7 @@ type ConversationMessageRequest = {
   preferredModalities?: Array<"TEXT" | "IMAGE" | "MIXED">;
   debug?: boolean;
   stream?: boolean;
+  agentEnabled?: boolean;
 };
 
 export class ApiError extends Error {
@@ -152,6 +158,7 @@ async function request<T>(path: string, options: RequestOptions = {}) {
       ...(token ? { "X-Access-Token": token } : {}),
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
   });
 
   const payload = (await response.json().catch(() => null)) as ApiResult<T> | null;
@@ -219,7 +226,10 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "trace") {
-    callbacks.onTrace?.(parseSseJson<{ stage?: string; message?: string; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number }>(data) ?? {});
+    callbacks.onTrace?.(parseSseJson<{
+      stage?: string; message?: string; runId?: string; answerMode?: ConversationAnswerMode | string;
+      intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown>;
+    }>(data) ?? {});
     return;
   }
 
@@ -235,7 +245,13 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "done") {
-    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean }>(data) ?? {});
+    callbacks.onDone?.(parseSseJson<{
+      turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null;
+      answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus;
+      fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType;
+      retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string;
+      workflowVersion?: string; agentTask?: AgentTask;
+    }>(data) ?? {});
     return;
   }
 
@@ -363,6 +379,16 @@ export const apiClient = {
     request<SearchPage>("/api/v1/search/kb", { method: "POST", body }),
   listConversations: (limit = 50, cursor?: string | null) =>
     request<ConversationSessionList>(`/api/v1/conversations?${conversationListQuery(limit, cursor)}`),
+  getConversationCapabilities: () =>
+    request<ConversationCapabilities>("/api/v1/conversations/capabilities"),
+  getAgentTask: (taskId: string) =>
+    request<AgentTask>(`/api/v1/agent/tasks/${encodeURIComponent(taskId)}`),
+  cancelAgentTask: (taskId: string) =>
+    request<AgentTask>(`/api/v1/agent/tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST" }),
+  cancelAgentRun: (runId: string) =>
+    request<boolean>(`/api/v1/agent/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }),
+  getAgentRunActivity: (runId: string, signal?: AbortSignal) =>
+    request<AgentRunActivity>(`/api/v1/agent/runs/${encodeURIComponent(runId)}/activity`, { signal }),
   createConversation: (body: { title?: string | null; kbIds?: string[] }) =>
     request<ConversationSession>("/api/v1/conversations", {
       method: "POST",

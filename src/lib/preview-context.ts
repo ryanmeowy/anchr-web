@@ -1,6 +1,7 @@
 "use client";
 
 import type { CitationChunk, ConversationCitation, PreviewRequest, RecentCitation, SearchAnswer } from "./types";
+import { normalizeCitationLabel, parseAssetCitationIndex } from "./citation-reference";
 
 const STORAGE_PREFIX = "anchr.preview.context.";
 const RESTORE_PREFIX = "anchr.preview.restore.";
@@ -136,7 +137,7 @@ export function buildPreviewRequest({
 }: {
   source: PreviewSource;
   segmentId: string;
-  citationIndex?: number;
+  citationIndex?: string;
   context: PreviewNavigationContext | null;
 }): PreviewRequest {
   const sourceContext = context?.source === source ? context : null;
@@ -145,16 +146,13 @@ export function buildPreviewRequest({
     return {};
   }
 
-  const normalizedCitationIndex = typeof citationIndex === "number"
-    && Number.isFinite(citationIndex)
-    && citationIndex > 0
-    ? citationIndex
-    : 1;
+  const normalizedCitationLabel = normalizeCitationLabel(citationIndex);
+  const assetCitationIndex = parseAssetCitationIndex(normalizedCitationLabel);
   const citation = sourceContext?.citations?.find(
-    (item) => item.citationIndex === normalizedCitationIndex && item.chunks.some((chunk) => chunk.segmentId === segmentId),
+    (item) => item.citationIndex === assetCitationIndex && item.chunks.some((chunk) => chunk.segmentId === segmentId),
   )
     ?? sourceContext?.citations?.find((item) => item.chunks.some((chunk) => chunk.segmentId === segmentId))
-    ?? sourceContext?.citations?.find((item) => item.citationIndex === normalizedCitationIndex);
+    ?? sourceContext?.citations?.find((item) => item.citationIndex === assetCitationIndex);
   const chunk = citation?.chunks.find((item) => item.segmentId === segmentId) ?? citation?.chunks[0];
   const why = chunk?.why;
   const reason = why?.reason ?? why?.matchSummary ?? citation?.reason;
@@ -169,7 +167,7 @@ export function buildPreviewRequest({
     ...(sourceContext?.question ? { question: sourceContext.question } : {}),
     citationInfo: {
       segmentId,
-      citationIndex: String(citation?.citationIndex ?? normalizedCitationIndex),
+      citationIndex: chunk?.citationLabel ?? normalizedCitationLabel,
       ...(reason ? { reason } : {}),
       ...(citation?.chunks?.length ? { chunks: citation.chunks } : {}),
     },
@@ -177,11 +175,8 @@ export function buildPreviewRequest({
 }
 
 export function saveRecentCitationPreviewNavigation(item: RecentCitation, index: number) {
-  const fallbackCitationIndex = index + 1;
-  const parsedCitationIndex = Number(item.citationIndex);
-  const citationIndex = Number.isFinite(parsedCitationIndex) && parsedCitationIndex > 0
-    ? parsedCitationIndex
-    : fallbackCitationIndex;
+  const citationLabel = normalizeCitationLabel(item.citationIndex, String(index + 1));
+  const citationIndex = parseAssetCitationIndex(citationLabel, index + 1);
   const normalizedSourceType = item.sourceType?.trim().toUpperCase();
   const sourceType = normalizedSourceType === "ASK" || normalizedSourceType === "SEARCH"
     ? normalizedSourceType
@@ -195,6 +190,9 @@ export function saveRecentCitationPreviewNavigation(item: RecentCitation, index:
         chunkOrder: item.anchor?.chunkOrder,
         anchor: item.anchor ?? undefined,
       }];
+  const indexedChunks = chunks.map((chunk) => chunk.segmentId === item.segmentId && !chunk.citationLabel
+    ? { ...chunk, citationLabel }
+    : chunk);
   const contextKey = savePreviewNavigation({
     source: "library",
     navigationMode: chunks.length > 1 ? "CITATION" : "NONE",
@@ -209,13 +207,13 @@ export function saveRecentCitationPreviewNavigation(item: RecentCitation, index:
       kbId: item.kbId ?? undefined,
       fileName: item.fileName ?? undefined,
       reason: item.citationReason ?? undefined,
-      chunks,
+      chunks: indexedChunks,
     }],
   });
   const params = new URLSearchParams({
     from: "library",
     contextKey,
-    citationIndex: String(citationIndex),
+    citationIndex: citationLabel,
   });
 
   return `/preview/${encodeURIComponent(item.segmentId)}?${params.toString()}`;

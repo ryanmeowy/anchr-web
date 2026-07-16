@@ -27,6 +27,7 @@ import {
 } from "@/lib/asset-scope";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import { formatDateTime, formatFileSize, statusText } from "@/lib/format";
+import { normalizeCitationLabel, parseAssetCitationIndex } from "@/lib/citation-reference";
 import {
   buildChunkNavigation,
   buildPreviewRequest,
@@ -99,7 +100,8 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
       ? "library"
       : "ask";
   const contextKey = searchParams.get("contextKey");
-  const citationIndexFromUrl = Number(searchParams.get("citationIndex") ?? "");
+  const citationLabelFromUrl = normalizeCitationLabel(searchParams.get("citationIndex"));
+  const assetCitationIndexFromUrl = parseAssetCitationIndex(citationLabelFromUrl);
   const context = useMemo(() => readPreviewNavigation(contextKey), [contextKey]);
   const [activeSelection, setActiveSelection] = useState({
     routeSegmentId: decodedSegmentId,
@@ -112,10 +114,10 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
     () => buildPreviewRequest({
       source: from,
       segmentId: decodedSegmentId,
-      citationIndex: citationIndexFromUrl,
+      citationIndex: citationLabelFromUrl,
       context,
     }),
-    [citationIndexFromUrl, context, decodedSegmentId, from],
+    [citationLabelFromUrl, context, decodedSegmentId, from],
   );
 
   useEffect(() => {
@@ -134,7 +136,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
   }, [theme, themeHydrated]);
 
   const previewQuery = useQuery({
-    queryKey: ["preview", decodedSegmentId, from, contextKey, citationIndexFromUrl],
+    queryKey: ["preview", decodedSegmentId, from, contextKey, citationLabelFromUrl],
     queryFn: () => apiClient.previewSegment(decodedSegmentId, previewRequest),
   });
 
@@ -150,14 +152,16 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
     const citations = context?.citations ?? [];
     return citations.find((citation) => citation.chunks.some((chunk) => chunk.segmentId === activeSegmentId))
       ?? citations.find((citation) => citation.chunks.some((chunk) => chunk.segmentId === decodedSegmentId))
-      ?? citations.find((citation) => citation.citationIndex === citationIndexFromUrl);
-  }, [activeSegmentId, citationIndexFromUrl, context?.citations, decodedSegmentId]);
+      ?? citations.find((citation) => citation.citationIndex === assetCitationIndexFromUrl);
+  }, [activeSegmentId, assetCitationIndexFromUrl, context?.citations, decodedSegmentId]);
   const activeChunk = activeCitation?.chunks.find((chunk) => chunk.segmentId === activeSegmentId);
   const activeItem = useMemo(() => mergePreviewChunk(item, activeChunk), [activeChunk, item]);
-  const citationIndex = activeCitation?.citationIndex
-    ?? citationIndexFromUrl
-    ?? item?.citationContext?.citationIndex
-    ?? 1;
+  const citationIndex = normalizeCitationLabel(
+    activeChunk?.citationLabel
+      ?? (activeSegmentId === decodedSegmentId ? citationLabelFromUrl : undefined)
+      ?? item?.citationContext?.citationIndex
+      ?? String(activeCitation?.citationIndex ?? assetCitationIndexFromUrl),
+  );
 
   const handleCitationSelect = useCallback((chunk: CitationChunk) => {
     if (!chunk.segmentId || chunk.segmentId === activeSegmentId) {
@@ -321,7 +325,7 @@ export function AssetPreviewContent({
       key={`${asset.assetId}-${asset.previewUrl ?? "no-preview"}`}
       item={item}
       context={null}
-      citationIndex={1}
+      citationIndex="1"
       from="library"
       onCitationSelect={() => undefined}
       onAssetCitationSelect={() => undefined}
@@ -347,7 +351,7 @@ function PreviewContent({
 }: {
   item: PreviewSegment;
   context: PreviewNavigationContext | null;
-  citationIndex: number;
+  citationIndex: string;
   from: PreviewSource;
   onCitationSelect: (chunk: CitationChunk) => void;
   onAssetCitationSelect: (citation: PreviewCitation) => void;
@@ -876,7 +880,7 @@ function CitationSidebar({
 }: {
   item: PreviewSegment;
   context: PreviewNavigationContext | null;
-  citationIndex: number;
+  citationIndex: string;
   from: PreviewSource;
   onCitationSelect: (chunk: CitationChunk) => void;
   onAssetCitationSelect: (citation: PreviewCitation) => void;
@@ -884,7 +888,9 @@ function CitationSidebar({
 }) {
   const citation = context?.citations?.find((itemCitation) => (
     itemCitation.chunks.some((chunk) => chunk.segmentId === item.segmentId)
-  )) ?? context?.citations?.find((itemCitation) => itemCitation.citationIndex === citationIndex);
+  )) ?? context?.citations?.find(
+    (itemCitation) => itemCitation.citationIndex === parseAssetCitationIndex(citationIndex),
+  );
   const citationNavigation = buildChunkNavigation(citation, item.segmentId);
   const documentChunks = citationNavigation.chunks;
   const currentCitationPosition = citationNavigation.currentPosition;
@@ -930,7 +936,7 @@ function CitationSidebar({
           {from !== "library" ? (
             <AssetCitationIndexRow
               citations={context?.citations ?? []}
-              currentCitationIndex={citationIndex}
+              currentCitationIndex={parseAssetCitationIndex(citationIndex)}
               onSelect={onAssetCitationSelect}
             />
           ) : null}
@@ -1617,7 +1623,7 @@ function BBoxOverlay({
   );
 }
 
-function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIndex?: number }) {
+function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIndex?: string }) {
   const content = item.content || item.ocrSummary || item.title || "当前片段暂无可展示文本。";
 
   return (

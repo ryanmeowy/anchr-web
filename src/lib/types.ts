@@ -384,6 +384,8 @@ export type PreviewAnchor = {
 
 export type CitationChunk = {
   segmentId: string;
+  segmentIndex?: number;
+  citationLabel?: string;
   title?: string;
   pageNo?: number | null;
   chunkOrder?: number | null;
@@ -512,7 +514,7 @@ export type PreviewSegment = {
   citationContext?: {
     sourceQuestion?: string;
     answerClaim?: string;
-    citationIndex?: number;
+    citationIndex?: string;
     citationReason?: string;
   };
 };
@@ -668,6 +670,10 @@ export type ConversationTurn = {
     }>;
   }>;
   createdAt?: number;
+  executionMode?: ConversationExecutionMode;
+  agentRunId?: string;
+  workflowVersion?: string;
+  agentTask?: AgentTask;
 };
 
 export type ConversationMessageList = {
@@ -690,9 +696,73 @@ export type ConversationMessage = {
   intent?: ConversationIntent;
   citations?: ConversationCitation[];
   createdAt?: number;
+  executionMode?: ConversationExecutionMode;
+  agentRunId?: string;
+  workflowVersion?: string;
+  agentTask?: AgentTask;
 };
 
-export type ConversationAnswerStatus = "ANSWERED" | "NO_EVIDENCE" | "MODEL_FALLBACK";
+export type ConversationAnswerStatus = "ANSWERED" | "PROCESSING" | "CANCELLED" | "NO_EVIDENCE" | "MODEL_FALLBACK";
+export type ConversationExecutionMode = "TRADITIONAL" | "AGENT" | "AGENT_FALLBACK";
+export type AgentTaskStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+export type AgentTask = {
+  taskId: string;
+  type: string;
+  status: AgentTaskStatus;
+  progress: number;
+  currentStage?: string | null;
+  answer?: string | null;
+  citations?: ConversationCitation[];
+  errorCode?: string | null;
+  errorMessage?: string | null;
+};
+export type AgentActivityStatus = "RUNNING" | "COMPLETED" | "WAITING_TASK" | "FAILED" | "CANCELLED" | "AGENT_FALLBACK";
+export type AgentActivityStepStatus = "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+export type AgentActivityStep = {
+  stepOrder: number;
+  type: "MODEL_DECISION" | "TOOL" | "TASK_STAGE" | "FINAL" | string;
+  toolName?: string | null;
+  callId?: string | null;
+  taskStage?: string | null;
+  taskType?: string | null;
+  answerType?: string | null;
+  decision?: "TOOL_SELECTION" | "FINAL_RESPONSE" | "PROTOCOL_RETRY" | string | null;
+  status: AgentActivityStepStatus;
+  attempt?: number | null;
+  progress?: number | null;
+  messageCount?: number | null;
+  plannedToolCallCount?: number | null;
+  evidenceCount?: number | null;
+  documentCount?: number | null;
+  segmentCount?: number | null;
+  batchCount?: number | null;
+  citationCount?: number | null;
+  hasMore?: boolean | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  durationMs?: number | null;
+  createdAt?: number | null;
+  errorCode?: string | null;
+};
+export type AgentRunActivity = {
+  runId: string;
+  status: AgentActivityStatus;
+  workflowVersion?: string | null;
+  stepCount: number;
+  toolCallCount: number;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  latencyMs?: number | null;
+  fallbackReason?: string | null;
+  startedAt?: number | null;
+  finishedAt?: number | null;
+  steps: AgentActivityStep[];
+};
+export type ConversationCapabilities = {
+  agentAvailable: boolean;
+  workflowVersion?: string;
+  maxDocumentsPerSummary?: number;
+};
 export type ConversationIntentType = "CHAT" | "KB_QUERY" | "OTHER";
 export type ConversationIntentSource = "RULE" | "MODEL" | "FALLBACK" | "DISABLED" | "LEGACY";
 export type ConversationIntent = {
