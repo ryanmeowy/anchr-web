@@ -1636,21 +1636,36 @@ function AgentActivityCard({
 
   return (
     <section className="ask-premium-trace-timeline flex min-h-0 flex-1 flex-col rounded-[8px] border border-white/10 bg-white/10 p-4">
-      <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-white/60">
-        <span>AGENT ACTIVITY</span>
-        {isAgent && status ? <span className="text-[#bbff66]">{agentStatusLabel(status)}</span> : null}
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <span className="text-xs font-black text-white/60">AGENT ACTIVITY</span>
+          {isAgent ? (
+            <p className="mt-1 text-[10px] text-white/45">
+              {serverActivity ? `${serverActivity.toolCallCount} 次工具调用 · 实时指标` : "实时执行时间线"}
+            </p>
+          ) : null}
+        </div>
+        {isAgent && status ? (
+          <span className="inline-flex shrink-0 items-center gap-1.5 pt-0.5 text-[10px] font-black text-[#bbff66]">
+            {status === "RUNNING" || status === "WAITING_TASK" ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            {status !== "RUNNING" && status !== "WAITING_TASK" ? <span className="h-1.5 w-1.5 rounded-full bg-[#bbff66]" /> : null}
+            {agentStatusLabel(status)}
+          </span>
+        ) : null}
       </div>
       {isAgent ? (
-        <div className="mb-3 flex flex-wrap gap-1.5 text-[10px] text-white/55">
-          <span className="rounded-full bg-black/20 px-2 py-1">{steps.length} 个节点</span>
-          {serverActivity ? <span className="rounded-full bg-black/20 px-2 py-1">{serverActivity.toolCallCount} 次工具调用</span> : null}
-          {totalTokens > 0 ? (
-            <span className="rounded-full bg-black/20 px-2 py-1">Token 总计 {totalTokens.toLocaleString()}</span>
-          ) : null}
-          {totalTokens > 0 ? (
-            <span className="rounded-full bg-black/20 px-2 py-1">输入 {promptTokens.toLocaleString()} · 输出 {completionTokens.toLocaleString()}</span>
-          ) : null}
-          {serverActivity?.latencyMs != null ? <span className="rounded-full bg-black/20 px-2 py-1">端到端 {formatMilliseconds(serverActivity.latencyMs)}</span> : null}
+        <div className="mb-3 grid shrink-0 grid-cols-[0.8fr_1.35fr_1fr] overflow-hidden rounded-[8px] border border-white/10 bg-black/20">
+          <AgentRunMetric label="步骤" value={String(steps.length)} detail="执行节点" />
+          <AgentRunMetric
+            label="Token"
+            value={totalTokens > 0 ? compactNumber(totalTokens) : "—"}
+            detail={totalTokens > 0 ? `输入 ${compactNumber(promptTokens)} · 输出 ${compactNumber(completionTokens)}` : "暂无用量"}
+          />
+          <AgentRunMetric
+            label="端到端"
+            value={serverActivity?.latencyMs != null ? formatMilliseconds(serverActivity.latencyMs) : "—"}
+            detail="完整流程"
+          />
         </div>
       ) : null}
       {!latestAssistantMessage && !hasLiveAgent ? (
@@ -1670,20 +1685,25 @@ function AgentActivityCard({
               position={index + 1}
               ordinal={steps.filter((candidate) => candidate.stepOrder <= step.stepOrder && candidate.type === step.type).length}
               currentTime={activityClock}
+              isLast={index === steps.length - 1}
             />
           ))}
           {steps.length === 0 ? (
             <AgentActivityEmpty title="正在执行" detail="等待 Agent 返回第一个安全操作事件。" loading={status === "RUNNING"} />
           ) : null}
-          {status && status !== "RUNNING" && status !== "WAITING_TASK" ? (
-            <div className="mt-1 border-t border-white/10 pt-3 text-xs text-white/60">
-              <strong className="text-[#bbff66]">{agentStatusLabel(status)}</strong>
-              <span> · {serverActivity?.stepCount ?? steps.length} steps · {serverActivity?.toolCallCount ?? steps.filter((step) => step.type === "TOOL").length} tools{formatDuration(serverActivity?.latencyMs)}</span>
-            </div>
-          ) : null}
         </div>
       )}
     </section>
+  );
+}
+
+function AgentRunMetric({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  return (
+    <div className="flex min-h-[68px] min-w-0 flex-col overflow-hidden border-l border-white/10 px-3 py-2.5 first:border-l-0">
+      <span className="block shrink-0 text-[9px] font-black uppercase leading-none tracking-[0.1em] text-white/45">{label}</span>
+      <strong className="mt-1.5 block shrink-0 truncate text-[15px] leading-none tracking-[-0.02em] text-white/90">{value}</strong>
+      {detail ? <span className="mt-2 block shrink-0 whitespace-nowrap text-[8px] leading-none text-white/45">{detail}</span> : null}
+    </div>
   );
 }
 
@@ -1704,32 +1724,59 @@ function AgentActivityStepItem({
   position,
   ordinal,
   currentTime,
+  isLast,
 }: {
   step: AgentActivityStep;
   position: number;
   ordinal: number;
   currentTime?: number;
+  isLast: boolean;
 }) {
   const progress = displayedAgentStepProgress(step);
+  const summary = agentStepSummary(step);
+  const metrics = agentStepMetrics(step, currentTime);
+  const stepSurface = step.status === "RUNNING"
+    ? "bg-[#bbff66]/[0.06]"
+    : step.status === "FAILED" || step.status === "CANCELLED" ? "bg-red-400/[0.05]" : "";
   return (
-    <div className="ask-premium-trace-event rounded-[8px] bg-black/20 p-3">
-      <div className="flex items-start gap-2">
-        <span className={`grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1 text-[9px] font-black ${step.status === "FAILED" || step.status === "CANCELLED" ? "bg-red-400/20 text-red-300" : "bg-[#bbff66]/15 text-[#bbff66]"}`}>{String(position).padStart(2, "0")}</span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3 text-xs font-black text-white/90">
-            <span>{agentStepTitle(step, ordinal)}</span>
-            <span className="flex shrink-0 items-center gap-1 text-[9px] text-white/45">
-              {step.status === "RUNNING" ? <Loader2 className="h-3 w-3 animate-spin text-[#bbff66]" /> : null}
-              {agentStepStatusLabel(step.status)}
-            </span>
-          </div>
-          <p className="mt-1 break-words text-xs leading-5 text-white/60">{agentStepDetail(step, currentTime)}</p>
-          {progress != null ? (
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
+    <div className="ask-premium-trace-event flex items-stretch gap-2.5">
+      <div className="relative flex w-5 shrink-0 justify-center">
+        <span className={`relative z-[1] mt-2 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[9px] font-black ${step.status === "FAILED" || step.status === "CANCELLED" ? "bg-red-400/20 text-red-300" : step.status === "RUNNING" ? "bg-[#bbff66] text-[#111315]" : "border border-white/10 bg-black/20 text-white/55"}`}>{String(position).padStart(2, "0")}</span>
+        {!isLast ? <span className="absolute bottom-[-8px] top-7 w-px bg-white/10" /> : null}
+      </div>
+      <div className={`mb-2.5 min-w-0 flex-1 rounded-[7px] px-2.5 py-2 ${stepSurface}`}>
+        <div className="flex items-center justify-between gap-3 text-xs font-black text-white/90">
+          <span>{agentStepTitle(step, ordinal)}</span>
+          <span className="flex shrink-0 items-center gap-1 text-[9px] text-white/45">
+            {step.status === "RUNNING" ? <Loader2 className="h-3 w-3 animate-spin text-[#bbff66]" /> : null}
+            {agentStepStatusLabel(step.status)}
+          </span>
+        </div>
+        {summary ? <p className="mt-1 break-words text-[11px] leading-[1.55] text-white/60">{summary}</p> : null}
+        {metrics.length > 0 ? (
+          <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-white/10 pt-2">
+            {metrics.map((metric) => (
+              <div
+                key={`${metric.label}:${metric.value}`}
+                className="flex min-w-0 items-baseline justify-between gap-1.5 text-[9px]"
+              >
+                <dt className="shrink-0 text-white/45">{metric.label}</dt>
+                <dd className={`truncate font-semibold ${metric.tone === "accent" ? "text-[#bbff66]" : metric.tone === "danger" ? "text-red-300" : "text-white/60"}`}>{metric.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+        {progress != null ? (
+          <div className="mt-2.5">
+            <div className="mb-1 flex items-center justify-between text-[9px] text-white/45">
+              <span>阶段进度</span>
+              <strong className="text-white/60">{progress}%</strong>
+            </div>
+            <div className="h-1 overflow-hidden rounded-full bg-white/10">
               <span className="block h-full rounded-full bg-[#bbff66] transition-[width]" style={{ width: `${progress}%` }} />
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1812,9 +1859,8 @@ function agentStepTitle(step: AgentActivityStep, ordinal: number) {
   }[step.toolName ?? ""] ?? step.toolName ?? "执行工具";
 }
 
-function agentStepDetail(step: AgentActivityStep, currentTime?: number) {
+function agentStepSummary(step: AgentActivityStep) {
   const details: string[] = [];
-  const progress = displayedAgentStepProgress(step);
   if (step.type === "MODEL_DECISION") {
     if (step.messageCount != null) details.push(`读取 ${step.messageCount} 条上下文消息`);
     if (step.decision === "ANALYZING") details.push("正在等待模型决策");
@@ -1825,42 +1871,59 @@ function agentStepDetail(step: AgentActivityStep, currentTime?: number) {
   if (step.decision === "READ_LIMIT_REACHED") {
     details.push("已达到单轮连续读取上限，使用现有证据生成回答");
   }
-  if (step.toolName) details.push(step.toolName);
   if (step.answerType) details.push(step.answerType === "KNOWLEDGE" ? "知识回答" : step.answerType === "CHAT" ? "直接回答" : step.answerType);
   if (step.taskType) details.push(step.taskType === "DOCUMENT_SUMMARY" ? "文档总结" : step.taskType);
-  if (step.model) details.push(`模型 ${step.model}`);
   if (step.documentCount != null) details.push(`${step.documentCount} 份文档`);
   if (step.evidenceCount != null) details.push(`${step.evidenceCount} 条证据`);
   if (step.segmentCount != null) details.push(`${step.segmentCount} 个片段`);
   if (step.batchCount != null) details.push(`${step.batchCount} 个处理批次`);
   if (step.citationCount != null) details.push(`${step.citationCount} 条引用`);
-  if (step.modelCallCount != null && step.modelCallCount > 0) details.push(`${step.modelCallCount} 次模型请求`);
-  if ((step.promptTokens ?? 0) + (step.completionTokens ?? 0) > 0) {
-    details.push(`Token 输入 ${(step.promptTokens ?? 0).toLocaleString()} / 输出 ${(step.completionTokens ?? 0).toLocaleString()}`);
-  }
+  if (step.hasMore === true) details.push("仍有后续内容");
+  return details.join(" · ");
+}
+
+type AgentStepMetric = {
+  label: string;
+  value: string;
+  tone?: "default" | "accent" | "danger";
+};
+
+function agentStepMetrics(step: AgentActivityStep, currentTime?: number): AgentStepMetric[] {
+  const metrics: AgentStepMetric[] = [];
   const modelLatency = step.modelLatencyMs
     ?? (step.type === "MODEL_DECISION" && step.status !== "RUNNING" ? step.durationMs : undefined);
-  if (step.firstTokenMs != null) details.push(`首字 ${formatMilliseconds(step.firstTokenMs)}`);
-  if (modelLatency != null) details.push(`模型响应 ${formatMilliseconds(modelLatency)}`);
-  if (step.streaming === true) details.push("流式输出");
-  if (step.streaming === false) details.push("非流式输出");
+  if (step.model) metrics.push({ label: "模型", value: step.model });
+  if (step.modelCallCount != null && step.modelCallCount > 1) {
+    metrics.push({ label: "调用", value: `${step.modelCallCount} 次` });
+  }
+  if ((step.promptTokens ?? 0) + (step.completionTokens ?? 0) > 0) {
+    metrics.push({
+      label: "Token",
+      value: `↑${compactNumber(step.promptTokens ?? 0)} ↓${compactNumber(step.completionTokens ?? 0)}`,
+    });
+  }
+  if (step.firstTokenMs != null) metrics.push({ label: "首字", value: formatMilliseconds(step.firstTokenMs) });
+  if (modelLatency != null) metrics.push({ label: "模型耗时", value: formatMilliseconds(modelLatency) });
   const generationMs = modelLatency != null && step.firstTokenMs != null
     ? modelLatency - step.firstTokenMs
     : undefined;
   if ((step.modelCallCount ?? 1) === 1 && (step.completionTokens ?? 0) > 0 && generationMs != null && generationMs > 0) {
-    details.push(`输出速率 ${((step.completionTokens ?? 0) * 1000 / generationMs).toFixed(1)} token/s`);
+    metrics.push({
+      label: "速率",
+      value: `${((step.completionTokens ?? 0) * 1000 / generationMs).toFixed(1)} tok/s`,
+    });
   }
-  if (progress != null) details.push(`进度 ${progress}%`);
-  if (step.hasMore === true) details.push("仍有后续内容");
-  if (step.attempt != null && step.attempt > 1) details.push(`第 ${step.attempt} 次尝试`);
-  if (step.errorCode) details.push(`错误 ${step.errorCode}`);
+  if (step.attempt != null && step.attempt > 1) metrics.push({ label: "尝试", value: `第 ${step.attempt} 次` });
+  if (step.errorCode) metrics.push({ label: "错误", value: step.errorCode, tone: "danger" });
   if (step.status === "RUNNING" && currentTime != null && step.createdAt != null && currentTime >= step.createdAt) {
-    details.push(`已等待 ${formatMilliseconds(currentTime - step.createdAt)}`);
+    metrics.push({ label: "已用时", value: formatMilliseconds(currentTime - step.createdAt), tone: "accent" });
   } else if (step.durationMs != null && modelLatency !== step.durationMs) {
-    details.push(`${step.type === "FINAL" ? "端到端" : "阶段耗时"} ${formatMilliseconds(step.durationMs)}`);
+    metrics.push({
+      label: step.type === "FINAL" ? "端到端" : "阶段耗时",
+      value: formatMilliseconds(step.durationMs),
+    });
   }
-  if (details.length) return details.join(" · ");
-  return step.status === "RUNNING" ? "正在执行" : step.status === "COMPLETED" ? "已完成" : agentStatusLabel(step.status);
+  return metrics;
 }
 
 function displayedAgentStepProgress(step: AgentActivityStep) {
@@ -1908,8 +1971,11 @@ function formatMilliseconds(durationMs: number) {
   return durationMs >= 1_000 ? `${(durationMs / 1_000).toFixed(1)}s` : `${Math.max(0, Math.round(durationMs))}ms`;
 }
 
-function formatDuration(durationMs?: number | null) {
-  return durationMs == null ? "" : ` · ${formatMilliseconds(durationMs)}`;
+function compactNumber(value: number) {
+  return new Intl.NumberFormat("zh-CN", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(Math.max(0, value));
 }
 
 function SessionContextToggleIcon({ collapsed }: { collapsed: boolean }) {
