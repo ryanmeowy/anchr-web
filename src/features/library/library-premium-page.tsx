@@ -45,6 +45,7 @@ import {
 import { PremiumConfigurationShell } from "@/components/app/premium-configuration-gate";
 import { FileTypeIcon } from "@/components/shared/file-type-icon";
 import { apiClient } from "@/lib/api-client";
+import { saveAskAssetScope, saveAssetScopeHandoff, type AssetScope } from "@/lib/asset-scope";
 import { formatDateTime, formatFileSize, formatNumber, statusText } from "@/lib/format";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import { saveRecentCitationPreviewNavigation } from "@/lib/preview-context";
@@ -356,7 +357,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
   };
 
   return (
-    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} scrollContent>
+    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} scrollContent ambientGlow={false}>
       <div className="grid min-h-full min-w-0 grid-rows-[auto_minmax(0,1fr)]">
             <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
@@ -364,8 +365,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
               </div>
               <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
-                  <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
-                    <span className="size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
+                  <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                     {openedKnowledgeBaseId ? "LIBRARY / KNOWLEDGE BASE / DOCUMENTS" : "LIBRARY / KNOWLEDGE ASSET COMMAND"}
                   </p>
                   <h1 className="max-w-[720px] text-[clamp(16px,2.4vw,34px)] font-black leading-none">
@@ -386,7 +386,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                 onBack={handleCloseKnowledgeBase}
               />
             ) : (
-              <main className="ask-premium-main grid min-h-0 place-items-center bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] p-6">
+              <main className="ask-premium-main library-no-ambient-glow grid min-h-0 place-items-center bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] p-6">
                 <InlineState
                   label={openedKbQuery.isError
                     ? `知识库暂不可用：${openedKbQuery.error instanceof Error ? openedKbQuery.error.message : "请稍后重试"}`
@@ -395,7 +395,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                 />
               </main>
             ) : (
-            <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-visible bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:px-5">
+            <main className="ask-premium-main library-no-ambient-glow grid min-h-0 min-w-0 items-start gap-3 overflow-visible bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:px-5">
               <section className="flex min-h-0 min-w-0 flex-col" aria-label="我的知识库">
                 <div className="mb-5 grid shrink-0 grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <form
@@ -681,6 +681,8 @@ function KnowledgeBaseDocumentView({
   const [documentPage, setDocumentPage] = useState(1);
   const [documentPageSize, setDocumentPageSize] = useState<number>(DOCUMENT_GRID_PAGE_SIZES[0]);
   const [deleteTarget, setDeleteTarget] = useState<LibraryDocumentItem | null>(null);
+  const [askingDocumentId, setAskingDocumentId] = useState<string | null>(null);
+  const [documentActionError, setDocumentActionError] = useState<string | null>(null);
   const deferredDocumentKeyword = useDeferredValue(keyword.trim());
   const documentsQuery = useQuery({
     queryKey: [
@@ -747,6 +749,30 @@ function KnowledgeBaseDocumentView({
     router.push(`/preview/asset/${encodeURIComponent(document.id)}?${params.toString()}`);
   };
 
+  const handleAskDocument = async (document: LibraryDocumentItem) => {
+    if (askingDocumentId) return;
+    setAskingDocumentId(document.id);
+    setDocumentActionError(null);
+    try {
+      const session = await apiClient.createConversation({
+        title: null,
+        kbIds: [knowledgeBase.id],
+        assetIdList: [document.id],
+      });
+      const scope: AssetScope = {
+        assetId: document.id,
+        fileName: document.name,
+        kbId: knowledgeBase.id,
+      };
+      saveAskAssetScope(session.sessionId, scope);
+      saveAssetScopeHandoff({ destination: "ask", scope, sessionId: session.sessionId });
+      router.push(`/ask?session=${encodeURIComponent(session.sessionId)}`);
+    } catch (error) {
+      setDocumentActionError(error instanceof Error ? error.message : "创建文档问答会话失败");
+      setAskingDocumentId(null);
+    }
+  };
+
   const handleRequestDelete = (document: LibraryDocumentItem) => {
     deleteMutation.reset();
     setDeleteTarget(document);
@@ -765,7 +791,7 @@ function KnowledgeBaseDocumentView({
 
   return (
     <>
-    <main className="ask-premium-main library-document-view min-h-0 min-w-0 overflow-auto bg-[linear-gradient(100deg,rgba(255,255,255,0.88),rgba(255,255,255,0.4)),radial-gradient(circle_at_84%_8%,rgba(187,255,102,0.34),transparent_28rem)] px-4 py-4 sm:px-5 lg:px-5" aria-label={`${knowledgeBase.name} 文档`}>
+    <main className="ask-premium-main library-no-ambient-glow library-document-view min-h-0 min-w-0 overflow-auto bg-[linear-gradient(100deg,rgba(255,255,255,0.88),rgba(255,255,255,0.4))] px-4 py-4 sm:px-5 lg:px-5" aria-label={`${knowledgeBase.name} 文档`}>
       <div className="mx-auto grid w-full max-w-[1500px] gap-4">
         <section className="library-document-command relative overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-4 text-white shadow-[var(--premium-tight-shadow)] sm:p-5">
           <div aria-hidden="true" className="library-document-orbit absolute -right-12 -top-20 size-64 rounded-full border border-white/10" />
@@ -855,6 +881,12 @@ function KnowledgeBaseDocumentView({
             </p>
           </div>
 
+          {documentActionError ? (
+            <div className="mb-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200">
+              {documentActionError}
+            </div>
+          ) : null}
+
           {documentsQuery.isLoading ? (
             <InlineState label="正在加载文档" />
           ) : documentsQuery.isError ? (
@@ -869,13 +901,15 @@ function KnowledgeBaseDocumentView({
                   document={document}
                   index={index}
                   onPreview={() => handlePreview(document)}
+                  onAsk={() => void handleAskDocument(document)}
+                  asking={askingDocumentId === document.id}
                   onDelete={() => handleRequestDelete(document)}
                 />
               ))}
             </div>
           ) : (
             <div className="overflow-x-auto rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] shadow-[var(--premium-tight-shadow)]">
-              <div className="grid min-w-[780px] grid-cols-[minmax(0,1fr)_100px_100px_168px_120px] gap-4 border-b border-[var(--premium-line)] px-4 py-3 text-[10px] font-black text-[var(--premium-muted)]">
+              <div className="grid min-w-[880px] grid-cols-[minmax(0,1fr)_100px_100px_168px_210px] gap-4 border-b border-[var(--premium-line)] px-4 py-3 text-[10px] font-black text-[var(--premium-muted)]">
                 <span>文档名称</span><span>类型</span><span>版本</span><span>入库时间</span><span className="text-right">操作</span>
               </div>
               <div className="divide-y divide-[var(--premium-line)]">
@@ -885,6 +919,8 @@ function KnowledgeBaseDocumentView({
                     document={document}
                     index={index}
                     onPreview={() => handlePreview(document)}
+                    onAsk={() => void handleAskDocument(document)}
+                    asking={askingDocumentId === document.id}
                     onDelete={() => handleRequestDelete(document)}
                   />
                 ))}
@@ -1028,11 +1064,15 @@ function DocumentCard({
   document,
   index,
   onPreview,
+  onAsk,
+  asking,
   onDelete,
 }: {
   document: LibraryDocumentItem;
   index: number;
   onPreview: () => void;
+  onAsk: () => void;
+  asking: boolean;
   onDelete: () => void;
 }) {
   return (
@@ -1050,7 +1090,7 @@ function DocumentCard({
       >
         <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 origin-left scale-x-0 bg-[var(--premium-accent)] transition-transform duration-500 group-hover:scale-x-100 group-focus-visible:scale-x-100" />
         <span aria-hidden="true" className="absolute -right-14 -top-14 size-36 rounded-full border border-[var(--premium-line)] transition duration-500 group-hover:scale-125 group-hover:border-[rgba(49,88,255,0.28)]" />
-        <span className="relative z-10 flex items-start justify-between gap-3 pr-10">
+        <span className="relative z-10 flex items-start justify-between gap-3 pr-[112px]">
           <FileTypeIcon fileName={document.name} className="shadow-[0_10px_28px_rgba(17,19,21,0.1)]" />
           <span className="inline-flex items-center gap-1 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2.5 py-1 text-[10px] font-black text-[var(--premium-ink-soft)]">
             <History size={12} /> V{document.version}
@@ -1073,15 +1113,28 @@ function DocumentCard({
           </span>
         </span>
       </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        className="absolute right-3 top-3 z-20 grid size-8 place-items-center rounded-[8px] border border-rose-200 bg-rose-50/95 text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:border-rose-400 hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 dark:border-rose-500/25 dark:bg-rose-500/15 dark:text-rose-300"
-        aria-label={`删除 ${document.name}`}
-        title={`删除 ${document.name}`}
-      >
-        <Trash2 size={14} />
-      </button>
+      <div className="absolute right-3 top-3 z-20 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onAsk}
+          disabled={asking}
+          className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[rgba(49,88,255,0.18)] bg-blue-50/95 px-2.5 text-[10px] font-black text-[var(--premium-blue)] shadow-sm transition hover:-translate-y-0.5 hover:border-[rgba(49,88,255,0.38)] hover:bg-blue-100 disabled:cursor-wait disabled:opacity-65 dark:border-white/15 dark:bg-white/10 dark:text-white"
+          aria-label={`使用 ${document.name} 新建问答`}
+          title={`仅使用 ${document.name} 新建问答`}
+        >
+          {asking ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />}
+          询问
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="grid size-8 place-items-center rounded-[8px] border border-rose-200 bg-rose-50/95 text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:border-rose-400 hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 dark:border-rose-500/25 dark:bg-rose-500/15 dark:text-rose-300"
+          aria-label={`删除 ${document.name}`}
+          title={`删除 ${document.name}`}
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
     </article>
   );
 }
@@ -1090,17 +1143,21 @@ function DocumentListItem({
   document,
   index,
   onPreview,
+  onAsk,
+  asking,
   onDelete,
 }: {
   document: LibraryDocumentItem;
   index: number;
   onPreview: () => void;
+  onAsk: () => void;
+  asking: boolean;
   onDelete: () => void;
 }) {
   return (
     <div
       style={{ animationDelay: `${Math.min(index, 6) * 48}ms` }}
-      className="library-document-card group grid min-h-16 w-full min-w-[780px] grid-cols-[minmax(0,1fr)_100px_100px_168px_120px] items-center gap-4 px-4 py-2 text-left transition duration-300 hover:bg-[var(--premium-panel-strong)]"
+      className="library-document-card group grid min-h-16 w-full min-w-[880px] grid-cols-[minmax(0,1fr)_100px_100px_168px_210px] items-center gap-4 px-4 py-2 text-left transition duration-300 hover:bg-[var(--premium-panel-strong)]"
     >
       <span className="flex min-w-0 items-center gap-3">
         <FileTypeIcon fileName={document.name} compact />
@@ -1113,6 +1170,16 @@ function DocumentListItem({
       <span className="inline-flex w-fit items-center gap-1 rounded-full bg-[var(--premium-panel-muted)] px-2 py-1 text-[10px] font-black text-[var(--premium-ink-soft)]"><History size={11} /> V{document.version}</span>
       <time className="truncate text-[11px] font-bold text-[var(--premium-muted)]" dateTime={document.importedAt}>{formatDateTime(document.importedAt)}</time>
       <span className="ml-auto flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={onAsk}
+          disabled={asking}
+          title={`仅使用 ${document.name} 新建问答`}
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-[var(--premium-blue-soft)] px-2.5 text-[10px] font-black text-[var(--premium-blue)] transition hover:bg-[var(--premium-blue)] hover:text-white disabled:cursor-wait disabled:opacity-60"
+        >
+          {asking ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />}
+          询问
+        </button>
         <button
           type="button"
           onClick={onPreview}
@@ -1354,14 +1421,6 @@ function KnowledgeBaseCard({
         selected ? "border-[var(--premium-line-strong)] bg-[var(--premium-panel-strong)] ring-1 ring-black/5 dark:ring-white/10" : "border-[var(--premium-line)] bg-[var(--premium-panel)]",
       ].join(" ")}
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-0 opacity-0 transition duration-300 group-hover:opacity-100"
-        style={{
-          background:
-            "linear-gradient(120deg, rgba(39,93,255,0.12), transparent 36%), radial-gradient(circle at 86% 8%, rgba(187,255,102,0.34), transparent 12rem)",
-        }}
-      />
       {!editing && !archiveConfirming ? (
         <button
           type="button"
@@ -2067,7 +2126,7 @@ function QuestionItem({ item, index }: { item: RecentQuestion; index: number }) 
       </span>
       <span className="grid min-w-0 overflow-hidden">
         <strong className="block truncate text-xs leading-5" title={item.question || "未命名问题"}>{item.question || "未命名问题"}</strong>
-        <span className="block truncate text-[10px] leading-5 text-white/55" title={knowledgeBases}>{knowledgeBases}</span>
+        <span className="library-question-context block truncate text-[10px] leading-5 text-white/55" title={knowledgeBases}>{knowledgeBases}</span>
       </span>
       <span className="library-activity-arrow grid size-7 shrink-0 place-items-center rounded-full border border-white/10 text-white/55" aria-hidden="true">
         <ArrowUpRight size={14} />
@@ -2145,9 +2204,9 @@ function HealthPanel({
             <section className="grid gap-2 border-t border-white/10 pt-2" aria-label="Segment 索引完成率">
               <div className="flex items-center justify-between gap-3 text-[11px] font-black">
                 <strong>SEGMENT INDEX COVERAGE</strong>
-                <span className="text-[9px] text-white/55">{coverage.toFixed(1)}%</span>
+                <span className="library-health-muted text-[9px] text-white/55">{coverage.toFixed(1)}%</span>
               </div>
-              <div className="flex h-2 overflow-hidden rounded-full bg-white/[0.09]">
+              <div className="library-health-track flex h-2 overflow-hidden rounded-full bg-white/[0.09]">
                 <span
                   className="block rounded-full bg-[linear-gradient(90deg,var(--premium-blue),var(--premium-accent))] transition-[width] duration-700 ease-out"
                   style={{ width: `${coverage}%` }}
@@ -2158,9 +2217,9 @@ function HealthPanel({
             <section className="grid gap-2 border-t border-white/10 pt-2" aria-label="文件类型占比">
               <div className="flex items-center justify-between gap-3 text-[11px] font-black">
                 <strong>FILE TYPE MIX</strong>
-                <span className="text-[9px] text-white/55">{sourceTypes.length} TYPES</span>
+                <span className="library-health-muted text-[9px] text-white/55">{sourceTypes.length} TYPES</span>
               </div>
-              <div className="flex h-2 overflow-hidden rounded-full bg-white/[0.09]" aria-hidden="true">
+              <div className="library-health-track flex h-2 overflow-hidden rounded-full bg-white/[0.09]" aria-hidden="true">
                 {sourceTypes.map((source) => (
                   <span
                     key={source.type}
@@ -2175,16 +2234,16 @@ function HealthPanel({
                     const label = healthSourceLabel(source.type, source.label);
 
                     return (
-                      <span key={source.type} className="grid min-w-0 grid-cols-[7px_minmax(0,1fr)_auto] items-center gap-2 text-[10px] text-white/55">
+                      <span key={source.type} className="library-health-muted grid min-w-0 grid-cols-[7px_minmax(0,1fr)_auto] items-center gap-2 text-[10px] text-white/55">
                         <i className="size-[7px] rounded-full" style={{ backgroundColor: healthSourceColor(source.type) }} aria-hidden="true" />
                         <span className="truncate" title={label}>{label}</span>
-                        <strong className="text-white">{Math.max(0, source.percentage)}%</strong>
+                        <strong className="library-health-source-value text-white">{Math.max(0, source.percentage)}%</strong>
                       </span>
                     );
                   })}
                 </div>
               ) : (
-                <p className="m-0 text-[10px] text-white/55">暂无文件类型数据</p>
+                <p className="library-health-muted m-0 text-[10px] text-white/55">暂无文件类型数据</p>
               )}
             </section>
           </div>
@@ -2222,17 +2281,18 @@ function healthSourceLabel(type: string, label: string) {
 
 function HealthMetric({ value, label, accent = false }: { value: string; label: string; accent?: boolean }) {
   return (
-    <article className="min-w-0 rounded-[8px] border border-white/10 bg-white/[0.055] px-2.5 py-2.5">
+    <article className="library-health-metric min-w-0 rounded-[8px] border border-white/10 bg-white/[0.055] px-2.5 py-2.5">
       <strong
         className={[
-          "mb-1.5 block overflow-hidden text-ellipsis text-[clamp(18px,1.55vw,22px)] font-black leading-[0.9]",
+          "library-health-metric-value mb-1.5 block overflow-hidden text-ellipsis text-[clamp(18px,1.55vw,22px)] font-black leading-[0.9]",
           accent ? "text-[var(--premium-accent)]" : "text-white",
         ].join(" ")}
+        data-accent={accent}
         title={value}
       >
         {value}
       </strong>
-      <span className="text-[9px] font-black text-white/55">{label}</span>
+      <span className="library-health-metric-label text-[9px] font-black text-white/55">{label}</span>
     </article>
   );
 }
@@ -2249,7 +2309,7 @@ function InlineState({ label, compact = false, fill = false }: { label: string; 
 }
 
 function DarkState({ label }: { label: string }) {
-  return <div className="grid h-full place-items-center rounded-[8px] bg-white/10 p-2.5 text-xs text-white/60">{label}</div>;
+  return <div className="library-panel-state grid h-full place-items-center rounded-[8px] bg-white/10 p-2.5 text-xs text-white/60">{label}</div>;
 }
 
 function getVisiblePages(page: number, totalPages: number) {

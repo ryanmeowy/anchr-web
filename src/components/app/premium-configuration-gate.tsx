@@ -186,7 +186,7 @@ export function PremiumSystemConfigurationBoundary({ children }: { children: Rea
 
   if (systemConfig.isLoading) {
     return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} ambientGlow={false}>
         <PremiumConfigurationLoading
           theme={theme}
           title="正在检查系统配置"
@@ -198,7 +198,7 @@ export function PremiumSystemConfigurationBoundary({ children }: { children: Rea
 
   if (systemConfig.indexStatusError || !systemConfig.indexStatus) {
     return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} ambientGlow={false}>
         <PremiumIndexStatusError
           theme={theme}
           onRetry={() => void systemConfig.refetchIndexStatus()}
@@ -209,7 +209,7 @@ export function PremiumSystemConfigurationBoundary({ children }: { children: Rea
 
   if (systemConfig.missingAny) {
     return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} ambientGlow={false}>
         <PremiumSystemConfigurationGate theme={theme} />
       </PremiumConfigurationShell>
     );
@@ -217,7 +217,7 @@ export function PremiumSystemConfigurationBoundary({ children }: { children: Rea
 
   if (!systemConfig.indexReady && systemConfig.indexStatus) {
     return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} ambientGlow={false}>
         <PremiumIndexGate theme={theme} indexStatus={systemConfig.indexStatus} />
       </PremiumConfigurationShell>
     );
@@ -230,22 +230,29 @@ export function PremiumConfigurationShell({
   theme,
   onThemeChange,
   scrollContent = false,
+  ambientGlow = true,
   children,
 }: {
   theme: PremiumThemeMode;
   onThemeChange: (theme: PremiumThemeMode) => void;
   scrollContent?: boolean;
+  ambientGlow?: boolean;
   children: ReactNode;
 }) {
   return (
     <div
-      className="premium-theme ask-premium-page imports-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] tracking-normal text-[#111315]"
+      className={[
+        "premium-theme ask-premium-page imports-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] tracking-normal text-[#111315]",
+        ambientGlow ? "" : "premium-no-ambient-glow",
+      ].join(" ")}
       data-theme={theme}
       data-premium-theme={theme}
       style={{ fontFamily: PREMIUM_CONFIGURATION_FONT_STACK }}
     >
       <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
-      <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,var(--premium-glow-primary),transparent_28rem),radial-gradient(circle_at_14%_92%,var(--premium-glow-secondary),transparent_30rem)]" />
+      {ambientGlow ? (
+        <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,var(--premium-glow-primary),transparent_28rem),radial-gradient(circle_at_14%_92%,var(--premium-glow-secondary),transparent_30rem)]" />
+      ) : null}
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
         <div
           className={[
@@ -478,5 +485,5 @@ function PremiumConfigurationStatusRow({ label, missing }: PremiumConfigurationS
 function statePageBackgroundClass(theme: PremiumThemeMode) {
   return theme === "dark"
     ? "bg-[#070908]"
-    : "bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)]";
+    : "bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))]";
 }

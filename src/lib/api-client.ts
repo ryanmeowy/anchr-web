@@ -12,6 +12,10 @@ import type {
   ConversationCitation,
   ConversationIntentType,
   ConversationMessageList,
+  AgentRunActivity,
+  AgentTask,
+  ConversationCapabilities,
+  ConversationExecutionMode,
   ConversationSession,
   ConversationSessionList,
   ElasticsearchHealth,
@@ -56,13 +60,22 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   token?: string | null;
+  signal?: AbortSignal;
 };
 
 type StreamMessageCallbacks = {
-  onTrace?: (event: { stage?: string; message?: string; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number }) => void;
+  onTrace?: (event: { stage?: string; message?: string; runId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown> }) => void;
   onDelta?: (text: string) => void;
+  onAnswerReset?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string; workflowVersion?: string; agentTask?: AgentTask }) => void;
+};
+
+type AgentTaskStreamCallbacks = {
+  onTask?: (task: AgentTask) => void;
+  onDelta?: (text: string) => void;
+  onAnswerReset?: (text: string) => void;
+  onDone?: () => void;
 };
 
 type ConversationMessageRequest = {
@@ -74,6 +87,7 @@ type ConversationMessageRequest = {
   preferredModalities?: Array<"TEXT" | "IMAGE" | "MIXED">;
   debug?: boolean;
   stream?: boolean;
+  agentEnabled?: boolean;
 };
 
 export class ApiError extends Error {
@@ -152,6 +166,7 @@ async function request<T>(path: string, options: RequestOptions = {}) {
       ...(token ? { "X-Access-Token": token } : {}),
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
   });
 
   const payload = (await response.json().catch(() => null)) as ApiResult<T> | null;
@@ -219,7 +234,10 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "trace") {
-    callbacks.onTrace?.(parseSseJson<{ stage?: string; message?: string; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number }>(data) ?? {});
+    callbacks.onTrace?.(parseSseJson<{
+      stage?: string; message?: string; runId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string;
+      intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown>;
+    }>(data) ?? {});
     return;
   }
 
@@ -229,13 +247,25 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
     return;
   }
 
+  if (eventName === "answer_reset") {
+    const event = parseSseJson<{ text?: string }>(data);
+    callbacks.onAnswerReset?.(event?.text ?? "");
+    return;
+  }
+
   if (eventName === "citations") {
     callbacks.onCitations?.(parseSseJson<ConversationCitation[]>(data) ?? []);
     return;
   }
 
   if (eventName === "done") {
-    callbacks.onDone?.(parseSseJson<{ turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean }>(data) ?? {});
+    callbacks.onDone?.(parseSseJson<{
+      turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null;
+      answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus;
+      fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType;
+      retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string;
+      workflowVersion?: string; agentTask?: AgentTask;
+    }>(data) ?? {});
     return;
   }
 
@@ -246,6 +276,12 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
 }
 
 function consumeSseChunk(chunk: string, callbacks: StreamMessageCallbacks) {
+  const { eventName, data } = parseSseChunk(chunk);
+  dispatchSseEvent(eventName, data, callbacks);
+  return eventName;
+}
+
+function parseSseChunk(chunk: string) {
   const lines = chunk.split(/\r?\n/);
   let eventName = "message";
   const dataLines: string[] = [];
@@ -261,7 +297,37 @@ function consumeSseChunk(chunk: string, callbacks: StreamMessageCallbacks) {
     }
   });
 
-  dispatchSseEvent(eventName, dataLines.join("\n"), callbacks);
+  return { eventName, data: dataLines.join("\n") };
+}
+
+function consumeAgentTaskSseChunk(chunk: string, callbacks: AgentTaskStreamCallbacks) {
+  const { eventName, data } = parseSseChunk(chunk);
+  if (!data) return eventName;
+  if (eventName === "task") {
+    const task = parseSseJson<AgentTask>(data);
+    if (task) callbacks.onTask?.(task);
+  }
+  if (eventName === "delta") callbacks.onDelta?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+  if (eventName === "answer_reset") callbacks.onAnswerReset?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+  if (eventName === "done") callbacks.onDone?.();
+  return eventName;
+}
+
+async function yieldAgentActivityFrame() {
+  if (typeof window === "undefined") return;
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const timer = window.setTimeout(finish, 32);
+    window.requestAnimationFrame(() => {
+      window.clearTimeout(timer);
+      finish();
+    });
+  });
 }
 
 export const apiClient = {
@@ -363,7 +429,51 @@ export const apiClient = {
     request<SearchPage>("/api/v1/search/kb", { method: "POST", body }),
   listConversations: (limit = 50, cursor?: string | null) =>
     request<ConversationSessionList>(`/api/v1/conversations?${conversationListQuery(limit, cursor)}`),
-  createConversation: (body: { title?: string | null; kbIds?: string[] }) =>
+  getConversationCapabilities: () =>
+    request<ConversationCapabilities>("/api/v1/conversations/capabilities"),
+  getAgentTask: (taskId: string) =>
+    request<AgentTask>(`/api/v1/agent/tasks/${encodeURIComponent(taskId)}`),
+  streamAgentTask: async (
+    taskId: string,
+    callbacks: AgentTaskStreamCallbacks,
+    signal?: AbortSignal,
+  ) => {
+    const basePath = process.env.NEXT_PUBLIC_API_BASE_PATH ?? "/backend";
+    const token = getAccessToken();
+    const response = await fetch(`${basePath}/api/v1/agent/tasks/${encodeURIComponent(taskId)}/stream`, {
+      headers: {
+        Accept: "text/event-stream",
+        ...(token ? { "X-Access-Token": token } : {}),
+      },
+      signal,
+      cache: "no-store",
+    });
+    if (!response.ok || !response.body) {
+      throw new ApiError(`任务流连接失败：${response.status}`, response.status);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const chunks = buffer.split(/\r?\n\r?\n/);
+      buffer = chunks.pop() ?? "";
+      for (let index = 0; index < chunks.length; index += 1) {
+        consumeAgentTaskSseChunk(chunks[index], callbacks);
+        if (index < chunks.length - 1) await yieldAgentActivityFrame();
+      }
+      if (done) break;
+    }
+    if (buffer.trim()) consumeAgentTaskSseChunk(buffer, callbacks);
+  },
+  cancelAgentTask: (taskId: string) =>
+    request<AgentTask>(`/api/v1/agent/tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST" }),
+  cancelAgentRun: (runId: string) =>
+    request<boolean>(`/api/v1/agent/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }),
+  getAgentRunActivity: (runId: string, signal?: AbortSignal) =>
+    request<AgentRunActivity>(`/api/v1/agent/runs/${encodeURIComponent(runId)}/activity`, { signal }),
+  createConversation: (body: { title?: string | null; kbIds?: string[]; assetIdList?: string[] }) =>
     request<ConversationSession>("/api/v1/conversations", {
       method: "POST",
       body,
@@ -394,6 +504,7 @@ export const apiClient = {
       },
       body: JSON.stringify({ ...body, stream: true }),
       signal,
+      cache: "no-store",
     });
 
     if (!response.ok || !response.body) {
@@ -415,7 +526,14 @@ export const apiClient = {
       const chunks = buffer.split(/\r?\n\r?\n/);
       buffer = chunks.pop() ?? "";
 
-      chunks.forEach((chunk) => consumeSseChunk(chunk, callbacks));
+      for (let index = 0; index < chunks.length; index += 1) {
+        const eventName = consumeSseChunk(chunks[index], callbacks);
+        // React batches callbacks handled in one network read. Yield between visual updates so
+        // activity and answer text remain progressive when a proxy coalesces SSE events.
+        if (["trace", "delta", "answer_reset"].includes(eventName) && index < chunks.length - 1) {
+          await yieldAgentActivityFrame();
+        }
+      }
 
       if (done) {
         break;

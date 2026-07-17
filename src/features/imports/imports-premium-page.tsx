@@ -251,7 +251,7 @@ export function ImportsPremiumPage() {
   }
 
   return (
-    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme}>
+    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} ambientGlow={false}>
       <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
         <header
           className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5"
@@ -262,8 +262,7 @@ export function ImportsPremiumPage() {
           </div>
           <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
             <div>
-              <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
-                <span className="size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
+              <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                 IMPORTS / INGESTION PIPELINE
               </p>
               <h1 className="max-w-[720px] text-[clamp(16px,2.4vw,34px)] font-black leading-none">
@@ -273,7 +272,7 @@ export function ImportsPremiumPage() {
           </section>
         </header>
 
-        <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:h-[111.111%] lg:w-[111.111%] lg:origin-top-left lg:scale-90 lg:grid-cols-[1fr_minmax(308px,363px)] lg:items-stretch lg:overflow-hidden lg:px-5">
+        <main className="ask-premium-main imports-no-ambient-glow grid min-h-0 min-w-0 items-start gap-3 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] px-4 py-3 sm:px-5 lg:h-[111.111%] lg:w-[111.111%] lg:origin-top-left lg:scale-90 lg:grid-cols-[1fr_minmax(308px,363px)] lg:items-stretch lg:overflow-hidden lg:px-5">
           <section className="grid min-h-0 min-w-0 gap-3 overflow-hidden lg:h-full lg:grid-rows-[minmax(200px,0.95fr)_minmax(145px,0.62fr)_minmax(200px,0.9fr)]" aria-label="导入资料">
             <section
               className="imports-panel premium-surface relative grid min-h-[220px] place-items-center overflow-hidden rounded-[8px] p-4 text-center backdrop-blur-xl lg:min-h-0"
@@ -282,7 +281,6 @@ export function ImportsPremiumPage() {
               onDrop={handleDrop}
             >
               <div className="pointer-events-none absolute inset-[9px] rounded-[8px] border border-dashed border-[rgba(49,88,255,0.45)]" />
-              <div className="imports-upload-glow-layer pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(49,88,255,0.1),transparent_38%),radial-gradient(circle_at_82%_8%,rgba(187,255,102,0.28),transparent_15rem)]" />
               <input
                 ref={fileInputRef}
                 type="file"

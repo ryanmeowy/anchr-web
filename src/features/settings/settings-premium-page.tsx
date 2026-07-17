@@ -606,9 +606,8 @@ export function SettingsPremiumPage() {
     [configsByCapability],
   );
   return (
-    <div className="premium-theme ask-premium-page settings-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] tracking-normal text-[#111315]" data-theme={theme} data-premium-theme={theme}>
+    <div className="premium-theme ask-premium-page settings-premium-page premium-no-ambient-glow min-h-screen overflow-x-hidden bg-[#f7f7f2] tracking-normal text-[#111315]" data-theme={theme} data-premium-theme={theme}>
       <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
-      <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,var(--premium-glow-primary),transparent_28rem),radial-gradient(circle_at_14%_92%,var(--premium-glow-secondary),transparent_30rem)]" />
 
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
         <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]">
@@ -621,8 +620,7 @@ export function SettingsPremiumPage() {
               </div>
               <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
-                  <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
-                    <span className="size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
+                  <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                     SETTINGS / SYSTEM CONFIGURATION
                   </p>
                   <h1 className="max-w-[720px] text-[clamp(16px,2.4vw,34px)] font-black leading-none">
@@ -632,7 +630,7 @@ export function SettingsPremiumPage() {
               </section>
             </header>
 
-            <main className="ask-premium-main min-h-0 min-w-0 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-5 pb-4 pt-3">
+            <main className="ask-premium-main settings-no-ambient-glow min-h-0 min-w-0 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] px-5 pb-4 pt-3">
               <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)]">
                 <CapabilitySelector
                   selectedType={selectedType}

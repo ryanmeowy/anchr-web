@@ -48,7 +48,7 @@ export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
 
   return (
     <div
-      className="premium-theme ask-premium-page preview-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] text-[#111315]"
+      className="premium-theme ask-premium-page preview-premium-page premium-no-ambient-glow min-h-screen overflow-x-hidden bg-[#f7f7f2] text-[#111315]"
       data-theme={theme}
       data-premium-theme={theme}
     >
@@ -56,11 +56,6 @@ export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
         aria-hidden="true"
         className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]"
       />
-      <div
-        aria-hidden="true"
-        className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,var(--premium-glow-primary),transparent_28rem),radial-gradient(circle_at_14%_92%,var(--premium-glow-secondary),transparent_30rem)]"
-      />
-
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
         <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
@@ -97,7 +92,7 @@ export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
               </div>
             </header>
 
-            <main className="preview-premium-main min-h-0 min-w-0 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] dark:bg-[radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.08),transparent_26rem),#070908]">
+            <main className="preview-premium-main min-h-0 min-w-0 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] dark:bg-[#080b09]">
               {!kbId || previewQuery.isError ? (
                 <AssetPreviewError message={errorMessage} onRetry={kbId ? () => void previewQuery.refetch() : undefined} />
               ) : previewQuery.isLoading ? (

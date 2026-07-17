@@ -2,8 +2,10 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
+  Copy,
   ExternalLink,
   FileText,
   Loader2,
@@ -27,6 +29,7 @@ import {
 } from "@/lib/asset-scope";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import { formatDateTime, formatFileSize, statusText } from "@/lib/format";
+import { normalizeCitationLabel, parseAssetCitationIndex } from "@/lib/citation-reference";
 import {
   buildChunkNavigation,
   buildPreviewRequest,
@@ -99,7 +102,8 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
       ? "library"
       : "ask";
   const contextKey = searchParams.get("contextKey");
-  const citationIndexFromUrl = Number(searchParams.get("citationIndex") ?? "");
+  const citationLabelFromUrl = normalizeCitationLabel(searchParams.get("citationIndex"));
+  const assetCitationIndexFromUrl = parseAssetCitationIndex(citationLabelFromUrl);
   const context = useMemo(() => readPreviewNavigation(contextKey), [contextKey]);
   const [activeSelection, setActiveSelection] = useState({
     routeSegmentId: decodedSegmentId,
@@ -112,10 +116,10 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
     () => buildPreviewRequest({
       source: from,
       segmentId: decodedSegmentId,
-      citationIndex: citationIndexFromUrl,
+      citationIndex: citationLabelFromUrl,
       context,
     }),
-    [citationIndexFromUrl, context, decodedSegmentId, from],
+    [citationLabelFromUrl, context, decodedSegmentId, from],
   );
 
   useEffect(() => {
@@ -134,7 +138,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
   }, [theme, themeHydrated]);
 
   const previewQuery = useQuery({
-    queryKey: ["preview", decodedSegmentId, from, contextKey, citationIndexFromUrl],
+    queryKey: ["preview", decodedSegmentId, from, contextKey, citationLabelFromUrl],
     queryFn: () => apiClient.previewSegment(decodedSegmentId, previewRequest),
   });
 
@@ -150,14 +154,16 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
     const citations = context?.citations ?? [];
     return citations.find((citation) => citation.chunks.some((chunk) => chunk.segmentId === activeSegmentId))
       ?? citations.find((citation) => citation.chunks.some((chunk) => chunk.segmentId === decodedSegmentId))
-      ?? citations.find((citation) => citation.citationIndex === citationIndexFromUrl);
-  }, [activeSegmentId, citationIndexFromUrl, context?.citations, decodedSegmentId]);
+      ?? citations.find((citation) => citation.citationIndex === assetCitationIndexFromUrl);
+  }, [activeSegmentId, assetCitationIndexFromUrl, context?.citations, decodedSegmentId]);
   const activeChunk = activeCitation?.chunks.find((chunk) => chunk.segmentId === activeSegmentId);
   const activeItem = useMemo(() => mergePreviewChunk(item, activeChunk), [activeChunk, item]);
-  const citationIndex = activeCitation?.citationIndex
-    ?? citationIndexFromUrl
-    ?? item?.citationContext?.citationIndex
-    ?? 1;
+  const citationIndex = normalizeCitationLabel(
+    activeChunk?.citationLabel
+      ?? (activeSegmentId === decodedSegmentId ? citationLabelFromUrl : undefined)
+      ?? item?.citationContext?.citationIndex
+      ?? String(activeCitation?.citationIndex ?? assetCitationIndexFromUrl),
+  );
 
   const handleCitationSelect = useCallback((chunk: CitationChunk) => {
     if (!chunk.segmentId || chunk.segmentId === activeSegmentId) {
@@ -213,7 +219,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
 
   return (
     <div
-      className="premium-theme ask-premium-page preview-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] text-[#111315]"
+      className="premium-theme ask-premium-page preview-premium-page premium-no-ambient-glow min-h-screen overflow-x-hidden bg-[#f7f7f2] text-[#111315]"
       data-theme={theme}
       data-premium-theme={theme}
     >
@@ -221,11 +227,6 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
         aria-hidden="true"
         className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]"
       />
-      <div
-        aria-hidden="true"
-        className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,var(--premium-glow-primary),transparent_28rem),radial-gradient(circle_at_14%_92%,var(--premium-glow-secondary),transparent_30rem)]"
-      />
-
       <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
         <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
@@ -248,8 +249,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
                   返回
                 </button>
                 <section className="min-w-0">
-                  <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
-                    <span className={`${styles.pulse} size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]`} />
+                  <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                     PREVIEW / CITATION SOURCE
                   </p>
                   <h1 className="max-w-[900px] truncate text-[clamp(18px,2.6vw,36px)] font-black leading-none text-[var(--premium-ink)]">
@@ -262,7 +262,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
               </div>
             </header>
 
-            <main className="preview-premium-main min-h-0 min-w-0 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] dark:bg-[radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.08),transparent_26rem),#070908]">
+            <main className="preview-premium-main min-h-0 min-w-0 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] dark:bg-[#080b09]">
               {previewQuery.isLoading ? (
                 <PreviewState label="正在加载预览" />
               ) : previewQuery.isError ? (
@@ -321,7 +321,7 @@ export function AssetPreviewContent({
       key={`${asset.assetId}-${asset.previewUrl ?? "no-preview"}`}
       item={item}
       context={null}
-      citationIndex={1}
+      citationIndex="1"
       from="library"
       onCitationSelect={() => undefined}
       onAssetCitationSelect={() => undefined}
@@ -347,7 +347,7 @@ function PreviewContent({
 }: {
   item: PreviewSegment;
   context: PreviewNavigationContext | null;
-  citationIndex: number;
+  citationIndex: string;
   from: PreviewSource;
   onCitationSelect: (chunk: CitationChunk) => void;
   onAssetCitationSelect: (citation: PreviewCitation) => void;
@@ -645,7 +645,7 @@ function PreviewContent({
   return (
     <div
       ref={previewShellRef}
-      className="grid h-full min-h-0 min-w-0 grid-cols-[132px_minmax(0,1fr)_minmax(320px,390px)] overflow-hidden max-[1240px]:h-auto max-[1240px]:min-h-[760px] max-[1240px]:grid-cols-[116px_minmax(0,1fr)] max-[860px]:block max-[860px]:overflow-visible"
+      className="preview-premium-viewer-shell grid h-full min-h-0 min-w-0 grid-cols-[132px_minmax(0,1fr)_minmax(320px,390px)] overflow-hidden max-[1240px]:h-auto max-[1240px]:min-h-[760px] max-[1240px]:grid-cols-[116px_minmax(0,1fr)] max-[860px]:block max-[860px]:overflow-visible"
     >
       <aside
         aria-label="页面缩略图"
@@ -680,7 +680,7 @@ function PreviewContent({
 
       <section
         aria-label="预览工作区"
-        className="preview-premium-workspace grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-[radial-gradient(circle_at_18%_10%,rgba(36,89,255,0.08),transparent_24rem),rgba(16,18,20,0.04)] dark:bg-[radial-gradient(circle_at_18%_10%,rgba(49,88,255,0.12),transparent_24rem),rgba(255,255,255,0.03)] max-[860px]:min-h-[760px]"
+        className="preview-premium-workspace grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-[rgba(16,18,20,0.04)] dark:bg-[#0a0f0c] max-[860px]:min-h-[760px]"
       >
         <div
           aria-label="预览工具栏"
@@ -876,7 +876,7 @@ function CitationSidebar({
 }: {
   item: PreviewSegment;
   context: PreviewNavigationContext | null;
-  citationIndex: number;
+  citationIndex: string;
   from: PreviewSource;
   onCitationSelect: (chunk: CitationChunk) => void;
   onAssetCitationSelect: (citation: PreviewCitation) => void;
@@ -884,7 +884,9 @@ function CitationSidebar({
 }) {
   const citation = context?.citations?.find((itemCitation) => (
     itemCitation.chunks.some((chunk) => chunk.segmentId === item.segmentId)
-  )) ?? context?.citations?.find((itemCitation) => itemCitation.citationIndex === citationIndex);
+  )) ?? context?.citations?.find(
+    (itemCitation) => itemCitation.citationIndex === parseAssetCitationIndex(citationIndex),
+  );
   const citationNavigation = buildChunkNavigation(citation, item.segmentId);
   const documentChunks = citationNavigation.chunks;
   const currentCitationPosition = citationNavigation.currentPosition;
@@ -920,6 +922,8 @@ function CitationSidebar({
         </div>
       </SidePanel>
 
+      <EvidenceExcerptPanel key={item.segmentId} item={item} />
+
       <SidePanel>
         <PanelLabel label="SOURCE INFO" value={getPreviewType(item) || "TEXT"} />
         <div className="mt-3.5 grid gap-2.5">
@@ -930,7 +934,7 @@ function CitationSidebar({
           {from !== "library" ? (
             <AssetCitationIndexRow
               citations={context?.citations ?? []}
-              currentCitationIndex={citationIndex}
+              currentCitationIndex={parseAssetCitationIndex(citationIndex)}
               onSelect={onAssetCitationSelect}
             />
           ) : null}
@@ -985,20 +989,96 @@ function CitationSidebar({
         </div>
       </SidePanel>
 
-      <section className={`${styles.reveal} rounded-[8px] border border-white/10 bg-[#101214]/95 p-4 text-white shadow-[var(--premium-tight-shadow)]`}>
-        <PanelLabel label="TRACE QUALITY" value="SYNCED" dark />
-        <div className="mt-3.5 flex items-end justify-between gap-4">
-          <strong className="text-[clamp(38px,5vw,68px)] font-black leading-[0.88]">91%</strong>
-          <span className="text-xs leading-[1.6] text-white/65">
-            bbox、页码、引用定位和返回状态综合评分。
-          </span>
-        </div>
-        <div className="mt-3.5 h-2 overflow-hidden rounded-full bg-white/10">
-          <i className={`${styles.meterFill} block h-full rounded-[inherit] bg-gradient-to-r from-amber-400 to-lime-300`} />
-        </div>
-      </section>
       </div>
     </aside>
+  );
+}
+
+function EvidenceExcerptPanel({ item }: { item: PreviewSegment }) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const evidenceText = (item.content || item.ocrSummary || item.title || "").trim();
+  const plainEvidenceText = stripEmTags(evidenceText);
+  const pageNo = item.anchor?.pageNo;
+  const chunkOrder = item.anchor?.chunkOrder;
+  const bboxCount = item.anchor?.bbox?.filter((record) => record?.bbox).length ?? 0;
+  const location = [
+    pageNo ? `第 ${pageNo} 页` : null,
+    chunkOrder != null ? `Chunk ${chunkOrder}` : null,
+  ].filter(Boolean).join(" · ") || "片段证据";
+  const anchorLabel = bboxCount > 0
+    ? "已框选定位"
+    : pageNo
+      ? "页码定位"
+      : chunkOrder != null
+        ? "片段定位"
+        : "文本证据";
+  const canExpand = plainEvidenceText.length > 180;
+
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = window.setTimeout(() => setCopied(false), 1400);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(plainEvidenceText);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <SidePanel>
+      <PanelLabel label="EVIDENCE EXCERPT" value={location} />
+      {evidenceText ? (
+        <>
+          <div className={[
+            "mt-3.5 text-[13px] leading-[1.75] text-[var(--premium-ink)] [overflow-wrap:anywhere]",
+            expanded ? "max-h-80 overflow-auto pr-1" : "line-clamp-5",
+          ].join(" ")}
+          >
+            {renderEmText(evidenceText)}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="inline-flex min-h-6 items-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-2.5 text-[10px] font-black text-[var(--premium-ink-soft)]">
+              正文可核验
+            </span>
+            <span className="inline-flex min-h-6 items-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-2.5 text-[10px] font-black text-[var(--premium-ink-soft)]">
+              {anchorLabel}
+            </span>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {canExpand ? (
+              <button
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((value) => !value)}
+                className="inline-flex min-h-8 items-center justify-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-3 text-[11px] font-black text-[var(--premium-ink-soft)] transition hover:border-[var(--premium-blue)] hover:text-[var(--premium-blue)]"
+              >
+                {expanded ? "收起原文" : "展开原文"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-3 text-[11px] font-black text-[var(--premium-ink-soft)] transition hover:border-[var(--premium-blue)] hover:text-[var(--premium-blue)]"
+            >
+              {copied ? <Check size={13} /> : <Copy size={13} />}
+              {copied ? "已复制" : "复制原文"}
+            </button>
+          </div>
+        </>
+      ) : (
+        <p className="mt-3.5 text-[13px] leading-6 text-[var(--premium-ink-soft)]">
+          当前片段暂无可展示的文本，仍可通过页码与框选位置核验原文。
+        </p>
+      )}
+    </SidePanel>
   );
 }
 
@@ -1617,7 +1697,7 @@ function BBoxOverlay({
   );
 }
 
-function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIndex?: number }) {
+function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIndex?: string }) {
   const content = item.content || item.ocrSummary || item.title || "当前片段暂无可展示文本。";
 
   return (
