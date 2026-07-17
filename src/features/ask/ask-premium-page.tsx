@@ -879,6 +879,7 @@ export function AskPremiumPage() {
         sessionId: targetSessionId,
         assetScope: requestAssetScope ? [requestAssetScope.assetId] : [],
         answerMode: selectedAnswerMode,
+        executionMode: agentEnabled ? "AGENT" : "TRADITIONAL",
         pending: true,
       };
       const requestId = makeMessageId("stream");
@@ -1194,9 +1195,8 @@ export function AskPremiumPage() {
   };
 
   return (
-    <div className="premium-theme ask-premium-page min-h-screen overflow-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>
+    <div className="premium-theme ask-premium-page ask-premium-ask-page min-h-screen overflow-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>
       <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(17,19,21,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(17,19,21,0.055)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
-      <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,rgba(187,255,102,0.34),transparent_28rem),radial-gradient(circle_at_14%_92%,rgba(49,88,255,0.15),transparent_30rem)]" />
       {scopeNotice ? (
         <TransientNotice message={scopeNotice} onDismiss={() => setScopeNotice(null)} />
       ) : null}
@@ -1277,7 +1277,7 @@ export function AskPremiumPage() {
             </div>
           </aside>
 
-          <main className="ask-premium-main relative flex min-h-0 min-w-0 flex-col bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)]">
+          <main className="ask-premium-main ask-premium-no-ambient-glow relative flex min-h-0 min-w-0 flex-col bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))]">
             <button
               type="button"
               onClick={() => {
@@ -1300,7 +1300,7 @@ export function AskPremiumPage() {
               <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05]">
                 ASK
               </div>
-              <div className="relative z-10 min-w-0">
+              <div className="ask-premium-hero-copy relative z-10 min-w-0">
                 <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                   ASK / {selectedAnswerMode} ANSWER MODE
                 </p>
@@ -1575,8 +1575,10 @@ function TracePanel({
             />
           </div>
         </section>
-        <TraceCard label="MODEL" title={modelLabel} detail="Generation capability" />
-        <TraceCard label="KNOWLEDGE BASES" title={selectedKbLabel} detail="发送问题时作为当前问答范围" />
+        <div className="ask-premium-trace-metadata grid min-w-0 grid-cols-2 gap-2">
+          <TraceCard label="MODEL" title={modelLabel} detail="Generation capability" />
+          <TraceCard label="KNOWLEDGE BASES" title={selectedKbLabel} detail="当前问答范围" />
+        </div>
         <AgentActivityCard
           latestAssistantMessage={latestAssistantMessage}
           liveActivity={liveActivity}
@@ -1677,7 +1679,7 @@ function AgentActivityCard({
       ) : failed && steps.length === 0 ? (
         <AgentActivityEmpty title="Agent 流程暂不可用" detail="回答与引用不受影响。" />
       ) : (
-        <div ref={activityScrollRef} className="grid min-h-0 flex-1 content-start gap-2 overflow-auto pr-1">
+        <div ref={activityScrollRef} className="ask-premium-activity-scroll grid min-h-0 flex-1 content-start gap-2 overflow-auto pr-1">
           {steps.map((step, index) => (
             <AgentActivityStepItem
               key={agentStepKey(step)}
@@ -2003,10 +2005,10 @@ function SessionContextToggleIcon({ collapsed }: { collapsed: boolean }) {
 
 function TraceCard({ label, title, detail }: { label: string; title: string; detail: string }) {
   return (
-    <article className="ask-premium-trace-card grid gap-2 rounded-[8px] bg-white/10 p-4">
-      <span className="text-xs text-white/60">{label}</span>
-      <strong className="break-words text-sm">{title}</strong>
-      <p className="text-xs leading-5 text-white/65">{detail}</p>
+    <article className="ask-premium-trace-card grid min-w-0 content-start gap-1.5 rounded-[8px] bg-white/10 p-3">
+      <span className="text-[10px] font-bold text-white/60">{label}</span>
+      <strong className="min-w-0 break-words text-[13px] leading-5">{title}</strong>
+      <p className="text-[10px] leading-4 text-white/65">{detail}</p>
     </article>
   );
 }
@@ -2365,7 +2367,7 @@ function PremiumChatBubble({
 
   if (isUser) {
     return (
-      <article data-turn-id={message.turnId} className={["ask-premium-user-message flex justify-end", editing ? "is-editing" : ""].join(" ")}>
+      <article data-turn-id={message.turnId} className={["ask-premium-message-enter ask-premium-user-message flex justify-end", editing ? "is-editing" : ""].join(" ")}>
         <div className="relative max-w-[680px]">
           {editing ? (
             <form
@@ -2445,7 +2447,7 @@ function PremiumChatBubble({
   }
 
   return (
-    <article data-turn-id={message.turnId} className="flex gap-2.5">
+    <article data-turn-id={message.turnId} className="ask-premium-assistant-message ask-premium-message-enter flex gap-2.5">
       <div className="ask-premium-assistant-avatar grid size-8 shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-none">
         <AiStarIcon />
       </div>
@@ -2453,6 +2455,22 @@ function PremiumChatBubble({
         <div className="mb-2 flex items-center justify-between gap-4">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <strong className="text-[13px]">Anchr</strong>
+            {message.executionMode === "AGENT" ? (
+              <span
+                className="inline-flex min-h-6 items-center rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 text-[10px] font-black text-violet-700 dark:text-violet-200"
+                title="此回答由 Agent 执行"
+              >
+                Agent
+              </span>
+            ) : null}
+            {message.executionMode === "AGENT_FALLBACK" ? (
+              <span
+                className="inline-flex min-h-6 items-center rounded-full border border-orange-500/20 bg-orange-500/10 px-2.5 text-[10px] font-black text-orange-700 dark:text-orange-200"
+                title="Agent 执行失败后已降级为传统回答"
+              >
+                Agent 降级
+              </span>
+            ) : null}
             {message.answerMode ? (
               <span
                 className="inline-flex min-h-6 items-center rounded-full border border-blue-500/15 bg-blue-500/10 px-2.5 text-[10px] font-black text-blue-700 dark:text-blue-200"

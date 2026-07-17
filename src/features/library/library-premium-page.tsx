@@ -357,7 +357,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
   };
 
   return (
-    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} scrollContent>
+    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} scrollContent ambientGlow={false}>
       <div className="grid min-h-full min-w-0 grid-rows-[auto_minmax(0,1fr)]">
             <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
@@ -386,7 +386,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                 onBack={handleCloseKnowledgeBase}
               />
             ) : (
-              <main className="ask-premium-main grid min-h-0 place-items-center bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] p-6">
+              <main className="ask-premium-main library-no-ambient-glow grid min-h-0 place-items-center bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] p-6">
                 <InlineState
                   label={openedKbQuery.isError
                     ? `知识库暂不可用：${openedKbQuery.error instanceof Error ? openedKbQuery.error.message : "请稍后重试"}`
@@ -395,7 +395,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                 />
               </main>
             ) : (
-            <main className="ask-premium-main grid min-h-0 min-w-0 items-start gap-3 overflow-visible bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4)),radial-gradient(circle_at_82%_5%,rgba(187,255,102,0.32),transparent_26rem)] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:px-5">
+            <main className="ask-premium-main library-no-ambient-glow grid min-h-0 min-w-0 items-start gap-3 overflow-visible bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,330px)] lg:px-5">
               <section className="flex min-h-0 min-w-0 flex-col" aria-label="我的知识库">
                 <div className="mb-5 grid shrink-0 grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <form
@@ -791,7 +791,7 @@ function KnowledgeBaseDocumentView({
 
   return (
     <>
-    <main className="ask-premium-main library-document-view min-h-0 min-w-0 overflow-auto bg-[linear-gradient(100deg,rgba(255,255,255,0.88),rgba(255,255,255,0.4)),radial-gradient(circle_at_84%_8%,rgba(187,255,102,0.34),transparent_28rem)] px-4 py-4 sm:px-5 lg:px-5" aria-label={`${knowledgeBase.name} 文档`}>
+    <main className="ask-premium-main library-no-ambient-glow library-document-view min-h-0 min-w-0 overflow-auto bg-[linear-gradient(100deg,rgba(255,255,255,0.88),rgba(255,255,255,0.4))] px-4 py-4 sm:px-5 lg:px-5" aria-label={`${knowledgeBase.name} 文档`}>
       <div className="mx-auto grid w-full max-w-[1500px] gap-4">
         <section className="library-document-command relative overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-4 text-white shadow-[var(--premium-tight-shadow)] sm:p-5">
           <div aria-hidden="true" className="library-document-orbit absolute -right-12 -top-20 size-64 rounded-full border border-white/10" />
@@ -1421,14 +1421,6 @@ function KnowledgeBaseCard({
         selected ? "border-[var(--premium-line-strong)] bg-[var(--premium-panel-strong)] ring-1 ring-black/5 dark:ring-white/10" : "border-[var(--premium-line)] bg-[var(--premium-panel)]",
       ].join(" ")}
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-0 opacity-0 transition duration-300 group-hover:opacity-100"
-        style={{
-          background:
-            "linear-gradient(120deg, rgba(39,93,255,0.12), transparent 36%), radial-gradient(circle at 86% 8%, rgba(187,255,102,0.34), transparent 12rem)",
-        }}
-      />
       {!editing && !archiveConfirming ? (
         <button
           type="button"

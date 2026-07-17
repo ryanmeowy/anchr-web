@@ -497,11 +497,6 @@ export function SearchPremiumPage() {
         aria-hidden="true"
         className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]"
       />
-      <div
-        aria-hidden="true"
-        className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_82%_8%,var(--premium-glow-primary),transparent_28rem),radial-gradient(circle_at_14%_90%,var(--premium-glow-secondary),transparent_30rem)]"
-      />
-
       <div className="relative min-h-screen p-0 lg:p-6">
         <div className="search-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]">
           <PremiumRail theme={theme} onThemeChange={setTheme} />
@@ -1294,7 +1289,7 @@ function FilterPanel({
   const selectedLabel = formatSelectedKbLabel(selectedKbIds, kbById);
 
   return (
-    <section className="search-premium-filter min-h-0 rounded-[8px] border border-white/10 px-4 pb-4 pt-3 text-white" aria-label="筛选范围">
+    <section className="search-premium-filter search-premium-filter-no-glow min-h-0 rounded-[8px] border border-white/10 px-4 pb-4 pt-3 text-white" aria-label="筛选范围">
       <SearchSidePanelHeader label="FILTER SCOPE" icon={<SlidersHorizontal size={15} strokeWidth={2.4} />} />
       <div className="search-premium-filter-stack">
         <FilterBlock title="知识库">

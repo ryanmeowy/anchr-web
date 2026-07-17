@@ -33,10 +33,6 @@
   animation: previewPremiumBBoxFrameLock 1000ms cubic-bezier(0.19, 1, 0.22, 1) both;
 }
 
-.meterFill {
-  animation: previewPremiumGrow 1000ms cubic-bezier(0.19, 1, 0.22, 1) 260ms both;
-}
-
 @keyframes previewPremiumReveal {
   from {
     opacity: 0;
@@ -118,23 +114,12 @@
   }
 }
 
-@keyframes previewPremiumGrow {
-  from {
-    width: 18%;
-  }
-
-  to {
-    width: 91%;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .reveal,
   .pulse,
   .highlight,
   .bboxLock,
-  .bboxLock::before,
-  .meterFill {
+  .bboxLock::before {
     animation-duration: 1ms;
     animation-iteration-count: 1;
   }
