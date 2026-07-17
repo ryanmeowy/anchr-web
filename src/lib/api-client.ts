@@ -71,6 +71,13 @@ type StreamMessageCallbacks = {
   onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string; workflowVersion?: string; agentTask?: AgentTask }) => void;
 };
 
+type AgentTaskStreamCallbacks = {
+  onTask?: (task: AgentTask) => void;
+  onDelta?: (text: string) => void;
+  onAnswerReset?: (text: string) => void;
+  onDone?: () => void;
+};
+
 type ConversationMessageRequest = {
   query: string;
   limit?: number;
@@ -269,6 +276,12 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
 }
 
 function consumeSseChunk(chunk: string, callbacks: StreamMessageCallbacks) {
+  const { eventName, data } = parseSseChunk(chunk);
+  dispatchSseEvent(eventName, data, callbacks);
+  return eventName;
+}
+
+function parseSseChunk(chunk: string) {
   const lines = chunk.split(/\r?\n/);
   let eventName = "message";
   const dataLines: string[] = [];
@@ -284,7 +297,19 @@ function consumeSseChunk(chunk: string, callbacks: StreamMessageCallbacks) {
     }
   });
 
-  dispatchSseEvent(eventName, dataLines.join("\n"), callbacks);
+  return { eventName, data: dataLines.join("\n") };
+}
+
+function consumeAgentTaskSseChunk(chunk: string, callbacks: AgentTaskStreamCallbacks) {
+  const { eventName, data } = parseSseChunk(chunk);
+  if (!data) return eventName;
+  if (eventName === "task") {
+    const task = parseSseJson<AgentTask>(data);
+    if (task) callbacks.onTask?.(task);
+  }
+  if (eventName === "delta") callbacks.onDelta?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+  if (eventName === "answer_reset") callbacks.onAnswerReset?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+  if (eventName === "done") callbacks.onDone?.();
   return eventName;
 }
 
@@ -408,6 +433,40 @@ export const apiClient = {
     request<ConversationCapabilities>("/api/v1/conversations/capabilities"),
   getAgentTask: (taskId: string) =>
     request<AgentTask>(`/api/v1/agent/tasks/${encodeURIComponent(taskId)}`),
+  streamAgentTask: async (
+    taskId: string,
+    callbacks: AgentTaskStreamCallbacks,
+    signal?: AbortSignal,
+  ) => {
+    const basePath = process.env.NEXT_PUBLIC_API_BASE_PATH ?? "/backend";
+    const token = getAccessToken();
+    const response = await fetch(`${basePath}/api/v1/agent/tasks/${encodeURIComponent(taskId)}/stream`, {
+      headers: {
+        Accept: "text/event-stream",
+        ...(token ? { "X-Access-Token": token } : {}),
+      },
+      signal,
+      cache: "no-store",
+    });
+    if (!response.ok || !response.body) {
+      throw new ApiError(`任务流连接失败：${response.status}`, response.status);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const chunks = buffer.split(/\r?\n\r?\n/);
+      buffer = chunks.pop() ?? "";
+      for (let index = 0; index < chunks.length; index += 1) {
+        consumeAgentTaskSseChunk(chunks[index], callbacks);
+        if (index < chunks.length - 1) await yieldAgentActivityFrame();
+      }
+      if (done) break;
+    }
+    if (buffer.trim()) consumeAgentTaskSseChunk(buffer, callbacks);
+  },
   cancelAgentTask: (taskId: string) =>
     request<AgentTask>(`/api/v1/agent/tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST" }),
   cancelAgentRun: (runId: string) =>
@@ -469,9 +528,9 @@ export const apiClient = {
 
       for (let index = 0; index < chunks.length; index += 1) {
         const eventName = consumeSseChunk(chunks[index], callbacks);
-        // React batches callbacks handled in one network read. Yield between trace frames so
-        // Agent Activity remains progressive even when a proxy coalesces multiple SSE events.
-        if (eventName === "trace" && index < chunks.length - 1) {
+        // React batches callbacks handled in one network read. Yield between visual updates so
+        // activity and answer text remain progressive when a proxy coalesces SSE events.
+        if (["trace", "delta", "answer_reset"].includes(eventName) && index < chunks.length - 1) {
           await yieldAgentActivityFrame();
         }
       }

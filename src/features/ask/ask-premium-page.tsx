@@ -124,7 +124,12 @@ function applyAgentTask(message: ChatMessage, task: AgentTask): ChatMessage {
     ...message, agentTask: task, pending: false, content: task.answer || "任务已取消。",
     citations: [], answerStatus: "CANCELLED", answerFallbackReason: task.errorCode,
   };
-  return { ...message, agentTask: task, pending: true };
+  return {
+    ...message,
+    agentTask: task,
+    pending: true,
+    content: task.answer !== null && task.answer !== undefined ? task.answer : message.content,
+  };
 }
 
 function activityNumber(value: unknown) {
@@ -220,6 +225,10 @@ export function AskPremiumPage() {
     agentEnabled: boolean;
     runId?: string;
   } | null>(null);
+  const activeTaskStreamsRef = useRef<Map<string, {
+    controller: AbortController;
+    answerReceived: boolean;
+  }>>(new Map());
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -373,14 +382,82 @@ export function AskPremiumPage() {
       .filter((task): task is AgentTask => Boolean(task && (task.status === "PENDING" || task.status === "RUNNING")))
       .map((task) => task.taskId),
   )), [messagesBySession]);
+  const pendingTaskKey = pendingTaskIds.join("|");
 
   useEffect(() => {
-    if (pendingTaskIds.length === 0) return;
+    if (!pendingTaskKey) return;
+    const streams = pendingTaskKey.split("|").map((taskId) => {
+      const controller = new AbortController();
+      const streamState = { controller, answerReceived: false };
+      activeTaskStreamsRef.current.set(taskId, streamState);
+      const updateTask = (task: AgentTask) => {
+        setMessagesBySession((previous) => Object.fromEntries(Object.entries(previous).map(([sessionId, messages]) => [
+          sessionId,
+          messages.map((message) => message.agentTask?.taskId === task.taskId
+            ? applyAgentTask(message, { ...message.agentTask, ...task })
+            : message),
+        ])) as MessageCache);
+        if (task.taskId === latestAgentTask?.taskId) {
+          setLiveAgentActivity((previous) => previous.sessionId === activeSessionId
+            ? { ...previous, status: statusFromTask(task) }
+            : previous);
+        }
+      };
+      const updateAnswer = (update: (current: string) => string) => {
+        setMessagesBySession((previous) => Object.fromEntries(Object.entries(previous).map(([sessionId, messages]) => [
+          sessionId,
+          messages.map((message) => {
+            if (message.agentTask?.taskId !== taskId) return message;
+            const content = update(message.content);
+            return {
+              ...message,
+              content,
+              pending: true,
+              agentTask: { ...message.agentTask, answer: content },
+            };
+          }),
+        ])) as MessageCache);
+      };
+      void apiClient.streamAgentTask(taskId, {
+        onTask: updateTask,
+        onAnswerReset: (answer) => {
+          streamState.answerReceived = true;
+          updateAnswer(() => answer);
+        },
+        onDelta: (delta) => {
+          streamState.answerReceived = true;
+          updateAnswer((current) => `${current}${delta}`);
+        },
+        onDone: () => {
+          void apiClient.getAgentTask(taskId).then(updateTask).catch(() => undefined);
+        },
+      }, controller.signal).catch((error) => {
+        if (!(error instanceof Error && error.name === "AbortError")) {
+          // Polling below remains the cross-instance and reconnect fallback.
+        }
+      }).finally(() => {
+        if (activeTaskStreamsRef.current.get(taskId) === streamState) {
+          activeTaskStreamsRef.current.delete(taskId);
+        }
+      });
+      return { taskId, streamState };
+    });
+    return () => streams.forEach(({ taskId, streamState }) => {
+      streamState.controller.abort();
+      if (activeTaskStreamsRef.current.get(taskId) === streamState) {
+        activeTaskStreamsRef.current.delete(taskId);
+      }
+    });
+  }, [pendingTaskKey, latestAgentTask?.taskId, activeSessionId]);
+
+  useEffect(() => {
+    if (!pendingTaskKey) return;
+    const taskIds = pendingTaskKey.split("|");
     let cancelled = false;
     let timer: number | undefined;
     let delay = 2_000;
     const poll = async () => {
-      const results = await Promise.allSettled(pendingTaskIds.map((taskId) => apiClient.getAgentTask(taskId)));
+      const results = await Promise.allSettled(taskIds.map((taskId) => apiClient.getAgentTask(taskId)));
       if (cancelled) return;
       const updates = new Map<string, AgentTask>();
       results.forEach((result) => { if (result.status === "fulfilled") updates.set(result.value.taskId, result.value); });
@@ -390,7 +467,20 @@ export function AskPremiumPage() {
           messages.map((message) => {
             const task = message.agentTask ? updates.get(message.agentTask.taskId) : undefined;
             if (!task) return message;
-            return applyAgentTask(message, task);
+            const next = applyAgentTask(message, task);
+            const taskIsTerminal = task.status === "SUCCEEDED"
+              || task.status === "FAILED"
+              || task.status === "CANCELLED";
+            const activeStream = activeTaskStreamsRef.current.get(task.taskId);
+            if (taskIsTerminal || !activeStream?.answerReceived) return next;
+            const snapshotAnswer = task.answer ?? "";
+            if (snapshotAnswer.length > message.content.length
+              && snapshotAnswer.startsWith(message.content)) return next;
+            return {
+              ...next,
+              content: message.content,
+              agentTask: { ...next.agentTask!, answer: message.content },
+            };
           }),
         ])) as MessageCache);
         const latestTaskUpdate = latestAgentTask?.taskId ? updates.get(latestAgentTask.taskId) : undefined;
@@ -405,7 +495,7 @@ export function AskPremiumPage() {
     };
     void poll();
     return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
-  }, [pendingTaskIds.join("|"), latestAgentTask?.taskId, activeSessionId]);
+  }, [pendingTaskKey, latestAgentTask?.taskId, activeSessionId]);
 
   const cancelAgentTask = useCallback(async (taskId: string) => {
     setCancellingTaskIds((previous) => new Set(previous).add(taskId));
@@ -839,6 +929,7 @@ export function AskPremiumPage() {
                 taskStage: event.stage === "task_queued" ? "QUEUED" : undefined,
                 taskType: typeof details.taskType === "string" ? details.taskType : undefined,
                 answerType: typeof details.answerType === "string" ? details.answerType : undefined,
+                model: typeof details.model === "string" ? details.model : undefined,
                 decision: typeof details.decision === "string" ? details.decision : undefined,
                 status: isStarted
                   ? "RUNNING"
@@ -853,6 +944,12 @@ export function AskPremiumPage() {
                 batchCount: activityNumber(details.batchCount),
                 citationCount: activityNumber(details.citationCount),
                 hasMore: activityBoolean(details.hasMore),
+                promptTokens: activityNumber(details.promptTokens),
+                completionTokens: activityNumber(details.completionTokens),
+                modelCallCount: activityNumber(details.modelCallCount),
+                modelLatencyMs: activityNumber(details.modelLatencyMs),
+                firstTokenMs: activityNumber(details.firstTokenMs),
+                streaming: activityBoolean(details.streaming),
                 durationMs: activityNumber(details.durationMs),
                 createdAt: Date.now(),
                 errorCode: typeof details.errorCode === "string" ? details.errorCode : undefined,
@@ -1520,6 +1617,14 @@ function AgentActivityCard({
   const promptTokens = serverActivity?.promptTokens ?? 0;
   const completionTokens = serverActivity?.completionTokens ?? 0;
   const activityScrollRef = useRef<HTMLDivElement | null>(null);
+  const hasRunningStep = steps.some((step) => step.status === "RUNNING");
+  const [activityClock, setActivityClock] = useState<number>();
+
+  useEffect(() => {
+    if (!hasRunningStep) return;
+    const timer = window.setInterval(() => setActivityClock(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [hasRunningStep]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -1564,6 +1669,7 @@ function AgentActivityCard({
               step={step}
               position={index + 1}
               ordinal={steps.filter((candidate) => candidate.stepOrder <= step.stepOrder && candidate.type === step.type).length}
+              currentTime={activityClock}
             />
           ))}
           {steps.length === 0 ? (
@@ -1593,7 +1699,17 @@ function AgentActivityEmpty({ title, detail, loading = false }: { title: string;
   );
 }
 
-function AgentActivityStepItem({ step, position, ordinal }: { step: AgentActivityStep; position: number; ordinal: number }) {
+function AgentActivityStepItem({
+  step,
+  position,
+  ordinal,
+  currentTime,
+}: {
+  step: AgentActivityStep;
+  position: number;
+  ordinal: number;
+  currentTime?: number;
+}) {
   const progress = displayedAgentStepProgress(step);
   return (
     <div className="ask-premium-trace-event rounded-[8px] bg-black/20 p-3">
@@ -1607,7 +1723,7 @@ function AgentActivityStepItem({ step, position, ordinal }: { step: AgentActivit
               {agentStepStatusLabel(step.status)}
             </span>
           </div>
-          <p className="mt-1 break-words text-xs leading-5 text-white/60">{agentStepDetail(step)}</p>
+          <p className="mt-1 break-words text-xs leading-5 text-white/60">{agentStepDetail(step, currentTime)}</p>
           {progress != null ? (
             <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
               <span className="block h-full rounded-full bg-[#bbff66] transition-[width]" style={{ width: `${progress}%` }} />
@@ -1696,7 +1812,7 @@ function agentStepTitle(step: AgentActivityStep, ordinal: number) {
   }[step.toolName ?? ""] ?? step.toolName ?? "执行工具";
 }
 
-function agentStepDetail(step: AgentActivityStep) {
+function agentStepDetail(step: AgentActivityStep, currentTime?: number) {
   const details: string[] = [];
   const progress = displayedAgentStepProgress(step);
   if (step.type === "MODEL_DECISION") {
@@ -1712,19 +1828,37 @@ function agentStepDetail(step: AgentActivityStep) {
   if (step.toolName) details.push(step.toolName);
   if (step.answerType) details.push(step.answerType === "KNOWLEDGE" ? "知识回答" : step.answerType === "CHAT" ? "直接回答" : step.answerType);
   if (step.taskType) details.push(step.taskType === "DOCUMENT_SUMMARY" ? "文档总结" : step.taskType);
+  if (step.model) details.push(`模型 ${step.model}`);
   if (step.documentCount != null) details.push(`${step.documentCount} 份文档`);
   if (step.evidenceCount != null) details.push(`${step.evidenceCount} 条证据`);
   if (step.segmentCount != null) details.push(`${step.segmentCount} 个片段`);
   if (step.batchCount != null) details.push(`${step.batchCount} 个处理批次`);
   if (step.citationCount != null) details.push(`${step.citationCount} 条引用`);
+  if (step.modelCallCount != null && step.modelCallCount > 0) details.push(`${step.modelCallCount} 次模型请求`);
   if ((step.promptTokens ?? 0) + (step.completionTokens ?? 0) > 0) {
     details.push(`Token 输入 ${(step.promptTokens ?? 0).toLocaleString()} / 输出 ${(step.completionTokens ?? 0).toLocaleString()}`);
+  }
+  const modelLatency = step.modelLatencyMs
+    ?? (step.type === "MODEL_DECISION" && step.status !== "RUNNING" ? step.durationMs : undefined);
+  if (step.firstTokenMs != null) details.push(`首字 ${formatMilliseconds(step.firstTokenMs)}`);
+  if (modelLatency != null) details.push(`模型响应 ${formatMilliseconds(modelLatency)}`);
+  if (step.streaming === true) details.push("流式输出");
+  if (step.streaming === false) details.push("非流式输出");
+  const generationMs = modelLatency != null && step.firstTokenMs != null
+    ? modelLatency - step.firstTokenMs
+    : undefined;
+  if ((step.modelCallCount ?? 1) === 1 && (step.completionTokens ?? 0) > 0 && generationMs != null && generationMs > 0) {
+    details.push(`输出速率 ${((step.completionTokens ?? 0) * 1000 / generationMs).toFixed(1)} token/s`);
   }
   if (progress != null) details.push(`进度 ${progress}%`);
   if (step.hasMore === true) details.push("仍有后续内容");
   if (step.attempt != null && step.attempt > 1) details.push(`第 ${step.attempt} 次尝试`);
   if (step.errorCode) details.push(`错误 ${step.errorCode}`);
-  if (step.durationMs != null) details.push(`${formatMilliseconds(step.durationMs)}`);
+  if (step.status === "RUNNING" && currentTime != null && step.createdAt != null && currentTime >= step.createdAt) {
+    details.push(`已等待 ${formatMilliseconds(currentTime - step.createdAt)}`);
+  } else if (step.durationMs != null && modelLatency !== step.durationMs) {
+    details.push(`${step.type === "FINAL" ? "端到端" : "阶段耗时"} ${formatMilliseconds(step.durationMs)}`);
+  }
   if (details.length) return details.join(" · ");
   return step.status === "RUNNING" ? "正在执行" : step.status === "COMPLETED" ? "已完成" : agentStatusLabel(step.status);
 }

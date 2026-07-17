@@ -726,6 +726,7 @@ export type AgentActivityStep = {
   taskStage?: string | null;
   taskType?: string | null;
   answerType?: string | null;
+  model?: string | null;
   decision?: "TOOL_SELECTION" | "FINAL_RESPONSE" | "PROTOCOL_RETRY" | string | null;
   status: AgentActivityStepStatus;
   attempt?: number | null;
@@ -740,6 +741,10 @@ export type AgentActivityStep = {
   hasMore?: boolean | null;
   promptTokens?: number | null;
   completionTokens?: number | null;
+  modelCallCount?: number | null;
+  modelLatencyMs?: number | null;
+  firstTokenMs?: number | null;
+  streaming?: boolean | null;
   durationMs?: number | null;
   createdAt?: number | null;
   errorCode?: string | null;
