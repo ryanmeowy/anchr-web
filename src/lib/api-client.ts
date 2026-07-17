@@ -64,8 +64,9 @@ type RequestOptions = {
 };
 
 type StreamMessageCallbacks = {
-  onTrace?: (event: { stage?: string; message?: string; runId?: string; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown> }) => void;
+  onTrace?: (event: { stage?: string; message?: string; runId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown> }) => void;
   onDelta?: (text: string) => void;
+  onAnswerReset?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
   onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string; workflowVersion?: string; agentTask?: AgentTask }) => void;
 };
@@ -227,7 +228,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
 
   if (eventName === "trace") {
     callbacks.onTrace?.(parseSseJson<{
-      stage?: string; message?: string; runId?: string; answerMode?: ConversationAnswerMode | string;
+      stage?: string; message?: string; runId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string;
       intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown>;
     }>(data) ?? {});
     return;
@@ -236,6 +237,12 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   if (eventName === "delta") {
     const event = parseSseJson<{ text?: string }>(data);
     callbacks.onDelta?.(event?.text ?? "");
+    return;
+  }
+
+  if (eventName === "answer_reset") {
+    const event = parseSseJson<{ text?: string }>(data);
+    callbacks.onAnswerReset?.(event?.text ?? "");
     return;
   }
 
@@ -278,6 +285,24 @@ function consumeSseChunk(chunk: string, callbacks: StreamMessageCallbacks) {
   });
 
   dispatchSseEvent(eventName, dataLines.join("\n"), callbacks);
+  return eventName;
+}
+
+async function yieldAgentActivityFrame() {
+  if (typeof window === "undefined") return;
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const timer = window.setTimeout(finish, 32);
+    window.requestAnimationFrame(() => {
+      window.clearTimeout(timer);
+      finish();
+    });
+  });
 }
 
 export const apiClient = {
@@ -389,7 +414,7 @@ export const apiClient = {
     request<boolean>(`/api/v1/agent/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }),
   getAgentRunActivity: (runId: string, signal?: AbortSignal) =>
     request<AgentRunActivity>(`/api/v1/agent/runs/${encodeURIComponent(runId)}/activity`, { signal }),
-  createConversation: (body: { title?: string | null; kbIds?: string[] }) =>
+  createConversation: (body: { title?: string | null; kbIds?: string[]; assetIdList?: string[] }) =>
     request<ConversationSession>("/api/v1/conversations", {
       method: "POST",
       body,
@@ -420,6 +445,7 @@ export const apiClient = {
       },
       body: JSON.stringify({ ...body, stream: true }),
       signal,
+      cache: "no-store",
     });
 
     if (!response.ok || !response.body) {
@@ -441,7 +467,14 @@ export const apiClient = {
       const chunks = buffer.split(/\r?\n\r?\n/);
       buffer = chunks.pop() ?? "";
 
-      chunks.forEach((chunk) => consumeSseChunk(chunk, callbacks));
+      for (let index = 0; index < chunks.length; index += 1) {
+        const eventName = consumeSseChunk(chunks[index], callbacks);
+        // React batches callbacks handled in one network read. Yield between trace frames so
+        // Agent Activity remains progressive even when a proxy coalesces multiple SSE events.
+        if (eventName === "trace" && index < chunks.length - 1) {
+          await yieldAgentActivityFrame();
+        }
+      }
 
       if (done) {
         break;

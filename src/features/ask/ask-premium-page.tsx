@@ -136,14 +136,22 @@ function activityBoolean(value: unknown) {
 }
 
 function mergeLiveAgentStep(steps: AgentActivityStep[], next: AgentActivityStep) {
-  const key = next.callId ? `call:${next.callId}` : `${next.type}:${next.stepOrder}`;
+  const key = liveAgentStepKey(next);
   const index = steps.findIndex((step) => (
-    step.callId ? `call:${step.callId}` : `${step.type}:${step.stepOrder}`
+    liveAgentStepKey(step)
   ) === key);
   if (index < 0) return [...steps, next].sort((a, b) => a.stepOrder - b.stepOrder).slice(-50);
   const merged = [...steps];
   merged[index] = { ...merged[index], ...next };
   return merged.sort((a, b) => a.stepOrder - b.stepOrder).slice(-50);
+}
+
+function liveAgentStepKey(step: AgentActivityStep) {
+  if (step.callId && step.type === "TASK_STAGE") {
+    return `task:${step.callId}:${step.taskStage ?? "QUEUED"}`;
+  }
+  if (step.callId) return `tool:${step.callId}`;
+  return `${step.type}:${step.stepOrder}`;
 }
 
 function statusFromDone(
@@ -813,13 +821,16 @@ export function AskPremiumPage() {
             if (event.runId && streamRef.current) streamRef.current.runId = event.runId;
             if (agentEnabled
               && ["agent_thinking", "tool_call", "tool_result", "task_queued"].includes(event.stage ?? "")
-              && !(event.stage === "agent_thinking" && event.message === "started")) {
+              && !(event.stage === "agent_thinking" && event.message === "run_started")) {
               const details = event.details ?? {};
               const callId = typeof details.callId === "string" ? details.callId : undefined;
               const stepOrder = activityNumber(details.stepOrder);
               const fallbackOrder = activityNumber(details.toolCallOrder) ?? Date.now();
               const isTool = event.stage === "tool_call" || event.stage === "tool_result";
               const success = activityBoolean(details.success);
+              const isStarted = event.stage === "tool_call"
+                || event.message === "started"
+                || event.message?.endsWith("_started") === true;
               const nextStep: AgentActivityStep = {
                 stepOrder: stepOrder ?? fallbackOrder,
                 type: isTool ? "TOOL" : event.stage === "task_queued" ? "TASK_STAGE" : "MODEL_DECISION",
@@ -829,10 +840,10 @@ export function AskPremiumPage() {
                 taskType: typeof details.taskType === "string" ? details.taskType : undefined,
                 answerType: typeof details.answerType === "string" ? details.answerType : undefined,
                 decision: typeof details.decision === "string" ? details.decision : undefined,
-                status: event.stage === "tool_call" || event.message === "started"
+                status: isStarted
                   ? "RUNNING"
                   : success === false ? "FAILED" : "COMPLETED",
-                attempt: activityNumber(details.attempt),
+                attempt: activityNumber(details.attempt) ?? event.attempt,
                 progress: activityNumber(details.progress),
                 messageCount: activityNumber(details.messageCount),
                 plannedToolCallCount: activityNumber(details.toolCallCount),
@@ -872,6 +883,14 @@ export function AskPremiumPage() {
               ...message,
               pending: true,
               content: `${stripTraceText(message.content)}${delta}`,
+            }));
+          },
+          onAnswerReset: (answer) => {
+            if (!isCurrentStream()) return;
+            updateAssistantMessage(targetSessionId, assistantMessage.id, (message) => ({
+              ...message,
+              pending: true,
+              content: answer,
             }));
           },
           onCitations: (citations) => {
@@ -1219,7 +1238,7 @@ export function AskPremiumPage() {
 
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 sm:px-5 lg:px-5">
               <div
-                className="ask-premium-conversation-frame mx-auto flex min-h-0 w-full flex-1 flex-col gap-4 lg:w-[calc(100vw-780px)] lg:max-w-full"
+                className="ask-premium-conversation-frame mx-auto flex min-h-0 w-full flex-1 flex-col gap-0 lg:w-[calc(100vw-780px)] lg:max-w-full"
                 data-trace-collapsed={traceCollapsed}
               >
                 <section ref={messageScrollRef} className="ask-premium-message-scroll min-h-0 flex-1 overflow-auto pr-1">
@@ -1653,7 +1672,7 @@ function resolveAgentActivityStatus(
   live?: AgentActivityStatus,
   task?: AgentActivityStatus,
 ) {
-  const terminal = new Set<AgentActivityStatus>(["COMPLETED", "FAILED", "CANCELLED", "AGENT_FALLBACK"]);
+  const terminal = new Set<AgentActivityStatus>(["COMPLETED", "FAILED", "CANCELLED", "AGENT_DEGRADED", "AGENT_FALLBACK"]);
   if (server && terminal.has(server)) return server;
   if (task && terminal.has(task)) return task;
   if (live && terminal.has(live)) return live;
@@ -1661,9 +1680,13 @@ function resolveAgentActivityStatus(
 }
 
 function agentStepTitle(step: AgentActivityStep, ordinal: number) {
-  if (step.type === "MODEL_DECISION") return ordinal === 1 ? "分析用户请求" : "评估工具结果";
+  if (step.type === "MODEL_DECISION") {
+    if (step.decision === "FINAL_RESPONSE") return "生成最终回答";
+    return ordinal === 1 ? "分析用户请求" : "评估工具结果";
+  }
   if (step.type === "TASK_STAGE") return taskStageLabel(step.taskStage);
   if (step.type === "FINAL") return step.status === "FAILED" ? "执行失败" : step.status === "CANCELLED" ? "已取消" : "完成";
+  if (step.decision === "READ_LIMIT_REACHED") return "停止继续读取";
   return {
     find_documents: "查找文档",
     search_knowledge: "检索知识库",
@@ -1678,9 +1701,13 @@ function agentStepDetail(step: AgentActivityStep) {
   const progress = displayedAgentStepProgress(step);
   if (step.type === "MODEL_DECISION") {
     if (step.messageCount != null) details.push(`读取 ${step.messageCount} 条上下文消息`);
+    if (step.decision === "ANALYZING") details.push("正在等待模型决策");
     if (step.decision === "TOOL_SELECTION") details.push(`决定调用 ${step.plannedToolCallCount ?? 1} 个工具`);
     if (step.decision === "FINAL_RESPONSE") details.push("决定生成最终回答");
     if (step.decision === "PROTOCOL_RETRY") details.push("协议校正后重新决策");
+  }
+  if (step.decision === "READ_LIMIT_REACHED") {
+    details.push("已达到单轮连续读取上限，使用现有证据生成回答");
   }
   if (step.toolName) details.push(step.toolName);
   if (step.answerType) details.push(step.answerType === "KNOWLEDGE" ? "知识回答" : step.answerType === "CHAT" ? "直接回答" : step.answerType);
@@ -1738,6 +1765,7 @@ function agentStatusLabel(status: AgentActivityStatus | AgentActivityStep["statu
     COMPLETED: "已完成",
     CANCELLED: "已取消",
     FAILED: "执行失败",
+    AGENT_DEGRADED: "Agent 降级完成",
     AGENT_FALLBACK: "已回退传统 RAG",
   }[status] ?? status;
 }
@@ -2320,21 +2348,26 @@ function PremiumChatBubble({
         {message.error ? <div className="mt-3 text-sm text-rose-600">{message.error}</div> : null}
         {message.answerStatus !== "NO_EVIDENCE" && message.citations?.length ? (
           <div className="mt-4 flex flex-wrap gap-2" aria-label="引用来源">
-            {message.citations.map((citation, index) => (
-              <button
-                type="button"
-                key={`${citation.assetId ?? citation.fileName ?? index}-${index}`}
-                onClick={() => onPreviewCitation(message, citation, index, question)}
-                disabled={!citation.chunks?.length}
-                className="ask-premium-citation inline-flex min-h-[30px] items-center gap-2 rounded-full border border-black/10 bg-[#f7f7f2]/85 px-2.5 text-[11px] font-normal text-[#111315] transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
-                title={`[${citation.citationIndex ?? index + 1}] ${citation.fileName ?? "引用来源"}${citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}`}
-              >
-                <span className="min-w-0 truncate">
-                  [{citation.citationIndex ?? index + 1}] {citation.fileName ?? "引用来源"}
-                  {citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}
-                </span>
-              </button>
-            ))}
+            {message.citations.map((citation, index) => {
+              const citationFileName = citation.fileName?.trim()
+                || (citation.assetId ? assetNameCache[citation.assetId]?.trim() : undefined)
+                || "引用来源";
+              return (
+                <button
+                  type="button"
+                  key={`${citation.assetId ?? citationFileName ?? index}-${index}`}
+                  onClick={() => onPreviewCitation(message, citation, index, question)}
+                  disabled={!citation.chunks?.length}
+                  className="ask-premium-citation inline-flex min-h-[30px] items-center gap-2 rounded-full border border-black/10 bg-[#f7f7f2]/85 px-2.5 text-[11px] font-normal text-[#111315] transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
+                  title={`[${citation.citationIndex ?? index + 1}] ${citationFileName}${citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}`}
+                >
+                  <span className="min-w-0 truncate">
+                    [{citation.citationIndex ?? index + 1}] {citationFileName}
+                    {citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         ) : null}
       </div>

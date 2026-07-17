@@ -716,7 +716,7 @@ export type AgentTask = {
   errorCode?: string | null;
   errorMessage?: string | null;
 };
-export type AgentActivityStatus = "RUNNING" | "COMPLETED" | "WAITING_TASK" | "FAILED" | "CANCELLED" | "AGENT_FALLBACK";
+export type AgentActivityStatus = "RUNNING" | "COMPLETED" | "WAITING_TASK" | "FAILED" | "CANCELLED" | "AGENT_DEGRADED" | "AGENT_FALLBACK";
 export type AgentActivityStepStatus = "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
 export type AgentActivityStep = {
   stepOrder: number;
