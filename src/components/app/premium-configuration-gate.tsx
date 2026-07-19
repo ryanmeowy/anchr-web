@@ -1,8 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Info, Loader2 } from "lucide-react";
+import { Loader2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { apiClient } from "@/lib/api-client";
 import {
@@ -22,7 +23,7 @@ const PREMIUM_CONFIGURATION_FONT_STACK =
   '"Sora", "Outfit", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
 
 const SETTINGS_BUTTON_CLASS =
-  "imports-primary-action inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#111315] px-3.5 text-[12px] font-black text-white shadow-[0_16px_38px_rgba(17,19,21,0.2)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white dark:bg-white dark:text-[#111315] dark:hover:bg-[var(--premium-blue)] dark:hover:text-white";
+  "imports-primary-action inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#111315] px-3.5 text-[12px] font-black text-white shadow-[0_16px_38px_rgba(17,19,21,0.2)] transition hover:-translate-y-0.5 dark:bg-white dark:text-[#111315]";
 
 export type PremiumConfigurationStatus = {
   label: string;
@@ -172,7 +173,7 @@ export function usePremiumSystemConfiguration() {
  * in the protected page cannot start business requests while access is blocked.
  */
 export function PremiumSystemConfigurationBoundary({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<PremiumThemeMode>("light");
+  const [theme, setTheme] = useState<PremiumThemeMode>("dark");
   const systemConfig = usePremiumSystemConfiguration();
 
   useEffect(() => {
@@ -186,7 +187,7 @@ export function PremiumSystemConfigurationBoundary({ children }: { children: Rea
 
   if (systemConfig.isLoading) {
     return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} ambientGlow={false}>
+      <PremiumConfigurationShell theme={theme} ambientGlow={false} configurationState>
         <PremiumConfigurationLoading
           theme={theme}
           title="正在检查系统配置"
@@ -198,7 +199,7 @@ export function PremiumSystemConfigurationBoundary({ children }: { children: Rea
 
   if (systemConfig.indexStatusError || !systemConfig.indexStatus) {
     return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} ambientGlow={false}>
+      <PremiumConfigurationShell theme={theme} ambientGlow={false} configurationState>
         <PremiumIndexStatusError
           theme={theme}
           onRetry={() => void systemConfig.refetchIndexStatus()}
@@ -209,7 +210,7 @@ export function PremiumSystemConfigurationBoundary({ children }: { children: Rea
 
   if (systemConfig.missingAny) {
     return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} ambientGlow={false}>
+      <PremiumConfigurationShell theme={theme} ambientGlow={false} configurationState>
         <PremiumSystemConfigurationGate theme={theme} />
       </PremiumConfigurationShell>
     );
@@ -217,7 +218,7 @@ export function PremiumSystemConfigurationBoundary({ children }: { children: Rea
 
   if (!systemConfig.indexReady && systemConfig.indexStatus) {
     return (
-      <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} ambientGlow={false}>
+      <PremiumConfigurationShell theme={theme} ambientGlow={false} configurationState>
         <PremiumIndexGate theme={theme} indexStatus={systemConfig.indexStatus} />
       </PremiumConfigurationShell>
     );
@@ -228,22 +229,33 @@ export function PremiumSystemConfigurationBoundary({ children }: { children: Rea
 
 export function PremiumConfigurationShell({
   theme,
-  onThemeChange,
   scrollContent = false,
   ambientGlow = true,
+  configurationState = false,
+  pageClassName,
   children,
 }: {
   theme: PremiumThemeMode;
-  onThemeChange: (theme: PremiumThemeMode) => void;
   scrollContent?: boolean;
   ambientGlow?: boolean;
+  configurationState?: boolean;
+  pageClassName?: string;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
+  const isAskRoute = pathname === "/ask" || pathname.startsWith("/ask/");
+  const isLibraryRoute = pathname === "/library" || pathname.startsWith("/library/");
+  const isImportsRoute = pathname === "/imports" || pathname.startsWith("/imports/");
+  const useUnifiedConfigurationShell = configurationState || isAskRoute;
+  const useFullViewportShell = useUnifiedConfigurationShell || isLibraryRoute || isImportsRoute;
+
   return (
     <div
       className={[
-        "premium-theme ask-premium-page imports-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] tracking-normal text-[#111315]",
+        "premium-theme ask-premium-page min-h-screen overflow-x-hidden bg-[#f7f7f2] tracking-normal text-[#111315]",
+        useUnifiedConfigurationShell ? "ask-premium-ask-page" : "imports-premium-page",
         ambientGlow ? "" : "premium-no-ambient-glow",
+        pageClassName ?? "",
       ].join(" ")}
       data-theme={theme}
       data-premium-theme={theme}
@@ -253,16 +265,23 @@ export function PremiumConfigurationShell({
       {ambientGlow ? (
         <div aria-hidden="true" className="ask-premium-glow-bg pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_8%,var(--premium-glow-primary),transparent_28rem),radial-gradient(circle_at_14%_92%,var(--premium-glow-secondary),transparent_30rem)]" />
       ) : null}
-      <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
+      <div className={useFullViewportShell ? "relative h-screen overflow-hidden p-0" : "relative min-h-screen overflow-x-hidden p-0 lg:p-6"}>
         <div
           className={[
-            "ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]",
-            scrollContent ? "lg:h-[calc(100vh-48px)] lg:min-h-0" : "lg:min-h-[calc(100vh-48px)]",
+            "ask-premium-shell grid grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-white/70 backdrop-blur-2xl lg:grid-cols-[60px_minmax(0,1fr)] lg:grid-rows-none",
+            useFullViewportShell
+              ? "h-screen min-h-0 border-0 shadow-none"
+              : "min-h-screen border border-black/15 shadow-[0_24px_80px_rgba(17,19,21,0.12)] lg:rounded-[8px]",
+            useFullViewportShell ? "" : scrollContent ? "lg:h-[calc(100vh-48px)] lg:min-h-0" : "lg:min-h-[calc(100vh-48px)]",
           ].join(" ")}
         >
-          <PremiumRail theme={theme} onThemeChange={onThemeChange} />
-          {scrollContent ? (
-            <div className="min-h-0 min-w-0 overflow-y-auto overscroll-contain">
+          <PremiumRail />
+          {useUnifiedConfigurationShell ? (
+            <div className="ask-premium-main ask-premium-no-ambient-glow ask-premium-configuration-main grid min-h-0 min-w-0">
+              {children}
+            </div>
+          ) : scrollContent ? (
+            <div className="min-h-0 min-w-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
               {children}
             </div>
           ) : children}
@@ -303,8 +322,8 @@ export function PremiumConfigurationGate({
   return (
     <div className={`premium-configuration-state-page grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
-        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
-          <Info size={24} />
+        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-[#fde98a]/[0.14] text-[#fde98a]">
+          <TriangleAlert size={24} strokeWidth={1.8} />
         </div>
         <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">需要先完成配置</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">{description}</p>
@@ -325,8 +344,8 @@ export function PremiumSystemConfigurationGate({ theme }: { theme: PremiumThemeM
   return (
     <div className={`premium-configuration-state-page grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
-        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
-          <Info size={24} />
+        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-[#fde98a]/[0.14] text-[#fde98a]">
+          <TriangleAlert size={24} strokeWidth={1.8} />
         </div>
         <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">需要先完成配置</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">前往设置页完成模型和对象存储配置，完成后即可正常使用。</p>
@@ -395,8 +414,8 @@ export function PremiumIndexGate({
   return (
     <div className={`premium-configuration-state-page grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
-        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
-          <Info size={24} />
+        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-[#fde98a]/[0.14] text-[#fde98a]">
+          <TriangleAlert size={24} strokeWidth={1.8} />
         </div>
         <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">{title}</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">{description}</p>
@@ -432,8 +451,8 @@ function PremiumIndexStatusError({
   return (
     <div className={`premium-configuration-state-page grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
       <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
-        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
-          <Info size={24} />
+        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-[#fde98a]/[0.14] text-[#fde98a]">
+          <TriangleAlert size={24} strokeWidth={1.8} />
         </div>
         <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">索引状态未知</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">

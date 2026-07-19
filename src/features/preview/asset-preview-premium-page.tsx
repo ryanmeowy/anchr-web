@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
+import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
 import { apiClient } from "@/lib/api-client";
 import { AssetPreviewContent } from "./preview-premium-page";
@@ -12,7 +13,7 @@ import { AssetPreviewContent } from "./preview-premium-page";
 export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [theme, setTheme] = useState<PremiumThemeMode>("light");
+  const [theme, setTheme] = useState<PremiumThemeMode>("dark");
   const [themeHydrated, setThemeHydrated] = useState(false);
   const decodedAssetId = useMemo(() => decodeURIComponent(assetId), [assetId]);
   const kbId = searchParams.get("kbId")?.trim() ?? "";
@@ -56,19 +57,19 @@ export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
         aria-hidden="true"
         className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]"
       />
-      <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]">
-          <PremiumRail theme={theme} onThemeChange={setTheme} />
+      <div className="relative h-screen overflow-hidden p-0">
+        <div className="ask-premium-shell grid h-screen min-h-0 overflow-hidden border-0 bg-white/70 shadow-none backdrop-blur-2xl lg:grid-cols-[60px_minmax(0,1fr)]">
+          <PremiumRail />
 
           <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
-            <header className="ask-premium-hero relative grid h-[112px] overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
+            <header className="ask-premium-hero relative grid h-[112px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]"
+                className="ask-premium-watermark pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]"
               >
                 DOCUMENT
               </div>
-              <div className="relative z-10 flex min-w-0 items-center gap-3">
+              <div className="premium-page-header-content relative z-10 flex min-w-0 items-center gap-3">
                 <button
                   type="button"
                   onClick={handleBack}
@@ -78,8 +79,7 @@ export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
                   返回
                 </button>
                 <section className="min-w-0">
-                  <p className="ask-premium-kicker mb-1.5 flex items-center gap-2 text-[10px] font-black text-blue-700">
-                    <span className="size-1.5 rounded-full bg-[var(--premium-accent)] shadow-[0_0_0_5px_rgba(187,255,102,0.2)]" />
+                  <p className="ask-premium-kicker mb-1.5 text-[10px] font-black" style={{ color: "#87CEEB" }}>
                     LIBRARY / DOCUMENT SOURCE
                   </p>
                   <h1 className="max-w-[900px] truncate text-[clamp(18px,2.6vw,36px)] font-black leading-none text-[var(--premium-ink)]">
@@ -90,6 +90,7 @@ export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
                   </p>
                 </section>
               </div>
+              <PremiumHeaderUtilities theme={theme} />
             </header>
 
             <main className="preview-premium-main min-h-0 min-w-0 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] dark:bg-[#080b09]">

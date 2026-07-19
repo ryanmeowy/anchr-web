@@ -39,6 +39,7 @@ export async function uploadFilesToOss(
   files: File[],
   token: StsToken,
   formats: SupportedFormat[],
+  onFileUploaded?: (completedCount: number, totalCount: number, fileName: string) => void,
 ): Promise<UploadIngestionItem[]> {
   const { default: OSS } = await import("ali-oss/dist/aliyun-oss-sdk.min.js");
   const endpoint = normalizeEndpoint(token.endpoint);
@@ -70,6 +71,7 @@ export async function uploadFilesToOss(
       objectKey,
       fileHash: await sha256(file),
     });
+    onFileUploaded?.(items.length, files.length, file.name);
   }
   return items;
 }

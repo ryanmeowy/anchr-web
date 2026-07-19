@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ACCESS_TOKEN_CHANGED_EVENT, ACCESS_TOKEN_STORAGE_KEY } from "@/lib/api-client";
+import { BackgroundTaskProvider } from "./background-task-provider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -36,5 +37,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     };
   }, [queryClient]);
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BackgroundTaskProvider>{children}</BackgroundTaskProvider>
+    </QueryClientProvider>
+  );
 }

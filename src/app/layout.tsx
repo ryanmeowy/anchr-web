@@ -5,10 +5,7 @@ import "./globals.css";
 const premiumThemeBootstrap = `
 (() => {
   try {
-    const storedTheme = window.localStorage.getItem("anchr.theme");
-    const theme = storedTheme === "light" || storedTheme === "dark"
-      ? storedTheme
-      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    const theme = "dark";
     document.documentElement.classList.toggle("dark", theme === "dark");
     document.documentElement.dataset.premiumTheme = theme;
     document.documentElement.style.colorScheme = theme;

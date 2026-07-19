@@ -8,19 +8,25 @@ import {
   Database,
   Download,
   Folder,
+  FolderDown,
   Link2,
+  ListChecks,
   Loader2,
-  RefreshCw,
+  RefreshCcw,
   RotateCcw,
   ShieldCheck,
+  Waypoints,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   PremiumConfigurationShell,
 } from "@/components/app/premium-configuration-gate";
+import { useBackgroundTasks } from "@/components/app/background-task-provider";
+import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
+import { ActionErrorNotice } from "@/components/shared/action-error-notice";
 import { FileTypeIcon, normalizeExtension } from "@/components/shared/file-type-icon";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, isAccessDeniedError } from "@/lib/api-client";
 import { formatDateTime, formatFileSize, formatNumber, statusText } from "@/lib/format";
 import { buildDisplayNameFromUrl, inferFileType, uploadFilesToOss } from "@/lib/ingestion-files";
 import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
@@ -44,19 +50,32 @@ const FLOW_STEPS = [
 
 type ThemeMode = PremiumThemeMode;
 
-export function ImportsPremiumPage() {
+export function ImportsPremiumPage({
+  initialKbId = "",
+  initialTaskId = "",
+}: {
+  initialKbId?: string;
+  initialTaskId?: string;
+}) {
   const queryClient = useQueryClient();
+  const {
+    registerImportTask,
+    registerPendingImportTask,
+    resolveImportTask,
+    updateImportTask,
+  } = useBackgroundTasks();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [theme, setTheme] = useState<ThemeMode>("dark");
   const [themeHydrated, setThemeHydrated] = useState(false);
-  const [kbId, setKbId] = useState("");
+  const [kbId, setKbId] = useState(initialKbId);
   const [sourceUrl, setSourceUrl] = useState("");
   const [urlTitle, setUrlTitle] = useState("");
   const [showUrlForm, setShowUrlForm] = useState(false);
   const [isKbMenuOpen, setIsKbMenuOpen] = useState(false);
   const [dedupeStrategy, setDedupeStrategy] = useState("SKIP");
-  const [currentTaskId, setCurrentTaskId] = useState("");
+  const [currentTaskId, setCurrentTaskId] = useState(initialTaskId);
   const [files, setFiles] = useState<File[]>([]);
+  const [permissionNotice, setPermissionNotice] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -158,6 +177,7 @@ export function ImportsPremiumPage() {
       });
     },
     onSuccess: async (task) => {
+      registerImportTask(task);
       queryClient.setQueryData(["ingestion-task", selectedKbId, task.taskId], task);
       setCurrentTaskId(task.taskId);
       setSourceUrl("");
@@ -169,18 +189,24 @@ export function ImportsPremiumPage() {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async () => {
-      validateUploadInput(files, capabilitiesQuery.data?.maxFileSizeBytes, capabilitiesQuery.data?.maxFilesPerBatch);
+    mutationFn: async ({ trackingId, uploadFiles }: { trackingId: string; uploadFiles: File[] }) => {
+      validateUploadInput(uploadFiles, capabilitiesQuery.data?.maxFileSizeBytes, capabilitiesQuery.data?.maxFilesPerBatch);
 
       const stsToken = await apiClient.getStsToken();
-      const items = await uploadFilesToOss(files, stsToken, supportedFormats);
+      const items = await uploadFilesToOss(uploadFiles, stsToken, supportedFormats, (completedCount, totalCount) => {
+        updateImportTask(trackingId, {
+          uploadedCount: completedCount,
+          progress: Math.round((completedCount / Math.max(totalCount, 1)) * 100),
+        });
+      });
 
       return apiClient.createUploadIngestionTask(selectedKbId, {
         dedupeStrategy: effectiveDedupeStrategy,
         items,
       });
     },
-    onSuccess: async (task) => {
+    onSuccess: async (task, { trackingId }) => {
+      resolveImportTask(trackingId, task);
       queryClient.setQueryData(["ingestion-task", selectedKbId, task.taskId], task);
       setCurrentTaskId(task.taskId);
       setFiles([]);
@@ -189,11 +215,21 @@ export function ImportsPremiumPage() {
       }
       await invalidateIngestionQueries(queryClient, selectedKbId);
     },
+    onError: (error, { trackingId }) => {
+      updateImportTask(trackingId, { status: "error" });
+      if (isAccessDeniedError(error)) {
+        setPermissionNotice({
+          title: "权限不足，无法上传文件",
+          message: "当前角色没有上传文件的权限，请切换为具有相应权限的角色后重试。",
+        });
+      }
+    },
   });
 
   const retryTaskMutation = useMutation({
     mutationFn: (taskId: string) => apiClient.retryFailedIngestionTask(selectedKbId, taskId),
     onSuccess: async (task) => {
+      registerImportTask(task);
       setCurrentTaskId(task.taskId);
       queryClient.setQueryData(["ingestion-task", selectedKbId, task.taskId], task);
       await invalidateIngestionQueries(queryClient, selectedKbId);
@@ -214,6 +250,7 @@ export function ImportsPremiumPage() {
     mutationFn: ({ taskId, itemId }: { taskId: string; itemId: string }) =>
       apiClient.retryIngestionTaskItem(selectedKbId, taskId, itemId),
     onSuccess: async (task) => {
+      registerImportTask(task);
       setCurrentTaskId(task.taskId);
       queryClient.setQueryData(["ingestion-task", selectedKbId, task.taskId], task);
       await invalidateIngestionQueries(queryClient, selectedKbId);
@@ -230,6 +267,7 @@ export function ImportsPremiumPage() {
 
   function handleFilesSelected(nextFiles: File[]) {
     setFiles(nextFiles);
+    setPermissionNotice(null);
     uploadMutation.reset();
     createUrlMutation.reset();
   }
@@ -243,7 +281,16 @@ export function ImportsPremiumPage() {
   }
 
   function handleUploadClick() {
-    uploadMutation.mutate();
+    setPermissionNotice(null);
+    const trackingId = makeImportTrackingId();
+    registerPendingImportTask({
+      id: trackingId,
+      kbId: selectedKbId,
+      label: files.length > 1 ? `${files[0]?.name ?? "文件"} 等 ${files.length} 个文件` : files[0]?.name ?? "知识库文件",
+      totalCount: Math.max(files.length, 1),
+      startedAt: currentTimestamp(),
+    });
+    uploadMutation.mutate({ trackingId, uploadFiles: files });
   }
 
   function handleUrlSubmit() {
@@ -251,16 +298,23 @@ export function ImportsPremiumPage() {
   }
 
   return (
-    <PremiumConfigurationShell theme={theme} onThemeChange={setTheme} ambientGlow={false}>
+    <PremiumConfigurationShell theme={theme} ambientGlow={false}>
+      {permissionNotice ? (
+        <ActionErrorNotice
+          title={permissionNotice.title}
+          message={permissionNotice.message}
+          onDismiss={() => setPermissionNotice(null)}
+        />
+      ) : null}
       <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
         <header
-          className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5"
+          className="ask-premium-hero relative grid h-[112px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5"
           style={{ fontFamily: APP_FONT_STACK }}
         >
-          <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
+          <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
             IMPORT
           </div>
-          <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
+          <section className="premium-page-header-content relative z-10 flex min-w-0 flex-col justify-center gap-2">
             <div>
               <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                 IMPORTS / INGESTION PIPELINE
@@ -270,6 +324,7 @@ export function ImportsPremiumPage() {
               </h1>
             </div>
           </section>
+          <PremiumHeaderUtilities theme={theme} onStartImport={() => fileInputRef.current?.click()} />
         </header>
 
         <main className="ask-premium-main imports-no-ambient-glow grid min-h-0 min-w-0 items-start gap-3 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] px-4 py-3 sm:px-5 lg:h-[111.111%] lg:w-[111.111%] lg:origin-top-left lg:scale-90 lg:grid-cols-[1fr_minmax(308px,363px)] lg:items-stretch lg:overflow-hidden lg:px-5">
@@ -280,8 +335,7 @@ export function ImportsPremiumPage() {
               onDragOver={(event) => event.preventDefault()}
               onDrop={handleDrop}
             >
-              <div className="pointer-events-none absolute inset-[9px] rounded-[8px] border border-dashed border-[rgba(49,88,255,0.45)]" />
-              <input
+          <input
                 ref={fileInputRef}
                 type="file"
                 multiple
@@ -427,7 +481,14 @@ export function ImportsPremiumPage() {
                 )}
               </div>
 
-              <MutationError errors={[uploadMutation.error, createUrlMutation.error, retryTaskMutation.error, retryItemMutation.error]} />
+              <MutationError
+                errors={[
+                  isAccessDeniedError(uploadMutation.error) ? null : uploadMutation.error,
+                  createUrlMutation.error,
+                  retryTaskMutation.error,
+                  retryItemMutation.error,
+                ]}
+              />
             </section>
 
             <section className="imports-panel premium-surface flex h-[230px] min-h-0 min-w-0 flex-col overflow-hidden rounded-[8px] p-3 backdrop-blur-xl lg:h-full lg:max-h-full" aria-label="最近导入">
@@ -441,8 +502,10 @@ export function ImportsPremiumPage() {
                   onClick={() => ingestionTasksQuery.refetch()}
                   className={BUTTON_GHOST_CLASS}
                   disabled={!selectedKbId || ingestionTasksQuery.isFetching}
+                  aria-label="刷新最近导入"
+                  title="刷新最近导入"
                 >
-                  {ingestionTasksQuery.isFetching ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  {ingestionTasksQuery.isFetching ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
                   刷新
                 </button>
               </div>
@@ -470,9 +533,13 @@ export function ImportsPremiumPage() {
             </section>
           </section>
 
-          <aside className="grid min-h-0 min-w-0 gap-3 lg:h-full lg:grid-rows-[minmax(200px,0.95fr)_minmax(145px,0.62fr)_minmax(200px,0.9fr)]" aria-label="本次导入设置">
-            <section className="imports-session-glow premium-surface relative flex min-h-[220px] flex-col overflow-visible rounded-[8px] p-3 backdrop-blur-xl lg:min-h-0">
-              <PanelLabel label="IMPORT SESSION" />
+          <aside className="imports-premium-side-column grid min-h-0 min-w-0 gap-3 lg:h-full lg:grid-rows-[minmax(200px,0.95fr)_minmax(145px,0.62fr)_minmax(200px,0.9fr)]" aria-label="本次导入设置">
+            <section className="imports-session-glow premium-surface relative flex min-h-[220px] flex-col overflow-visible rounded-[8px] px-4 pb-4 backdrop-blur-xl lg:min-h-0">
+              <ImportsSidePanelHeader
+                label="IMPORT SESSION"
+                icon={<FolderDown size={17} strokeWidth={1.9} />}
+                iconColor="#A1CDEC"
+              />
               <div className="relative mt-3 grid min-h-0 flex-1 grid-rows-3 gap-2.5">
                 <ControlBlock title="目标知识库">
                   <KnowledgeBasePicker
@@ -518,7 +585,7 @@ function PendingFileCard({ file, supportedFormats }: { file: File; supportedForm
 
   return (
     <article className="grid min-h-[58px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] border border-black/10 bg-white/55 p-2 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-muted)]">
-      <FileTypeIcon fileName={file.name} sourceType={fileType ?? undefined} className="size-9" />
+      <FileTypeIcon fileName={file.name} sourceType={fileType ?? undefined} className="size-9" palette="imports" />
       <div className="min-w-0">
         <strong className="block truncate text-[13px] text-[var(--premium-ink)]">{file.name}</strong>
         <span className="mt-1 block truncate text-xs text-[var(--premium-muted)]">
@@ -547,7 +614,7 @@ function TaskItemCard({
 
   return (
     <article className="grid min-h-[58px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] border border-black/10 bg-white/55 p-2 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-muted)]">
-      <FileTypeIcon fileName={title} sourceType={item.sourceUrl ? "URL" : undefined} className="size-9" />
+      <FileTypeIcon fileName={title} sourceType={item.sourceUrl ? "URL" : undefined} className="size-9" palette="imports" />
       <div className="min-w-0">
         <strong className="block truncate text-[13px] text-[var(--premium-ink)]">{title}</strong>
         <span className="mt-1 block truncate text-xs text-[var(--premium-muted)]">
@@ -592,8 +659,8 @@ function RecentTaskRow({
       className={[
         "grid min-h-[56px] w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] border p-2 text-left transition hover:translate-x-1",
         active
-          ? "border-[rgba(49,88,255,0.28)] bg-[rgba(49,88,255,0.08)]"
-          : "border-black/10 bg-white/50 hover:bg-white/70 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel)] dark:hover:bg-[var(--premium-panel-strong)]",
+          ? "border-[#87CEEB] bg-transparent"
+          : "border-black/10 bg-white/50 hover:bg-white/70 dark:border-[var(--premium-line)] dark:bg-[rgb(36,36,36)] dark:hover:bg-[rgb(32,32,32)]",
       ].join(" ")}
     >
       <StatusDot status={task.status} />
@@ -658,7 +725,7 @@ function KnowledgeBasePicker({
                 className={[
                   "flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-[12px] font-extrabold",
                   selectedKbId === item.id
-                    ? "bg-[rgba(49,88,255,0.12)] font-bold text-blue-700 dark:text-blue-200"
+                    ? "bg-[rgba(135,206,235,0.16)] font-bold text-[var(--premium-ink)] [&_svg]:text-[#87CEEB]"
                     : "text-[var(--premium-ink-soft)] hover:bg-[var(--premium-panel-muted)]",
                 ].join(" ")}
                 role="option"
@@ -709,7 +776,7 @@ function DedupeStrategyPicker({
             className={[
               "inline-flex min-h-9 items-center justify-center rounded-[8px] border px-2 text-center text-[11px] font-black leading-none transition",
               selected
-                ? "border-[rgba(49,88,255,0.28)] bg-[rgba(49,88,255,0.12)] text-blue-700 dark:text-blue-200"
+                ? "border-[rgba(135,206,235,0.3)] bg-[rgba(135,206,235,0.16)] text-[var(--premium-ink)]"
                 : "border-black/10 bg-white/60 text-[var(--premium-ink-soft)] hover:bg-white/80 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)] dark:hover:bg-[var(--premium-panel)]",
             ].join(" ")}
             role="radio"
@@ -765,8 +832,13 @@ function TaskSummaryPanel({ currentTask, pendingFileCount }: { currentTask?: Ing
   const running = currentTask?.runningCount ?? (pendingFileCount > 0 ? pendingFileCount : 0);
 
   return (
-    <section className="imports-task-glow premium-surface relative flex min-h-0 flex-col overflow-hidden rounded-[8px] p-3 backdrop-blur-xl lg:min-h-0">
-      <PanelLabel label="CURRENT TASK" value={running > 0 ? `${formatNumber(running)} 处理中` : statusText(currentTask?.status)} />
+    <section className="imports-task-glow premium-surface relative flex min-h-0 flex-col overflow-hidden rounded-[8px] px-4 pb-4 backdrop-blur-xl lg:min-h-0">
+      <ImportsSidePanelHeader
+        label="CURRENT TASK"
+        value={running > 0 ? `${formatNumber(running)} 处理中` : statusText(currentTask?.status)}
+        icon={<ListChecks size={17} strokeWidth={1.9} />}
+        iconColor="#A7DCA4"
+      />
       <div className="mt-3 grid gap-3 rounded-[8px] border border-[rgba(49,88,255,0.14)] bg-white/50 px-2.5 py-3 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)]">
         <div className="flex items-baseline gap-2">
           <strong className="text-[22px] font-black leading-none text-[var(--premium-ink)]">{formatNumber(total)}</strong>
@@ -774,14 +846,11 @@ function TaskSummaryPanel({ currentTask, pendingFileCount }: { currentTask?: Ing
         </div>
         <TaskBar success={success} failed={failed} running={running} total={total} />
       </div>
-      <div className="mt-7 grid grid-cols-3 gap-2">
+      <div className="mt-5 grid grid-cols-3 gap-2">
         <TaskStat label="成功" value={success} tone="success" />
         <TaskStat label="失败" value={failed} tone="failed" />
         <TaskStat label="处理中" value={running} tone="running" />
       </div>
-      {currentTask?.updatedAt ? (
-        <p className="mt-3 text-[11px] text-[var(--premium-muted)]">更新于 {formatDateTime(currentTask.updatedAt)}</p>
-      ) : null}
     </section>
   );
 }
@@ -798,8 +867,13 @@ function PipelinePanel({ progress, pendingFileCount }: { progress: ReturnType<ty
       : "创建任务后会自动进入上传、解析、向量化和索引流程。";
 
   return (
-    <section className="imports-pipeline-glow premium-surface relative flex min-h-[240px] flex-col overflow-hidden rounded-[8px] p-3 backdrop-blur-xl lg:min-h-0">
-      <PanelLabel label="PIPELINE FLOW" value={`${percent}%`} />
+    <section className="imports-pipeline-glow premium-surface relative flex min-h-[240px] flex-col overflow-hidden rounded-[8px] px-4 pb-4 backdrop-blur-xl lg:min-h-0">
+      <ImportsSidePanelHeader
+        label="PIPELINE FLOW"
+        value={`${percent}%`}
+        icon={<Waypoints size={17} strokeWidth={1.9} />}
+        iconColor="#52D9B5"
+      />
       <div className="mt-3 grid gap-2 rounded-[8px] border border-[rgba(49,88,255,0.14)] bg-white/50 p-3 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)]">
         <div>
           <strong className="block text-xs text-[var(--premium-ink)]">{statusTitle}</strong>
@@ -809,7 +883,7 @@ function PipelinePanel({ progress, pendingFileCount }: { progress: ReturnType<ty
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-[#343a36]" aria-hidden="true">
           <span
-            className="block h-full rounded-full bg-[linear-gradient(90deg,var(--premium-blue),var(--premium-accent))] shadow-[0_0_18px_rgba(49,88,255,0.28)]"
+            className="block h-full rounded-full bg-[linear-gradient(90deg,#4b8de6,#89c777)] shadow-[0_0_18px_rgba(75,141,230,0.28)]"
             style={{ width: `${percent}%` }}
           />
         </div>
@@ -825,9 +899,9 @@ function PipelinePanel({ progress, pendingFileCount }: { progress: ReturnType<ty
               className={[
                 "relative grid min-h-[82px] grid-cols-[auto_minmax(0,1fr)] gap-2 overflow-hidden rounded-[8px] border p-2.5",
                 done
-                  ? "border-[rgba(187,255,102,0.36)] bg-[rgba(187,255,102,0.16)] dark:border-[#566b31] dark:bg-[#1d2817]"
+                  ? "border-transparent bg-[rgba(137,199,119,0.16)]"
                   : active
-                    ? "border-[rgba(49,88,255,0.28)] bg-[rgba(49,88,255,0.08)] dark:border-[#43548d] dark:bg-[#151b34]"
+                    ? "border-transparent bg-[rgba(75,141,230,0.16)]"
                     : "border-black/10 bg-white/50 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel)]",
               ].join(" ")}
             >
@@ -838,9 +912,9 @@ function PipelinePanel({ progress, pendingFileCount }: { progress: ReturnType<ty
                 className={[
                   "grid size-7 place-items-center rounded-full text-[11px] font-black",
                   done
-                    ? "bg-[var(--premium-accent)] text-[#111315]"
+                    ? "bg-[#89c777] text-[#111315]"
                     : active
-                      ? "bg-[var(--premium-blue)] text-white shadow-[0_0_0_5px_rgba(49,88,255,0.12)] dark:bg-[#6f83d6] dark:shadow-[0_0_0_5px_#202744]"
+                      ? "bg-[#4b8de6] text-white shadow-[0_0_0_5px_rgba(75,141,230,0.12)]"
                       : "bg-black/10 text-[var(--premium-muted)] dark:bg-[var(--premium-panel-muted)]",
                 ].join(" ")}
               >
@@ -854,8 +928,10 @@ function PipelinePanel({ progress, pendingFileCount }: { progress: ReturnType<ty
                 className={[
                   "absolute right-2 top-2 rounded-full px-1.5 py-1 text-[10px] font-black",
                   done
-                    ? "bg-[rgba(187,255,102,0.28)] text-[#426b09] dark:bg-[#8fab57] dark:text-[#111315]"
-                    : "bg-black/5 text-[var(--premium-muted)] dark:bg-[var(--premium-panel-muted)]",
+                    ? "bg-[#89c777] text-[#111315]"
+                    : active
+                      ? "bg-[#4b8de6] text-white"
+                      : "bg-black/5 text-[var(--premium-muted)] dark:bg-[var(--premium-panel-muted)]",
                 ].join(" ")}
               >
                 {done ? "完成" : active ? `${progress.progress}%` : "等待"}
@@ -874,9 +950,9 @@ function TaskBar({ success, failed, running, total }: { success: number; failed:
 
   return (
     <div className="flex h-2 overflow-hidden rounded-full bg-black/10 dark:bg-[#343a36]" aria-hidden="true">
-      <span className="h-full bg-[var(--premium-accent)]" style={{ width: `${(success / denominator) * 100}%` }} />
-      <span className="h-full bg-rose-500" style={{ width: `${(failed / denominator) * 100}%` }} />
-      <span className="h-full bg-[var(--premium-blue)]" style={{ width: `${(running / denominator) * 100}%` }} />
+      <span className="h-full bg-[#89c777]" style={{ width: `${(success / denominator) * 100}%` }} />
+      <span className="h-full bg-[#df836d]" style={{ width: `${(failed / denominator) * 100}%` }} />
+      <span className="h-full bg-[#4b8de6]" style={{ width: `${(running / denominator) * 100}%` }} />
       <span className="h-full bg-black/10 dark:bg-[#343a36]" style={{ width: `${(queued / denominator) * 100}%` }} />
     </div>
   );
@@ -884,30 +960,35 @@ function TaskBar({ success, failed, running, total }: { success: number; failed:
 
 function TaskStat({ label, value, tone }: { label: string; value: number; tone: "success" | "failed" | "running" }) {
   const ring = tone === "success"
-    ? "border-emerald-400/30 bg-[rgba(187,255,102,0.18)] dark:border-[#82975a] dark:bg-[#35482a]"
+    ? "border-transparent bg-[rgba(137,199,119,0.16)]"
     : tone === "failed"
-      ? "border-rose-400/30 bg-rose-500/10 dark:border-[#a96660] dark:bg-[#56302d]"
-      : "border-blue-400/30 bg-blue-500/10 dark:border-[#6b7ec0] dark:bg-[#2b3560]";
+      ? "border-transparent bg-[rgba(255,117,95,0.16)]"
+      : "border-transparent bg-[rgba(75,141,230,0.16)]";
   const color = tone === "success"
-    ? "text-emerald-800 dark:text-[#d5e8a6]"
+    ? "text-[#89c777]"
     : tone === "failed"
-      ? "text-rose-700 dark:text-[#ffc4be]"
-      : "text-blue-800 dark:text-[#d1dcff]";
+      ? "text-[#ffb4a8]"
+      : "text-[#4B8DE6]";
 
   return (
     <span className={`flex items-center gap-2 rounded-[8px] border px-2.5 py-4 ${ring}`}>
       <b className={`text-[17px] font-black leading-none ${color}`}>{formatNumber(value)}</b>
-      <span className="text-[11px] font-black text-[var(--premium-muted)]">{label}</span>
+      <span className={`text-[11px] font-black ${color}`}>{label}</span>
     </span>
   );
 }
 
-function PanelLabel({ label, value }: { label: string; value?: string }) {
+function ImportsSidePanelHeader({ label, icon, iconColor, value }: { label: string; icon: ReactNode; iconColor?: string; value?: string }) {
   return (
-    <p className="flex items-center justify-between gap-3 text-xs font-black text-[var(--premium-muted)]">
-      <span>{label}</span>
-      {value ? <span>{value}</span> : null}
-    </p>
+    <header className="relative z-10 flex h-[52px] min-h-[52px] min-w-0 items-center justify-between gap-3 border-b border-[var(--premium-line)]">
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="grid size-8 shrink-0 place-items-center text-[#c3cc89]" style={iconColor ? { color: iconColor } : undefined} aria-hidden="true">
+          {icon}
+        </span>
+        <h2 className="truncate text-xs font-black leading-none text-[var(--premium-ink)]">{label}</h2>
+      </span>
+      {value ? <span className="shrink-0 text-xs font-black text-[var(--premium-muted)]">{value}</span> : null}
+    </header>
   );
 }
 
@@ -919,13 +1000,17 @@ function StatusBadge({ status, progress }: { status: string; progress?: number }
         ? "已跳过"
         : statusText(status);
   const tone =
-    status === "SUCCESS" || status === "COMPLETED" || status === "SKIPPED"
-      ? "border-emerald-400/30 bg-[rgba(187,255,102,0.28)] text-emerald-800 dark:border-[#82975a] dark:bg-[#35482a] dark:text-[#d5e8a6]"
-      : status === "FAILED" || status === "PARTIAL_SUCCESS"
-        ? "border-rose-400/30 bg-rose-500/15 text-rose-700 dark:border-[#a96660] dark:bg-[#56302d] dark:text-[#ffc4be]"
-        : status === "RUNNING"
-          ? "border-blue-400/30 bg-blue-500/10 text-blue-800 dark:border-[#6b7ec0] dark:bg-[#2b3560] dark:text-[#d1dcff]"
-          : "border-black/10 bg-black/5 text-[var(--premium-muted)] dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-muted)]";
+    status === "SUCCESS" || status === "COMPLETED"
+      ? "border-transparent bg-[rgba(137,199,119,0.16)] text-[#89c777]"
+      : status === "SKIPPED"
+        ? "border-emerald-400/30 bg-[rgba(187,255,102,0.28)] text-emerald-800 dark:border-[#82975a] dark:bg-[#35482a] dark:text-[#d5e8a6]"
+        : status === "FAILED"
+          ? "border-transparent bg-[rgba(255,117,95,0.16)] text-[#ffb4a8]"
+          : status === "PARTIAL_SUCCESS"
+            ? "border-rose-400/30 bg-rose-500/15 text-rose-700 dark:border-[#a96660] dark:bg-[#56302d] dark:text-[#ffc4be]"
+            : status === "RUNNING"
+              ? "border-blue-400/30 bg-blue-500/10 text-blue-800 dark:border-[#6b7ec0] dark:bg-[#2b3560] dark:text-[#d1dcff]"
+              : "border-black/10 bg-black/5 text-[var(--premium-muted)] dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-muted)]";
 
   return (
     <span className={`inline-grid min-h-7 min-w-[58px] place-items-center whitespace-nowrap rounded-full border px-2 text-[11px] font-black leading-none ${tone}`}>
@@ -936,10 +1021,10 @@ function StatusBadge({ status, progress }: { status: string; progress?: number }
 
 function StatusDot({ status }: { status: string }) {
   if (status === "SUCCESS" || status === "COMPLETED" || status === "SKIPPED") {
-    return <span className="grid size-7 place-items-center rounded-full border border-transparent bg-[rgba(187,255,102,0.28)] text-sm font-black text-emerald-800 dark:border-[#82975a] dark:bg-[#35482a] dark:text-[#d5e8a6]">✓</span>;
+    return <span className="grid size-7 place-items-center rounded-full border border-transparent bg-[rgba(137,199,119,0.16)] text-sm font-black text-[#89c777]">✓</span>;
   }
   if (status === "FAILED" || status === "PARTIAL_SUCCESS") {
-    return <span className="grid size-7 place-items-center rounded-full border border-transparent bg-rose-500/15 text-sm font-black text-rose-700 dark:border-[#a96660] dark:bg-[#56302d] dark:text-[#ffc4be]">!</span>;
+    return <span className="grid size-7 place-items-center rounded-full border border-transparent bg-[rgba(255,117,95,0.16)] text-sm font-black text-[#ffb4a8]">!</span>;
   }
 
   return <span className="grid size-7 place-items-center rounded-full border border-transparent bg-blue-500/10 text-sm font-black text-blue-700 dark:border-[#6b7ec0] dark:bg-[#2b3560] dark:text-[#d1dcff]">•</span>;
@@ -1045,6 +1130,14 @@ function isFinishedTaskStatus(status: string) {
   return status === "SUCCESS" || status === "COMPLETED" || status === "FAILED" || status === "PARTIAL_SUCCESS" || status === "SKIPPED";
 }
 
+function makeImportTrackingId() {
+  return `import-upload:${crypto.randomUUID()}`;
+}
+
+function currentTimestamp() {
+  return Date.now();
+}
+
 function buildAccept(formats: SupportedFormat[]) {
   return formats
     .flatMap((item) => item.extensions)
@@ -1120,19 +1213,19 @@ const BUTTON_PRIMARY_CLASS =
   "imports-primary-action inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#111315] px-3.5 text-[12px] font-black text-white shadow-[0_16px_38px_rgba(17,19,21,0.2)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:bg-[#111315]/35 disabled:shadow-none";
 
 const BUTTON_FILE_PICKER_CLASS =
-  "inline-flex min-h-9 items-center justify-center rounded-full bg-[#111315] px-3.5 text-[11px] font-black leading-none text-white shadow-[0_16px_38px_rgba(17,19,21,0.2)] transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:bg-[#111315]/35 disabled:shadow-none dark:bg-white dark:text-[#111315] dark:hover:bg-[var(--premium-blue)] dark:hover:text-white";
+  "inline-flex min-h-9 items-center justify-center rounded-full bg-[#111315] px-3.5 text-[11px] font-black leading-none text-white shadow-[0_16px_38px_rgba(17,19,21,0.2)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:bg-[#111315]/35 disabled:shadow-none dark:bg-white dark:text-[#111315]";
 
 const BUTTON_SECONDARY_CLASS =
-  "inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[rgba(255,253,245,0.7)] px-3 text-[12px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:border-[var(--premium-blue)] hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:opacity-50 dark:bg-[var(--premium-panel-strong)] dark:hover:bg-[var(--premium-blue)]";
+  "inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[rgba(255,253,245,0.7)] px-3 text-[12px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-50 dark:bg-[var(--premium-panel-strong)]";
 
 const BUTTON_GHOST_CLASS =
-  "inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-[12px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:border-[var(--premium-blue)] hover:bg-[var(--premium-blue)] hover:text-white disabled:translate-y-0 disabled:opacity-50";
+  "inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-transparent px-3 text-[12px] font-black text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-50";
 
 const BUTTON_RETRY_CLASS =
-  "inline-flex min-h-7 items-center justify-center justify-self-end gap-[5px] whitespace-nowrap rounded-full border border-[rgba(255,102,89,0.3)] bg-[rgba(255,102,89,0.12)] px-[11px] text-[11px] font-black leading-none text-[#a93527] transition hover:-translate-y-px hover:bg-[rgba(255,102,89,0.2)] disabled:translate-y-0 disabled:opacity-50 dark:border-[#7d3834] dark:bg-[#3a1716] dark:text-[#ffb4ad] dark:hover:bg-[#4a201d] dark:disabled:border-[#3d2422] dark:disabled:bg-[#281615] dark:disabled:text-[#a97873] dark:disabled:opacity-100";
+  "inline-flex min-h-7 items-center justify-center justify-self-end gap-[5px] whitespace-nowrap rounded-full border border-transparent bg-[rgba(255,117,95,0.16)] px-[11px] text-[11px] font-black leading-none text-[#ffb4a8] transition hover:-translate-y-px hover:bg-[rgba(255,117,95,0.24)] disabled:translate-y-0 disabled:opacity-50";
 
 const BUTTON_RETRY_ALL_CLASS =
-  "inline-flex min-h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-[rgba(255,102,89,0.3)] bg-[rgba(255,102,89,0.12)] px-[13px] text-[11px] font-black leading-none text-[#a93527] transition hover:-translate-y-px hover:bg-[rgba(255,102,89,0.2)] disabled:translate-y-0 disabled:opacity-50 dark:border-[#7d3834] dark:bg-[#3a1716] dark:text-[#ffb4ad] dark:hover:bg-[#4a201d] dark:disabled:border-[#3d2422] dark:disabled:bg-[#281615] dark:disabled:text-[#a97873] dark:disabled:opacity-100";
+  "inline-flex min-h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-transparent bg-[rgba(255,117,95,0.16)] px-[13px] text-[11px] font-black leading-none text-[#ffb4a8] transition hover:-translate-y-px hover:bg-[rgba(255,117,95,0.24)] disabled:translate-y-0 disabled:opacity-50";
 
 const FIELD_CLASS =
   "h-9 w-full rounded-[8px] border border-[var(--premium-line)] bg-white/70 px-3 text-[12px] text-[var(--premium-ink)] outline-none transition placeholder:text-[var(--premium-muted)] focus:border-[var(--premium-focus-line)] focus:bg-[var(--premium-elevated)] focus:shadow-[0_0_0_3px_var(--premium-focus-ring)] dark:bg-[var(--premium-panel-strong)]";

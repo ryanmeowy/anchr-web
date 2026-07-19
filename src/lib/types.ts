@@ -716,7 +716,7 @@ export type AgentTask = {
   errorCode?: string | null;
   errorMessage?: string | null;
 };
-export type AgentActivityStatus = "RUNNING" | "COMPLETED" | "WAITING_TASK" | "FAILED" | "CANCELLED" | "AGENT_DEGRADED" | "AGENT_FALLBACK";
+export type AgentActivityStatus = "RUNNING" | "AWAITING_TURN" | "COMPLETED" | "WAITING_TASK" | "FAILED" | "CANCELLED" | "AGENT_DEGRADED" | "AGENT_FALLBACK";
 export type AgentActivityStepStatus = "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
 export type AgentActivityStep = {
   stepOrder: number;
@@ -751,7 +751,10 @@ export type AgentActivityStep = {
 };
 export type AgentRunActivity = {
   runId: string;
+  sessionId?: string;
+  turnId?: string;
   status: AgentActivityStatus;
+  currentStep?: string | null;
   workflowVersion?: string | null;
   stepCount: number;
   toolCallCount: number;
@@ -762,6 +765,15 @@ export type AgentRunActivity = {
   startedAt?: number | null;
   finishedAt?: number | null;
   steps: AgentActivityStep[];
+};
+export type AgentRunSummary = {
+  runId: string;
+  sessionId: string;
+  turnId?: string | null;
+  status: AgentActivityStatus;
+  currentStep?: string | null;
+  startedAt: number;
+  finishedAt?: number | null;
 };
 export type ConversationCapabilities = {
   agentAvailable: boolean;
