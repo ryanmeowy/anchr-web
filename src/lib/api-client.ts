@@ -13,6 +13,7 @@ import type {
   ConversationIntentType,
   ConversationMessageList,
   AgentRunActivity,
+  AgentRunSummary,
   AgentTask,
   ConversationCapabilities,
   ConversationExecutionMode,
@@ -100,6 +101,18 @@ export class ApiError extends Error {
     this.status = status;
     this.code = code;
   }
+}
+
+export function isAccessDeniedError(error: unknown) {
+  if (!error) return false;
+
+  const message = error instanceof Error ? error.message.toUpperCase() : "";
+  const code = error instanceof ApiError ? error.code?.toUpperCase() : undefined;
+  return (
+    (error instanceof ApiError && error.status === 403) ||
+    Boolean(code?.includes("ACCESS_DENIED")) ||
+    message.includes("CURRENT ROLE ACCESS DENIED")
+  );
 }
 
 function isBuiltinGuestAccessToken(token: string) {
@@ -473,6 +486,8 @@ export const apiClient = {
     request<boolean>(`/api/v1/agent/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }),
   getAgentRunActivity: (runId: string, signal?: AbortSignal) =>
     request<AgentRunActivity>(`/api/v1/agent/runs/${encodeURIComponent(runId)}/activity`, { signal }),
+  listRecoverableAgentRuns: (limit = 10) =>
+    request<AgentRunSummary[]>(`/api/v1/agent/runs/recoverable?limit=${limit}`),
   createConversation: (body: { title?: string | null; kbIds?: string[]; assetIdList?: string[] }) =>
     request<ConversationSession>("/api/v1/conversations", {
       method: "POST",

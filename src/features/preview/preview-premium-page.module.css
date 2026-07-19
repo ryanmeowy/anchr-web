@@ -14,8 +14,8 @@
 .bboxStable {
   isolation: isolate;
   box-shadow:
-    0 0 0 1px rgba(37, 99, 235, 0.14),
-    0 12px 34px rgba(37, 99, 235, 0.18);
+    0 0 0 1px rgba(91, 140, 224, 0.14),
+    0 12px 34px rgba(91, 140, 224, 0.18);
 }
 
 .bboxLock {
@@ -25,7 +25,7 @@
 .bboxLock::before {
   position: absolute;
   inset: 0;
-  border: 2px solid #2563eb;
+  border: 2px solid #5b8ce0;
   border-radius: inherit;
   pointer-events: none;
   content: "";
@@ -74,22 +74,22 @@
   0% {
     border-color: transparent;
     box-shadow:
-      0 0 0 12px rgba(37, 99, 235, 0),
-      0 12px 34px rgba(37, 99, 235, 0);
+      0 0 0 12px rgba(91, 140, 224, 0),
+      0 12px 34px rgba(91, 140, 224, 0);
   }
 
   72% {
-    border-color: rgba(96, 165, 250, 0.42);
+    border-color: rgba(91, 140, 224, 0.55);
     box-shadow:
-      0 0 0 5px rgba(37, 99, 235, 0.18),
-      0 18px 44px rgba(37, 99, 235, 0.26);
+      0 0 0 5px rgba(91, 140, 224, 0.18),
+      0 18px 44px rgba(91, 140, 224, 0.26);
   }
 
   100% {
-    border-color: #2563eb;
+    border-color: #5b8ce0;
     box-shadow:
-      0 0 0 1px rgba(37, 99, 235, 0.14),
-      0 12px 34px rgba(37, 99, 235, 0.18);
+      0 0 0 1px rgba(91, 140, 224, 0.14),
+      0 12px 34px rgba(91, 140, 224, 0.18);
   }
 }
 

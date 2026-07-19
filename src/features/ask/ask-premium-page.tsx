@@ -20,10 +20,12 @@ import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PremiumRail } from "@/components/app/premium-rail";
+import { useBackgroundTasks, type TrackedAgentTask } from "@/components/app/background-task-provider";
+import { ActionErrorNotice } from "@/components/shared/action-error-notice";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
 import { ErrorBlock } from "@/components/ui/query-state";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, isAccessDeniedError } from "@/lib/api-client";
 import {
   consumeAssetScopeHandoff,
   readAskAssetScope,
@@ -79,6 +81,10 @@ type ChatMessage = {
 type MessageCache = Record<string, ChatMessage[]>;
 type ComposerMenu = "kb" | "mode" | "model" | null;
 type ThemeMode = PremiumThemeMode;
+type PermissionNotice = {
+  title: string;
+  message: string;
+};
 type LiveAgentActivity = {
   sessionId?: string;
   runId?: string;
@@ -145,10 +151,29 @@ function mergeLiveAgentStep(steps: AgentActivityStep[], next: AgentActivityStep)
   const index = steps.findIndex((step) => (
     liveAgentStepKey(step)
   ) === key);
-  if (index < 0) return [...steps, next].sort((a, b) => a.stepOrder - b.stepOrder).slice(-50);
+  if (index < 0) {
+    if (next.stepOrder <= 0) return steps;
+    return [...steps, next].sort(compareAgentSteps).slice(-50);
+  }
   const merged = [...steps];
-  merged[index] = { ...merged[index], ...next };
-  return merged.sort((a, b) => a.stepOrder - b.stepOrder).slice(-50);
+  merged[index] = mergeDefinedAgentStep(merged[index], next);
+  return merged.sort(compareAgentSteps).slice(-50);
+}
+
+function mergeDefinedAgentStep(base: AgentActivityStep, update: AgentActivityStep) {
+  const defined = Object.fromEntries(
+    Object.entries(update).filter(([, value]) => value !== undefined && value !== null),
+  ) as Partial<AgentActivityStep>;
+  return {
+    ...base,
+    ...defined,
+    stepOrder: update.stepOrder > 0 ? update.stepOrder : base.stepOrder,
+    createdAt: base.createdAt ?? update.createdAt,
+  } as AgentActivityStep;
+}
+
+function compareAgentSteps(a: AgentActivityStep, b: AgentActivityStep) {
+  return a.stepOrder - b.stepOrder || (a.createdAt ?? 0) - (b.createdAt ?? 0);
 }
 
 function liveAgentStepKey(step: AgentActivityStep) {
@@ -182,6 +207,11 @@ export function AskPremiumPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const {
+    tasks: backgroundTasks,
+    registerAgentTask,
+    updateAgentTask: updateBackgroundAgentTask,
+  } = useBackgroundTasks();
   const initialKbId = searchParams.get("kbId") ?? "";
   const initialKbName = searchParams.get("kbName") ?? "";
   const initialSessionId = searchParams.get("session") ?? "";
@@ -204,8 +234,9 @@ export function AskPremiumPage() {
   const [renameValue, setRenameValue] = useState("");
   const [composerMenu, setComposerMenu] = useState<ComposerMenu>(null);
   const [composerMenuPosition, setComposerMenuPosition] = useState<{ left: number; top: number } | null>(null);
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [theme, setTheme] = useState<ThemeMode>("dark");
   const [themeHydrated, setThemeHydrated] = useState(false);
+  const [isMessageSubmitting, setIsMessageSubmitting] = useState(false);
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [liveAgentActivity, setLiveAgentActivity] = useState<LiveAgentActivity>({ steps: [] });
@@ -217,7 +248,9 @@ export function AskPremiumPage() {
   const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
   const [assetNameCache, setAssetNameCache] = useState<Record<string, string>>({});
   const [scopeNotice, setScopeNotice] = useState<string | null>(null);
+  const [permissionNotice, setPermissionNotice] = useState<PermissionNotice | null>(null);
   const [cancellingTaskIds, setCancellingTaskIds] = useState<Set<string>>(new Set());
+  const messageSubmissionLockRef = useRef(false);
   const streamRef = useRef<{
     requestId: string;
     sessionId: string;
@@ -353,6 +386,14 @@ export function AskPremiumPage() {
     ? Object.prototype.hasOwnProperty.call(messagesBySession, activeSessionId)
     : false;
   const isStreamingActiveSession = Boolean(activeSessionId && streamingSessionId === activeSessionId);
+  const activeTrackedAgentTask = useMemo(() => backgroundTasks
+    .filter((task): task is TrackedAgentTask => task.kind === "agent" && task.sessionId === activeSessionId)
+    .sort((a, b) => {
+      if (a.status === "running" && b.status !== "running") return -1;
+      if (a.status !== "running" && b.status === "running") return 1;
+      return b.startedAt - a.startedAt;
+    })[0], [activeSessionId, backgroundTasks]);
+  const trackedAgentInProgress = activeTrackedAgentTask?.status === "running";
   const canCancelActiveQuery = isStreamingActiveSession && streamRef.current?.agentEnabled === true;
   const lastActiveMessageContent = activeMessages.at(-1)?.content;
   const latestAssistantMessage = useMemo(
@@ -364,6 +405,9 @@ export function AskPremiumPage() {
     || latestAssistantMessage?.executionMode === "AGENT_FALLBACK";
   const latestAgentTask = latestAssistantUsesAgent ? latestAssistantMessage?.agentTask : undefined;
   const latestAgentTaskInProgress = latestAgentTask?.status === "PENDING" || latestAgentTask?.status === "RUNNING";
+  const latestAgentTaskCancelling = Boolean(
+    latestAgentTask && cancellingTaskIds.has(latestAgentTask.taskId),
+  );
   const activityRunId = activeLiveAgentActivity?.runId
     ?? (latestAssistantUsesAgent ? latestAssistantMessage?.agentRunId : undefined);
   const agentActivityQuery = useQuery({
@@ -373,10 +417,15 @@ export function AskPremiumPage() {
     retry: false,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status === "RUNNING" || status === "WAITING_TASK" || latestAgentTaskInProgress ? 2_000 : false;
+      return status === "RUNNING" || status === "AWAITING_TURN" || status === "WAITING_TASK" || latestAgentTaskInProgress ? 2_000 : false;
     },
   });
-  const canSubmit = Boolean(query.trim()) && !streamingSessionId && (Boolean(activeSessionId) || selectedKbIds.length > 0);
+  const canSubmit = Boolean(query.trim())
+    && !isMessageSubmitting
+    && !streamingSessionId
+    && !latestAgentTaskInProgress
+    && !trackedAgentInProgress
+    && (Boolean(activeSessionId) || selectedKbIds.length > 0);
   const pendingTaskIds = useMemo(() => Array.from(new Set(
     Object.values(messagesBySession).flat().map((message) => message.agentTask)
       .filter((task): task is AgentTask => Boolean(task && (task.status === "PENDING" || task.status === "RUNNING")))
@@ -522,37 +571,47 @@ export function AskPremiumPage() {
   const cancelActiveQuery = useCallback(async () => {
     const active = streamRef.current;
     if (!active) return;
-    const runCancellation = active.runId
-      ? apiClient.cancelAgentRun(active.runId)
-      : Promise.resolve(false);
-    streamRef.current = null;
-    setStreamingSessionId(null);
-    setMessagesBySession((previous) => ({
-      ...previous,
-      [active.sessionId]: (previous[active.sessionId] ?? []).map((message) => (
-        message.pending && !message.agentTask
-          ? {
-              ...message,
-              pending: false,
-              content: stripTraceText(message.content) || "查询已取消。",
-              answerStatus: "CANCELLED" as const,
-              answerFallbackReason: "agent_run_cancelled",
-            }
-          : message
-      )),
-    }));
-    setScopeNotice("查询已取消");
-    setLiveAgentActivity((previous) => (
-      previous.sessionId === active.sessionId ? { ...previous, status: "CANCELLED" } : previous
-    ));
+    if (!active.runId) {
+      setStreamError("Agent 运行尚未建立，请稍后重试取消");
+      return;
+    }
     try {
-      await runCancellation;
+      const accepted = await apiClient.cancelAgentRun(active.runId);
+      if (!accepted) {
+        setStreamError("后端未确认取消，正在继续同步任务状态");
+        return;
+      }
+      if (streamRef.current?.requestId !== active.requestId) return;
+      streamRef.current = null;
+      setStreamingSessionId(null);
+      setMessagesBySession((previous) => ({
+        ...previous,
+        [active.sessionId]: (previous[active.sessionId] ?? []).map((message) => (
+          message.pending && !message.agentTask
+            ? {
+                ...message,
+                pending: false,
+                content: stripTraceText(message.content) || "查询已取消。",
+                answerStatus: "CANCELLED" as const,
+                answerFallbackReason: "agent_run_cancelled",
+              }
+            : message
+        )),
+      }));
+      setScopeNotice("查询已取消");
+      setLiveAgentActivity((previous) => previous.sessionId === active.sessionId
+        ? {
+            ...previous,
+            status: "CANCELLED",
+            steps: cancelRunningAgentSteps(previous.steps),
+          }
+        : previous);
+      void queryClient.invalidateQueries({ queryKey: ["agent", "activity", active.runId] });
+      active.controller.abort();
     } catch (error) {
       setStreamError(error instanceof Error ? error.message : "后端查询取消失败");
-    } finally {
-      active.controller.abort();
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -733,6 +792,84 @@ export function AskPremiumPage() {
   }, [activeSessionId, hasLoadedActiveMessages]);
 
   useEffect(() => {
+    if (!activeSessionId || !hasLoadedActiveMessages || !activeTrackedAgentTask || !trackedAgentInProgress) return;
+    const trackedTask = activeTrackedAgentTask;
+    const frame = window.requestAnimationFrame(() => {
+      setMessagesBySession((previous) => {
+        const messages = previous[activeSessionId] ?? [];
+        const alreadyPresent = messages.some((message) => (
+          (trackedTask.runId && message.agentRunId === trackedTask.runId)
+          || (trackedTask.turnId && message.turnId === trackedTask.turnId)
+          || message.id === `${trackedTask.id}-assistant`
+        ));
+        if (alreadyPresent) return previous;
+        return {
+          ...previous,
+          [activeSessionId]: [
+            ...messages,
+            {
+              id: `${trackedTask.id}-user`,
+              role: "user",
+              content: trackedTask.label,
+              sessionId: activeSessionId,
+              turnId: trackedTask.turnId,
+            },
+            {
+              id: `${trackedTask.id}-assistant`,
+              role: "assistant",
+              content: "Agent 正在处理回答…",
+              sessionId: activeSessionId,
+              turnId: trackedTask.turnId,
+              answerStatus: "PROCESSING",
+              executionMode: "AGENT",
+              agentRunId: trackedTask.runId,
+              pending: true,
+            },
+          ],
+        };
+      });
+      setLiveAgentActivity((previous) => previous.sessionId === activeSessionId && previous.runId === trackedTask.runId
+        ? previous
+        : {
+            sessionId: activeSessionId,
+            runId: trackedTask.runId,
+            status: "RUNNING",
+            steps: [],
+          });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSessionId, activeTrackedAgentTask, hasLoadedActiveMessages, trackedAgentInProgress]);
+
+  const reconciledBackgroundTasksRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!activeSessionId || !hasLoadedActiveMessages || !activeTrackedAgentTask || trackedAgentInProgress) return;
+    if (reconciledBackgroundTasksRef.current.has(activeTrackedAgentTask.id)) return;
+    reconciledBackgroundTasksRef.current.add(activeTrackedAgentTask.id);
+    let cancelled = false;
+    void apiClient.listConversationMessages(activeSessionId, HISTORY_LIMIT).then((data) => {
+      if (cancelled) return;
+      setMessagesBySession((previous) => ({
+        ...previous,
+        [activeSessionId]: turnsToMessages(data.turns ?? []),
+      }));
+      setLiveAgentActivity((previous) => previous.sessionId === activeSessionId
+        ? {
+            ...previous,
+            runId: activeTrackedAgentTask.runId ?? previous.runId,
+            status: activeTrackedAgentTask.status === "success"
+              ? "COMPLETED"
+              : activeTrackedAgentTask.status === "cancelled" ? "CANCELLED" : "FAILED",
+          }
+        : previous);
+    }).catch(() => {
+      reconciledBackgroundTasksRef.current.delete(activeTrackedAgentTask.id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, activeTrackedAgentTask, hasLoadedActiveMessages, trackedAgentInProgress]);
+
+  useEffect(() => {
     if (initialTurnId && activeSessionId === initialSessionId) return;
     const scroller = messageScrollRef.current;
     const userMessages = scroller?.querySelectorAll<HTMLElement>(".ask-premium-user-message");
@@ -838,7 +975,15 @@ export function AskPremiumPage() {
 
   const sendMessage = async (rawText: string, options: { clearComposer?: boolean } = {}) => {
     const text = rawText.trim();
-    if (!text || streamingSessionId || (!activeSessionId && selectedKbIds.length === 0)) return;
+    if (!text
+      || messageSubmissionLockRef.current
+      || isMessageSubmitting
+      || streamingSessionId
+      || latestAgentTaskInProgress
+      || trackedAgentInProgress
+      || (!activeSessionId && selectedKbIds.length === 0)) return;
+    messageSubmissionLockRef.current = true;
+    setIsMessageSubmitting(true);
     const requestAssetScope = activeAssetScope;
     const effectiveKbIds = requestAssetScope?.kbId ? [requestAssetScope.kbId] : selectedKbIds;
 
@@ -850,6 +995,7 @@ export function AskPremiumPage() {
     setLiveAgentActivity({ steps: [] });
 
     let targetSessionId = activeSessionId;
+    let backgroundTaskId: string | null = null;
     try {
       if (!targetSessionId) {
         const session = await apiClient.createConversation({
@@ -889,6 +1035,15 @@ export function AskPremiumPage() {
         streamRef.current.sessionId === targetSessionId
       );
 
+      if (agentEnabled) {
+        backgroundTaskId = requestId;
+        registerAgentTask({
+          id: requestId,
+          sessionId: targetSessionId,
+          label: text,
+          startedAt: currentTimestamp(),
+        });
+      }
       streamRef.current = { requestId, sessionId: targetSessionId, controller, agentEnabled };
       setStreamingSessionId(targetSessionId);
       setMessagesBySession((previous) => ({
@@ -910,20 +1065,29 @@ export function AskPremiumPage() {
           onTrace: (event) => {
             if (!isCurrentStream()) return;
             if (event.runId && streamRef.current) streamRef.current.runId = event.runId;
+            const traceDetails = event.details ?? {};
+            if (agentEnabled) {
+              updateBackgroundAgentTask(requestId, {
+                runId: event.runId,
+                turnId: typeof traceDetails.turnId === "string" ? traceDetails.turnId : undefined,
+                currentStage: typeof traceDetails.taskStage === "string"
+                  ? traceDetails.taskStage
+                  : event.message ?? event.stage,
+              });
+            }
             if (agentEnabled
               && ["agent_thinking", "tool_call", "tool_result", "task_queued"].includes(event.stage ?? "")
               && !(event.stage === "agent_thinking" && event.message === "run_started")) {
-              const details = event.details ?? {};
+              const details = traceDetails;
               const callId = typeof details.callId === "string" ? details.callId : undefined;
               const stepOrder = activityNumber(details.stepOrder);
-              const fallbackOrder = activityNumber(details.toolCallOrder) ?? Date.now();
               const isTool = event.stage === "tool_call" || event.stage === "tool_result";
               const success = activityBoolean(details.success);
               const isStarted = event.stage === "tool_call"
                 || event.message === "started"
                 || event.message?.endsWith("_started") === true;
               const nextStep: AgentActivityStep = {
-                stepOrder: stepOrder ?? fallbackOrder,
+                stepOrder: stepOrder ?? 0,
                 type: isTool ? "TOOL" : event.stage === "task_queued" ? "TASK_STAGE" : "MODEL_DECISION",
                 toolName: typeof details.tool === "string" ? details.tool : undefined,
                 callId,
@@ -1006,6 +1170,17 @@ export function AskPremiumPage() {
           onDone: (event) => {
             if (!isCurrentStream()) return;
             if (agentEnabled) {
+              updateBackgroundAgentTask(requestId, {
+                runId: event.runId,
+                turnId: event.turnId,
+                agentTaskId: event.agentTask?.taskId,
+                currentStage: event.agentTask?.currentStage ?? undefined,
+                status: event.answerStatus === "PROCESSING"
+                  ? "running"
+                  : event.answerStatus === "CANCELLED"
+                    ? "cancelled"
+                    : event.answerStatus === "MODEL_FALLBACK" ? "error" : "success",
+              });
               setLiveAgentActivity((previous) => ({
                 sessionId: targetSessionId,
                 runId: event.runId ?? previous.runId,
@@ -1052,19 +1227,31 @@ export function AskPremiumPage() {
       );
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
-      const message = error instanceof Error ? error.message : "消息发送失败";
-      setStreamError(message);
+      const accessDenied = isAccessDeniedError(error);
+      if (accessDenied) {
+        setPermissionNotice({
+          title: "权限不足，无法发送消息",
+          message: "当前角色没有发送消息的权限，请切换为具有相应权限的角色后重试。",
+        });
+      }
+      const message = accessDenied
+        ? "当前角色没有发送消息的权限"
+        : error instanceof Error ? error.message : "消息发送失败";
+      setStreamError(accessDenied ? null : message);
       if (agentEnabled) {
+        if (backgroundTaskId) updateBackgroundAgentTask(backgroundTaskId, { status: "error" });
         setLiveAgentActivity((previous) => ({ ...previous, status: "FAILED" }));
       }
       if (targetSessionId) {
         setMessagesBySession((previous) => ({
           ...previous,
-          [targetSessionId]: (previous[targetSessionId] ?? []).map((item) => (
-            item.pending
-              ? { ...item, pending: false, error: message, content: stripTraceText(item.content) || "回答生成失败。" }
-              : item
-          )),
+          [targetSessionId]: accessDenied
+            ? (previous[targetSessionId] ?? []).filter((item) => !item.pending)
+            : (previous[targetSessionId] ?? []).map((item) => (
+                item.pending
+                  ? { ...item, pending: false, error: message, content: stripTraceText(item.content) || "回答生成失败。" }
+                  : item
+              )),
         }));
       }
     } finally {
@@ -1072,10 +1259,13 @@ export function AskPremiumPage() {
         streamRef.current = null;
         setStreamingSessionId(null);
       }
+      messageSubmissionLockRef.current = false;
+      setIsMessageSubmitting(false);
     }
   };
 
   const handleSubmit = async () => {
+    if (!canSubmit) return;
     await sendMessage(query, { clearComposer: true });
   };
 
@@ -1127,6 +1317,7 @@ export function AskPremiumPage() {
     const title = renameValue.trim();
     if (!title) return;
 
+    setConversationError(null);
     const previous = conversations;
     setConversations((items) => items.map((item) => (
       item.sessionId === sessionId ? { ...item, title } : item
@@ -1140,11 +1331,21 @@ export function AskPremiumPage() {
       )));
     } catch (error) {
       setConversations(previous);
-      setConversationError(error instanceof Error ? error.message : "重命名失败");
+      const accessDenied = isAccessDeniedError(error);
+      if (accessDenied) {
+        setPermissionNotice({
+          title: "权限不足，无法编辑会话",
+          message: "当前角色没有编辑会话的权限，请切换为具有相应权限的角色后重试。",
+        });
+      }
+      setConversationError(accessDenied
+        ? null
+        : error instanceof Error ? error.message : "重命名失败");
     }
   };
 
   const deleteConversation = async (sessionId: string) => {
+    setConversationError(null);
     const previous = conversations;
     setConversations((items) => items.filter((item) => item.sessionId !== sessionId));
     setOpenMenuSessionId(null);
@@ -1167,7 +1368,16 @@ export function AskPremiumPage() {
       });
     } catch (error) {
       setConversations(previous);
-      setConversationError(error instanceof Error ? error.message : "删除失败");
+      const accessDenied = isAccessDeniedError(error);
+      if (accessDenied) {
+        setPermissionNotice({
+          title: "权限不足，无法删除会话",
+          message: "当前角色没有删除会话的权限，请切换为具有相应权限的角色后重试。",
+        });
+      }
+      setConversationError(accessDenied
+        ? null
+        : error instanceof Error ? error.message : "删除失败");
     }
   };
 
@@ -1195,20 +1405,27 @@ export function AskPremiumPage() {
   };
 
   return (
-    <div className="premium-theme ask-premium-page ask-premium-ask-page min-h-screen overflow-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>
+    <div className="premium-theme ask-premium-page ask-premium-ask-page ask-premium-entry-page min-h-screen overflow-hidden bg-[#f7f7f2] text-[#111315]" data-theme={theme} data-premium-theme={theme}>
       <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(17,19,21,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(17,19,21,0.055)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
       {scopeNotice ? (
         <TransientNotice message={scopeNotice} onDismiss={() => setScopeNotice(null)} />
       ) : null}
+      {permissionNotice ? (
+        <ActionErrorNotice
+          title={permissionNotice.title}
+          message={permissionNotice.message}
+          onDismiss={() => setPermissionNotice(null)}
+        />
+      ) : null}
 
-      <div className="relative min-h-screen p-0 lg:p-6">
+      <div className="relative h-screen p-0">
         <div
-          className="ask-premium-shell ask-premium-chat-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:grid-cols-[60px_280px_minmax(0,1fr)_350px] lg:grid-rows-none lg:rounded-[8px]"
+          className="ask-premium-shell ask-premium-chat-shell grid h-screen grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden border-0 bg-white/70 shadow-none backdrop-blur-2xl lg:grid-cols-[60px_280px_minmax(0,1fr)_350px] lg:grid-rows-none"
           data-history-collapsed={historyCollapsed}
           data-layout-transition-ready={layoutTransitionReady}
           data-trace-collapsed={traceCollapsed}
         >
-          <PremiumRail theme={theme} onThemeChange={setTheme} />
+          <PremiumRail />
 
           <aside
             data-conversation-scroll
@@ -1338,12 +1555,12 @@ export function AskPremiumPage() {
                 className="ask-premium-conversation-frame mx-auto flex min-h-0 w-full flex-1 flex-col gap-0 lg:w-[calc(100vw-780px)] lg:max-w-full"
                 data-trace-collapsed={traceCollapsed}
               >
-                <section ref={messageScrollRef} className="ask-premium-message-scroll min-h-0 flex-1 overflow-auto pr-1">
-                  <div className="relative grid gap-4">
+                <section ref={messageScrollRef} className="ask-premium-message-scroll min-h-0 flex-1 overflow-auto pr-1 pt-3">
+                  <div className="relative grid min-h-full content-start gap-4">
                     {messageError ? (
                       <ErrorBlock message={messageError} />
                     ) : isLoadingMessages ? (
-                      <div className="ask-premium-inline-loading flex min-h-[280px] items-center justify-center" aria-label="加载中">
+                      <div className="ask-premium-inline-loading absolute inset-0 grid place-items-center" aria-label="加载中">
                         <span className="ask-premium-spinner" aria-hidden="true" />
                       </div>
                     ) : activeMessages.length ? (
@@ -1351,13 +1568,12 @@ export function AskPremiumPage() {
                         <PremiumChatBubble
                           key={message.id}
                           message={message}
+                          theme={theme}
                           question={activeMessages[index - 1]?.role === "user" ? activeMessages[index - 1]?.content : undefined}
                           onPreviewCitation={handlePreviewCitation}
                           onSubmitUserEdit={(value) => sendMessage(value)}
-                          canSubmitUserEdit={!streamingSessionId}
+                          canSubmitUserEdit={!isMessageSubmitting && !streamingSessionId && !latestAgentTaskInProgress}
                           assetNameCache={assetNameCache}
-                          onCancelAgentTask={(taskId) => void cancelAgentTask(taskId)}
-                          cancellingAgentTask={Boolean(message.agentTask && cancellingTaskIds.has(message.agentTask.taskId))}
                         />
                       ))
                     ) : (
@@ -1396,7 +1612,11 @@ export function AskPremiumPage() {
                       if (canSubmit) void handleSubmit();
                     }}
                     enterKeyHint="send"
-                    placeholder="给 Anchr 发送消息"
+                    placeholder={latestAgentTaskInProgress
+                      ? latestAgentTaskCancelling
+                        ? "正在取消后台任务…"
+                        : "后台任务执行中，可编辑草稿；点击 X 取消"
+                      : "给 Anchr 发送消息"}
                     className="ask-premium-textarea max-h-40 min-h-[52px] w-full resize-none border-0 bg-transparent text-slate-950 outline-none placeholder:text-slate-400"
                   />
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_42px] items-center gap-2.5 max-sm:block max-sm:w-full max-sm:max-w-full">
@@ -1431,16 +1651,27 @@ export function AskPremiumPage() {
                       />
                     </div>
                     <button
-                      type={isStreamingActiveSession ? "button" : "submit"}
-                      onClick={canCancelActiveQuery ? () => void cancelActiveQuery() : undefined}
-                      disabled={isStreamingActiveSession ? !canCancelActiveQuery : !canSubmit}
-                      className="ask-premium-send-button grid size-[42px] shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-[0_12px_28px_rgba(17,19,21,0.2)] transition hover:-translate-y-0.5 hover:scale-[1.03] hover:bg-blue-600 disabled:bg-[#111315] disabled:text-white disabled:opacity-100 disabled:shadow-[0_12px_28px_rgba(17,19,21,0.2)] max-sm:fixed max-sm:bottom-[76px] max-sm:left-[min(322px,calc(100vw-72px))] max-sm:z-[60] max-sm:size-[42px]"
-                      aria-label={canCancelActiveQuery ? "取消查询" : isStreamingActiveSession ? "生成中" : "发送"}
-                      title={canCancelActiveQuery ? "取消查询" : isStreamingActiveSession ? "生成中" : "发送"}
+                      type={latestAgentTaskInProgress || isStreamingActiveSession ? "button" : "submit"}
+                      onClick={latestAgentTaskInProgress && latestAgentTask
+                        ? () => void cancelAgentTask(latestAgentTask.taskId)
+                        : canCancelActiveQuery ? () => void cancelActiveQuery() : undefined}
+                      disabled={latestAgentTaskInProgress
+                        ? latestAgentTaskCancelling
+                        : isStreamingActiveSession ? !canCancelActiveQuery : !canSubmit}
+                      aria-busy={latestAgentTaskCancelling || undefined}
+                      className="ask-premium-send-button grid size-[42px] shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-none transition hover:-translate-y-0.5 hover:scale-[1.03] hover:bg-blue-600 disabled:bg-[#111315] disabled:text-white disabled:opacity-100 disabled:shadow-none max-sm:fixed max-sm:bottom-[76px] max-sm:left-[min(322px,calc(100vw-72px))] max-sm:z-[60] max-sm:size-[42px]"
+                      aria-label={latestAgentTaskInProgress
+                        ? latestAgentTaskCancelling ? "正在取消后台任务" : "取消后台任务"
+                        : canCancelActiveQuery ? "取消查询" : isStreamingActiveSession ? "生成中" : "发送"}
+                      title={latestAgentTaskInProgress
+                        ? latestAgentTaskCancelling ? "正在取消后台任务" : "点击取消后台任务"
+                        : canCancelActiveQuery ? "取消查询" : isStreamingActiveSession ? "生成中" : "发送"}
                     >
-                      {canCancelActiveQuery ? <X size={20} /> : isStreamingActiveSession
-                        ? <Loader2 className="animate-spin" size={20} />
-                        : <SendGlyph />}
+                      {latestAgentTaskInProgress ? <X size={20} />
+                        : canCancelActiveQuery ? <X size={20} />
+                          : isStreamingActiveSession
+                            ? <Loader2 className="animate-spin" size={20} />
+                            : <SendGlyph />}
                     </button>
                   </div>
 
@@ -1570,7 +1801,7 @@ function TracePanel({
           <strong className="ask-premium-answer-mode-title block min-w-0 max-w-full break-words font-black leading-none">{answerMode}</strong>
           <div className="ask-premium-answer-mode-bar h-2 w-full min-w-0 overflow-hidden rounded-full bg-white/10">
             <span
-              className="block h-full rounded-full bg-[#bbff66] transition-[width] duration-300 ease-out"
+              className="block h-full rounded-full bg-[var(--ask-accent)] transition-[width] duration-300 ease-out"
               style={{ width: answerModeProgress[answerMode] }}
             />
           </div>
@@ -1608,13 +1839,14 @@ function AgentActivityCard({
     || latestAssistantMessage?.executionMode === "AGENT_FALLBACK";
   const hasLiveAgent = Boolean(liveActivity?.sessionId);
   const isAgent = hasLiveAgent || latestUsesAgent;
-  const mergedSteps = mergeAgentActivitySteps(serverActivity?.steps ?? [], liveActivity?.steps ?? []);
-  const steps = mergeTaskProgressStep(mergedSteps, latestAssistantMessage?.agentTask);
   const status = resolveAgentActivityStatus(
     serverActivity?.status,
     liveActivity?.status,
     statusFromTask(latestAssistantMessage?.agentTask),
   );
+  const mergedSteps = mergeAgentActivitySteps(serverActivity?.steps ?? [], liveActivity?.steps ?? []);
+  const taskSteps = mergeTaskProgressStep(mergedSteps, latestAssistantMessage?.agentTask);
+  const steps = status === "CANCELLED" ? cancelRunningAgentSteps(taskSteps) : taskSteps;
   const totalTokens = (serverActivity?.promptTokens ?? 0) + (serverActivity?.completionTokens ?? 0);
   const promptTokens = serverActivity?.promptTokens ?? 0;
   const completionTokens = serverActivity?.completionTokens ?? 0;
@@ -1648,9 +1880,9 @@ function AgentActivityCard({
           ) : null}
         </div>
         {isAgent && status ? (
-          <span className="inline-flex shrink-0 items-center gap-1.5 pt-0.5 text-[10px] font-black text-[#bbff66]">
-            {status === "RUNNING" || status === "WAITING_TASK" ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-            {status !== "RUNNING" && status !== "WAITING_TASK" ? <span className="h-1.5 w-1.5 rounded-full bg-[#bbff66]" /> : null}
+          <span className="inline-flex shrink-0 items-center gap-1.5 pt-0.5 text-[10px] font-black text-[var(--ask-accent-text)]">
+            {status === "RUNNING" || status === "AWAITING_TURN" || status === "WAITING_TASK" ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            {status !== "RUNNING" && status !== "AWAITING_TURN" && status !== "WAITING_TASK" ? <span className="h-1.5 w-1.5 rounded-full bg-[var(--ask-accent-text)]" /> : null}
             {agentStatusLabel(status)}
           </span>
         ) : null}
@@ -1713,7 +1945,7 @@ function AgentActivityEmpty({ title, detail, loading = false }: { title: string;
   return (
     <div className="ask-premium-trace-empty rounded-[8px] bg-black/20 p-3 text-xs leading-5 text-white/60">
       <div className="flex items-center gap-2 font-black text-white/85">
-        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#bbff66]" /> : null}
+        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--ask-accent-text)]" /> : null}
         <span>{title}</span>
       </div>
       <p className="mt-1">{detail}</p>
@@ -1738,19 +1970,19 @@ function AgentActivityStepItem({
   const summary = agentStepSummary(step);
   const metrics = agentStepMetrics(step, currentTime);
   const stepSurface = step.status === "RUNNING"
-    ? "bg-[#bbff66]/[0.06]"
+    ? "bg-[var(--ask-accent-softest)]"
     : step.status === "FAILED" || step.status === "CANCELLED" ? "bg-red-400/[0.05]" : "";
   return (
     <div className="ask-premium-trace-event flex items-stretch gap-2.5">
       <div className="relative flex w-5 shrink-0 justify-center">
-        <span className={`relative z-[1] mt-2 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[9px] font-black ${step.status === "FAILED" || step.status === "CANCELLED" ? "bg-red-400/20 text-red-300" : step.status === "RUNNING" ? "bg-[#bbff66] text-[#111315]" : "border border-white/10 bg-black/20 text-white/55"}`}>{String(position).padStart(2, "0")}</span>
+        <span className={`relative z-[1] mt-2 flex size-5 items-center justify-center rounded-full p-0 text-center text-[9px] font-black leading-none tabular-nums ${step.status === "FAILED" || step.status === "CANCELLED" ? "bg-red-400/20 text-red-300" : step.status === "RUNNING" ? "bg-[var(--ask-accent-text)] text-[#111315]" : "border border-white/10 bg-black/20 text-white/55"}`}>{String(position).padStart(2, "0")}</span>
         {!isLast ? <span className="absolute bottom-[-8px] top-7 w-px bg-white/10" /> : null}
       </div>
       <div className={`mb-2.5 min-w-0 flex-1 rounded-[7px] px-2.5 py-2 ${stepSurface}`}>
         <div className="flex items-center justify-between gap-3 text-xs font-black text-white/90">
           <span>{agentStepTitle(step, ordinal)}</span>
           <span className="flex shrink-0 items-center gap-1 text-[9px] text-white/45">
-            {step.status === "RUNNING" ? <Loader2 className="h-3 w-3 animate-spin text-[#bbff66]" /> : null}
+            {step.status === "RUNNING" ? <Loader2 className="h-3 w-3 animate-spin text-[var(--ask-accent-text)]" /> : null}
             {agentStepStatusLabel(step.status)}
           </span>
         </div>
@@ -1763,7 +1995,7 @@ function AgentActivityStepItem({
                 className="flex min-w-0 items-baseline justify-between gap-1.5 text-[9px]"
               >
                 <dt className="shrink-0 text-white/45">{metric.label}</dt>
-                <dd className={`truncate font-semibold ${metric.tone === "accent" ? "text-[#bbff66]" : metric.tone === "danger" ? "text-red-300" : "text-white/60"}`}>{metric.value}</dd>
+                <dd className={`truncate font-semibold ${metric.tone === "accent" ? "text-[var(--ask-accent-text)]" : metric.tone === "danger" ? "text-red-300" : "text-white/60"}`}>{metric.value}</dd>
               </div>
             ))}
           </dl>
@@ -1775,7 +2007,7 @@ function AgentActivityStepItem({
               <strong className="text-white/60">{progress}%</strong>
             </div>
             <div className="h-1 overflow-hidden rounded-full bg-white/10">
-              <span className="block h-full rounded-full bg-[#bbff66] transition-[width]" style={{ width: `${progress}%` }} />
+              <span className="block h-full rounded-full bg-[var(--ask-accent)] transition-[width]" style={{ width: `${progress}%` }} />
             </div>
           </div>
         ) : null}
@@ -1786,21 +2018,39 @@ function AgentActivityStepItem({
 
 function mergeAgentActivitySteps(persisted: AgentActivityStep[], live: AgentActivityStep[]) {
   const merged = new Map<string, AgentActivityStep>();
-  persisted.forEach((step) => merged.set(agentStepKey(step), step));
-  live.forEach((step) => {
+  persisted.filter(hasValidAgentStepOrder).forEach((step) => merged.set(agentStepKey(step), step));
+  live.filter(hasValidAgentStepOrder).forEach((step) => {
     const key = agentStepKey(step);
     const stored = merged.get(key);
     if (!stored) {
       merged.set(key, step);
+    } else if (step.errorCode && !stored.errorCode) {
+      merged.set(key, mergeDefinedAgentStep(stored, step));
     } else if (stored.status === "RUNNING" && step.status !== "RUNNING") {
-      merged.set(key, { ...stored, ...step });
+      merged.set(key, mergeDefinedAgentStep(stored, step));
     } else {
       merged.set(key, { ...step, ...stored });
     }
   });
   return Array.from(merged.values())
-    .sort((a, b) => a.stepOrder - b.stepOrder || (a.createdAt ?? 0) - (b.createdAt ?? 0))
+    .sort(compareAgentSteps)
     .slice(-50);
+}
+
+function hasValidAgentStepOrder(step: AgentActivityStep) {
+  return Number.isFinite(step.stepOrder) && step.stepOrder > 0;
+}
+
+function cancelRunningAgentSteps(steps: AgentActivityStep[]) {
+  return steps.map((step) => step.status === "RUNNING"
+    ? {
+        ...step,
+        status: "CANCELLED" as const,
+        durationMs: step.durationMs ?? (step.createdAt == null
+          ? undefined
+          : Math.max(0, Date.now() - step.createdAt)),
+      }
+    : step);
 }
 
 function agentStepKey(step: AgentActivityStep) {
@@ -1960,6 +2210,7 @@ function taskStageLabel(stage?: string | null) {
 function agentStatusLabel(status: AgentActivityStatus | AgentActivityStep["status"]) {
   return {
     RUNNING: "正在执行",
+    AWAITING_TURN: "正在保存回答",
     WAITING_TASK: "后台任务处理中",
     COMPLETED: "已完成",
     CANCELLED: "已取消",
@@ -2268,11 +2519,11 @@ function PremiumConversationItem({
           {confirmingDelete ? (
             <>
               <button type="button" onClick={onDelete} className="flex h-9 items-center gap-2 rounded-[6px] px-2 text-sm font-bold text-rose-600 hover:bg-rose-50"><Trash2 size={15} />确认删除</button>
-              <button type="button" onClick={() => setConfirmingDelete(false)} className="h-9 rounded-[6px] px-2 text-left text-sm text-slate-700 hover:bg-slate-50">取消</button>
+              <button type="button" onClick={() => setConfirmingDelete(false)} className="ask-premium-conversation-delete-cancel h-9 rounded-[6px] px-2 text-left text-sm text-slate-700 hover:bg-slate-50">取消</button>
             </>
           ) : (
             <>
-              <button type="button" onClick={onStartRename} className="flex h-9 items-center gap-2 rounded-[6px] px-2 text-sm text-slate-700 hover:bg-slate-50"><Edit3 size={15} />重命名</button>
+              <button type="button" onClick={onStartRename} className="ask-premium-conversation-rename-action flex h-9 items-center gap-2 rounded-[6px] px-2 text-sm text-slate-700 hover:bg-slate-50"><Edit3 size={15} />重命名</button>
               <button type="button" onClick={() => setConfirmingDelete(true)} className="flex h-9 items-center gap-2 rounded-[6px] px-2 text-sm text-rose-600 hover:bg-rose-50"><Trash2 size={15} />删除</button>
             </>
           )}
@@ -2285,15 +2536,15 @@ function PremiumConversationItem({
 
 function PremiumChatBubble({
   message,
+  theme,
   question,
   onPreviewCitation,
   onSubmitUserEdit,
   canSubmitUserEdit = true,
   assetNameCache,
-  onCancelAgentTask,
-  cancellingAgentTask = false,
 }: {
   message: ChatMessage;
+  theme: ThemeMode;
   question?: string;
   onPreviewCitation: (
     message: ChatMessage,
@@ -2306,8 +2557,6 @@ function PremiumChatBubble({
   onSubmitUserEdit: (value: string) => void | Promise<void>;
   canSubmitUserEdit?: boolean;
   assetNameCache: Record<string, string>;
-  onCancelAgentTask: (taskId: string) => void;
-  cancellingAgentTask?: boolean;
 }) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
@@ -2457,7 +2706,7 @@ function PremiumChatBubble({
             <strong className="text-[13px]">Anchr</strong>
             {message.executionMode === "AGENT" ? (
               <span
-                className="inline-flex min-h-6 items-center rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 text-[10px] font-black text-violet-700 dark:text-violet-200"
+                className="ask-premium-agent-status ask-premium-agent-label inline-flex min-h-6 items-center rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 text-[10px] font-black text-violet-700 dark:text-violet-200"
                 title="此回答由 Agent 执行"
               >
                 Agent
@@ -2474,9 +2723,9 @@ function PremiumChatBubble({
             {message.answerMode ? (
               <span
                 className="inline-flex min-h-6 items-center rounded-full border border-blue-500/15 bg-blue-500/10 px-2.5 text-[10px] font-black text-blue-700 dark:text-blue-200"
-                title={`回答模式：${message.answerMode}`}
+                title={theme === "dark" ? `Answer mode: ${message.answerMode.toUpperCase()}` : `回答模式：${message.answerMode}`}
               >
-                {answerModeDisplayName(message.answerMode)}
+                {theme === "dark" ? message.answerMode.toUpperCase() : answerModeDisplayName(message.answerMode)}
               </span>
             ) : null}
             {message.answerStatus === "NO_EVIDENCE" ? (
@@ -2490,20 +2739,9 @@ function PremiumChatBubble({
               </span>
             ) : null}
             {message.answerStatus === "PROCESSING" && message.agentTask ? (
-              <>
-                <span className="inline-flex min-h-6 items-center rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 text-[10px] font-black text-blue-700 dark:text-blue-200">
-                  {message.agentTask.currentStage || "处理中"} · {message.agentTask.progress}%
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onCancelAgentTask(message.agentTask!.taskId)}
-                  disabled={cancellingAgentTask}
-                  className="inline-flex min-h-6 items-center gap-1 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 text-[10px] font-black text-rose-700 transition hover:bg-rose-500/15 disabled:cursor-wait disabled:opacity-60 dark:text-rose-200"
-                >
-                  {cancellingAgentTask ? <Loader2 size={11} className="animate-spin" /> : null}
-                  {cancellingAgentTask ? "正在取消" : "取消任务"}
-                </button>
-              </>
+              <span className="ask-premium-agent-status inline-flex min-h-6 items-center rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 text-[10px] font-black text-blue-700 dark:text-blue-200">
+                {message.agentTask.currentStage || "处理中"} · {message.agentTask.progress}%
+              </span>
             ) : null}
             {message.answerStatus === "CANCELLED" ? (
               <span className="inline-flex min-h-6 items-center rounded-full border border-slate-500/20 bg-slate-500/10 px-2.5 text-[10px] font-black text-slate-600 dark:text-slate-300">
@@ -2512,8 +2750,8 @@ function PremiumChatBubble({
             ) : null}
           </div>
           {message.pending ? (
-            <span className="ask-premium-streaming-indicator inline-flex size-4 items-center justify-center rounded-full bg-[#bbff66]/15" aria-label="流式回答中" title="流式回答中">
-              <span className="ask-premium-streaming-dot size-1.5 rounded-full bg-[#68a313]" aria-hidden="true" />
+            <span className="ask-premium-streaming-indicator inline-flex size-4 items-center justify-center rounded-full bg-[var(--ask-accent-soft)]" aria-label="流式回答中" title="流式回答中">
+              <span className="ask-premium-streaming-dot size-1.5 rounded-full bg-[var(--ask-accent-dot)]" aria-hidden="true" />
             </span>
           ) : null}
         </div>
@@ -2594,7 +2832,15 @@ function PremiumChatBubble({
 }
 
 function EmptyPremiumChat() {
-  return null;
+  return (
+    <div className="ask-premium-empty-chat absolute inset-0 grid place-items-center px-6 text-center">
+      <p className="max-w-[460px] text-sm font-medium leading-7 text-[var(--premium-muted)]">
+        在已选择的知识范围内提问。回答将保留可追溯引用
+        <br />
+        与执行上下文。
+      </p>
+    </div>
+  );
 }
 
 function turnsToMessages(turns: ConversationTurn[]) {
@@ -2628,7 +2874,8 @@ function turnsToMessages(turns: ConversationTurn[]) {
       workflowVersion: turn.workflowVersion,
       agentTask: turn.agentTask,
       pending: turn.answerStatus === "PROCESSING"
-        && Boolean(turn.agentTask && (turn.agentTask.status === "PENDING" || turn.agentTask.status === "RUNNING")),
+        && (turn.executionMode === "AGENT"
+          || Boolean(turn.agentTask && (turn.agentTask.status === "PENDING" || turn.agentTask.status === "RUNNING"))),
     });
 
     return messages;
@@ -2653,6 +2900,10 @@ function mergeConversations(primary: ConversationSession[], secondary: Conversat
 
 function makeMessageId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function currentTimestamp() {
+  return Date.now();
 }
 
 async function copyTextToClipboard(value: string) {

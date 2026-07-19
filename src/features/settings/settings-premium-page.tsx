@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
+import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
 import {
   ACCESS_TOKEN_CHANGED_EVENT,
   apiClient,
@@ -96,14 +97,12 @@ const STATUS_ACTION_CLASS =
   "inline-flex h-5 shrink-0 items-center justify-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2 text-[10px] font-black leading-none text-[var(--premium-ink-soft)] transition hover:border-[var(--premium-blue)] hover:text-[var(--premium-blue)]";
 const SUCCESS_PILL_CLASS =
   "settings-success-pill inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[rgba(187,255,102,0.28)] px-2.5 text-[11px] font-black text-[#426b09]";
-const MUTED_PILL_CLASS =
-  "settings-muted-pill inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2.5 text-[11px] font-black text-[var(--premium-muted)]";
 const ACTION_BUTTON_LABEL_CLASS =
   "block max-w-full truncate text-center text-[12px] font-black leading-none";
 const ENABLE_BUTTON_LABEL_CLASS =
   "block max-w-full truncate text-center text-[11px] font-black leading-none";
 const INFO_NOTICE_CLASS =
-  "mb-4 inline-flex items-center gap-2 rounded-[8px] border border-[rgba(49,88,255,0.16)] bg-[rgba(49,88,255,0.08)] px-3 py-2 text-[11px] font-black leading-[1.55] text-[var(--premium-ink-soft)]";
+  "mb-4 inline-flex items-center gap-2 rounded-[8px] border border-[rgba(75,141,230,0.22)] bg-[rgba(75,141,230,0.12)] px-3 py-2 text-[11px] font-black leading-[1.55] text-[#4b8de6]";
 const CAPABILITY_OPTIONS: CapabilityOption[] = [
   { value: "GENERATION", label: "Generation", description: "Chat & answer generation", modelLabel: "生成模型", code: "GEN", icon: Stars },
   { value: "EMBEDDING", label: "Embedding", description: "Text vectorization", modelLabel: "向量模型", code: "EMB", icon: Waypoints },
@@ -315,7 +314,7 @@ export function SettingsPremiumPage() {
   const isGuest = configuredAccessToken === "";
   const tokenResolved = configuredAccessToken !== null;
   const hasOwnerAccess = Boolean(configuredAccessToken);
-  const [theme, setTheme] = useState<PremiumThemeMode>("light");
+  const [theme, setTheme] = useState<PremiumThemeMode>("dark");
   const [themeHydrated, setThemeHydrated] = useState(false);
   const [selection, setSelection] = useState<CapabilitySelection>({
     type: "GENERATION",
@@ -609,16 +608,16 @@ export function SettingsPremiumPage() {
     <div className="premium-theme ask-premium-page settings-premium-page premium-no-ambient-glow min-h-screen overflow-x-hidden bg-[#f7f7f2] tracking-normal text-[#111315]" data-theme={theme} data-premium-theme={theme}>
       <div aria-hidden="true" className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
 
-      <div className="relative min-h-screen overflow-x-hidden p-0 lg:p-6">
-        <div className="ask-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[0_24px_80px_rgba(17,19,21,0.12)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]">
-          <PremiumRail theme={theme} onThemeChange={setTheme} />
+      <div className="relative h-screen overflow-hidden p-0">
+        <div className="ask-premium-shell grid h-screen min-h-0 overflow-hidden border-0 bg-white/70 shadow-none backdrop-blur-2xl lg:grid-cols-[60px_minmax(0,1fr)]">
+          <PremiumRail />
 
           <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
-            <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
-              <div aria-hidden="true" className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
+            <header className="ask-premium-hero relative grid h-[112px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
+              <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
                 SETTINGS
               </div>
-              <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
+              <section className="premium-page-header-content relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
                   <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                     SETTINGS / SYSTEM CONFIGURATION
@@ -628,6 +627,7 @@ export function SettingsPremiumPage() {
                   </h1>
                 </div>
               </section>
+              <PremiumHeaderUtilities theme={theme} />
             </header>
 
             <main className="ask-premium-main settings-no-ambient-glow min-h-0 min-w-0 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] px-5 pb-4 pt-3">
@@ -777,14 +777,12 @@ export function SettingsPremiumPage() {
 
 function RestrictedPanelOverlay({ title, message }: { title: string; message: string }) {
   return (
-    <div className="absolute inset-0 z-20 grid grid-rows-[auto_minmax(0,1fr)] gap-4 rounded-[8px] bg-white p-3 dark:bg-[#121814]">
-      <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">{title}</h2>
-      <div className="grid place-items-center rounded-[8px] border border-[rgba(49,88,255,0.16)] bg-[rgba(49,88,255,0.08)] p-4 text-center">
-        <div className="grid place-items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-full bg-[#111315] text-[#c9ff50] shadow-[0_8px_24px_rgba(17,19,21,0.2)] dark:bg-[#c9ff50] dark:text-[#111315] dark:shadow-[0_8px_28px_rgba(201,255,80,0.18)]">
-            <LockKeyhole size={18} aria-hidden="true" />
-          </span>
-          <p className="text-xs font-black text-[var(--premium-ink-soft)]">{message}</p>
+    <div className="absolute inset-0 z-20 rounded-[8px] bg-[rgb(27,27,27)] p-3">
+      <h2 className="relative z-10 text-[clamp(18px,2vw,24px)] font-black leading-none text-[#f4f7ec]">{title}</h2>
+      <div className="absolute inset-x-3 bottom-3 top-[52px] grid place-items-center px-4">
+        <div className="inline-flex max-w-full items-center justify-center gap-2.5 text-[rgba(244,247,236,0.58)]">
+          <LockKeyhole className="shrink-0" size={16} strokeWidth={1.8} aria-hidden="true" />
+          <p className="text-xs font-semibold leading-5">{message}</p>
         </div>
       </div>
     </div>
@@ -820,7 +818,6 @@ function CapabilitySelector({
     <aside className={`${PANEL_CLASS} grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3`} aria-label="能力配置导航">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-black text-[var(--premium-muted)]">MODEL CAPABILITIES</p>
-        <span className={MUTED_PILL_CLASS}>4</span>
       </div>
 
       <div className="grid min-h-0 grid-rows-4 gap-2.5">
@@ -869,7 +866,7 @@ function CapabilitySelector({
                   <span className="block truncate text-xs text-[var(--premium-muted)]">{option.description}</span>
                 </span>
                 <span className="grid size-8 place-items-center" aria-label={enabled ? "已启用" : "未启用"} title={enabled ? "已启用" : "未启用"}>
-                  <span className={enabled ? "size-2 rounded-full bg-[#426b09]" : "size-2 rounded-full bg-[var(--premium-muted)]/40"} />
+                  <span className={enabled ? "size-2 rounded-full bg-[#89c777]" : "size-2 rounded-full bg-[var(--premium-muted)]/40"} />
                 </span>
               </button>
 
@@ -1265,7 +1262,7 @@ function ConfigPanel({
 
       {(capability === "MULTI_EMBEDDING" || capability === "RERANK") ? (
         <div className={INFO_NOTICE_CLASS}>
-          <Info size={16} className="text-[var(--premium-blue)]" />
+          <Info size={16} className="shrink-0 text-current" />
           当前仅支持百炼平台
         </div>
       ) : null}
@@ -1506,7 +1503,7 @@ function RuntimeStatusPanel({
         <div className="settings-status-card grid gap-2 rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
           <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
             <span>模型启用状态</span>
-            <strong className="text-[#426b09]">{enabledCount}/4 已启用</strong>
+            <strong className="text-[#89c777]" data-status="enabled">{enabledCount}/4 已启用</strong>
           </div>
           <div className="grid gap-2">
             {CAPABILITY_OPTIONS.map((option) => {
@@ -1519,11 +1516,11 @@ function RuntimeStatusPanel({
                   ? "未启用"
                   : "未配置";
               const rowStatusClass = enabled
-                ? "bg-[rgba(187,255,102,0.14)]"
+                ? "bg-[rgba(137,199,119,0.14)]"
                 : configured
                   ? "bg-[rgba(143,150,157,0.14)] dark:bg-white/10"
                   : "bg-white/65 dark:bg-white/10";
-              const statusClass = enabled ? "text-[#426b09]" : "text-[var(--premium-muted)]";
+              const statusClass = enabled ? "text-[#89c777]" : "text-[var(--premium-muted)]";
               return (
                 <div
                   key={option.value}
@@ -1552,8 +1549,13 @@ function RuntimeStatusPanel({
                 : indexStatusLoading || !indexStatus ? "text-[var(--premium-muted)]"
                 : indexStatus.status === "REBUILDING" || indexStatus.status === "INITIALIZING" ? "text-[var(--premium-blue)]"
                 : indexStatus.pendingRebuild ? "text-amber-600 dark:text-amber-300"
-                : "text-[#426b09]"
-              } data-status={indexStatusHasError ? "error" : undefined}>
+                : "text-[#89c777]"
+              } data-status={
+                indexStatusHasError ? "error"
+                : indexStatusLoading || !indexStatus ? "muted"
+                : indexStatusLabel === "已就绪" ? "success"
+                : undefined
+              }>
                 {indexStatusLabel}
               </strong>
               {indexStatusError ? (
@@ -1610,14 +1612,24 @@ function RuntimeStatusPanel({
         <div className="settings-status-card rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
           <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
             <span>存储配置状态</span>
-            <strong className={storageConfigured || storageLoading ? "text-[#426b09]" : "text-[var(--premium-muted)]"} data-status={storageConfigured || storageLoading ? undefined : "muted"}>{storageLoading ? "检查中" : storageConfigured ? "已配置" : "未配置"}</strong>
+            <strong
+              className={storageConfigured && !storageLoading ? "text-[#89c777]" : "text-[var(--premium-muted)]"}
+              data-status={storageConfigured && !storageLoading ? "success" : "muted"}
+            >
+              {storageLoading ? "检查中" : storageConfigured ? "已配置" : "未配置"}
+            </strong>
           </div>
         </div>
 
         <div className="settings-status-card rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
           <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
             <span>Token 配置状态</span>
-            <strong className="text-[#426b09]">{tokenStatus}</strong>
+            <strong
+              className={token == null ? "text-[var(--premium-muted)]" : "text-[#89c777]"}
+              data-status={token == null ? "muted" : "success"}
+            >
+              {tokenStatus}
+            </strong>
           </div>
         </div>
       </div>
@@ -1799,7 +1811,7 @@ function StoragePanel({
       </div>
 
       <div className={INFO_NOTICE_CLASS}>
-        <Info size={16} className="text-[var(--premium-blue)]" />
+        <Info size={16} className="shrink-0 text-current" />
         当前仅支持阿里云 OSS
       </div>
 
@@ -1902,13 +1914,13 @@ function SecurityPanel() {
           <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">访问令牌</h2>
           <p className="mt-1 text-[11px] leading-normal text-[var(--premium-muted)]">用于接口访问认证</p>
         </div>
-        {saved ? <span className={`${SUCCESS_PILL_CLASS} ml-auto`}>保存成功</span> : null}
+        {saved ? <span className={`${SUCCESS_PILL_CLASS} settings-token-success-pill ml-auto`}>保存成功</span> : null}
       </div>
 
       <label className={FORM_FIELD_CLASS}>
         <span>配置 Token</span>
         <input
-          className={FIELD_CLASS}
+          className={`${FIELD_CLASS} settings-token-input`}
           value={displayToken}
           placeholder="粘贴 X-Access-Token"
           onChange={(event) => {

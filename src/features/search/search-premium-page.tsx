@@ -3,8 +3,6 @@
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
-  ArrowRight,
-  ArrowUpRight,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -14,13 +12,15 @@ import {
   Copy,
   Database,
   Folder,
-  History,
   Loader2,
   RefreshCcw,
+  ScanSearch,
   Search,
   Sparkles,
   SlidersHorizontal,
+  TextCursorInput,
   X,
+  Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -33,6 +33,7 @@ import {
   type UIEvent,
 } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
+import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
 import { apiClient } from "@/lib/api-client";
@@ -66,6 +67,7 @@ const DEFAULT_SEARCH_LIMIT = 10;
 const MIN_SEARCH_LIMIT = 1;
 const MAX_SEARCH_LIMIT = 10;
 const RECENT_SEARCH_PAGE_SIZE = 8;
+const SEARCH_SESSION_STORAGE_KEY = "anchr.search.session-state.v1";
 
 const SOURCE_TYPE_LABEL: Record<string, string> = {
   PDF: "PDF",
@@ -123,16 +125,63 @@ type SearchPremiumReturnState = {
   resultsScrollTop: number;
 };
 
+type SearchSessionState = {
+  version: 1;
+  query: string;
+  submittedQuery: string;
+  submittedFilters: SearchFiltersValue | null;
+  selectedKbIds: string[];
+  selectedAssetTypes: SearchAssetType[];
+  selectedHitTypes: SearchHitType[];
+  activeAssetScope: AssetScope | null;
+  recallLimit: number;
+  dateFrom: string;
+  dateTo: string;
+  activeTab: SearchTab;
+  searchData: SearchPageData | null;
+  elapsedMs: number | null;
+};
+
 type DisplayResult = {
   item: SearchResult;
   knowledgeBaseName: string;
 };
 
+function readSearchSessionState(): SearchSessionState | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(SEARCH_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const state = JSON.parse(raw) as Partial<SearchSessionState>;
+    if (state.version !== 1 || typeof state.submittedQuery !== "string") return null;
+    return state as SearchSessionState;
+  } catch {
+    return null;
+  }
+}
+
+function writeSearchSessionState(state: SearchSessionState) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.setItem(SEARCH_SESSION_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Search can still work when browser storage is unavailable or full.
+  }
+}
+
+function clearSearchSessionState() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(SEARCH_SESSION_STORAGE_KEY);
+}
+
 export function SearchPremiumPage() {
   const router = useRouter();
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const answerScrollRef = useRef<HTMLDivElement>(null);
   const resultsScrollRef = useRef<HTMLDivElement>(null);
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [theme, setTheme] = useState<ThemeMode>("dark");
   const [themeHydrated, setThemeHydrated] = useState(false);
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -149,6 +198,7 @@ export function SearchPremiumPage() {
   const [isKbMenuOpen, setIsKbMenuOpen] = useState(false);
   const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
   const [scopeNotice, setScopeNotice] = useState<string | null>(null);
+  const [sessionStateHydrated, setSessionStateHydrated] = useState(false);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -201,6 +251,7 @@ export function SearchPremiumPage() {
     const handoff = consumeAssetScopeHandoff("search");
     if (handoff) {
       const frame = window.requestAnimationFrame(() => {
+        clearSearchSessionState();
         setQuery("");
         setSubmittedQuery("");
         setSubmittedFilters(null);
@@ -208,27 +259,29 @@ export function SearchPremiumPage() {
         setElapsedMs(null);
         setActiveTab("answer");
         setActiveAssetScope(handoff.scope);
+        setSessionStateHydrated(true);
         clearPreviewRestoreState("search");
       });
       return () => window.cancelAnimationFrame(frame);
     }
 
     const restored = readPreviewRestoreState<SearchPremiumReturnState>("search");
-    if (!restored?.context.returnState) {
-      const frame = window.requestAnimationFrame(() => {
-        setActiveAssetScope(readSearchAssetScope());
-      });
-      return () => window.cancelAnimationFrame(frame);
-    }
-
-    const state = restored.context.returnState;
+    const previewState = restored?.context.returnState;
+    const state: SearchPremiumReturnState | SearchSessionState | null = previewState ?? readSearchSessionState();
     let scrollFrame = 0;
     const frame = window.requestAnimationFrame(() => {
-      setQuery(state.query);
+      if (!state) {
+        setQuery("");
+        setActiveAssetScope(readSearchAssetScope());
+        setSessionStateHydrated(true);
+        return;
+      }
+
+      setQuery(state.query ?? state.submittedQuery);
       setSubmittedQuery(state.submittedQuery);
       setSubmittedFilters(state.submittedFilters);
-      setSelectedKbIds(state.selectedKbIds);
-      setSelectedAssetTypes(state.selectedAssetTypes);
+      setSelectedKbIds(state.selectedKbIds ?? []);
+      setSelectedAssetTypes(state.selectedAssetTypes ?? []);
       setSelectedHitTypes(state.selectedHitTypes ?? []);
       setActiveAssetScope(state.activeAssetScope ?? readSearchAssetScope());
       setRecallLimit(clampSearchLimit(state.recallLimit));
@@ -237,12 +290,16 @@ export function SearchPremiumPage() {
       setActiveTab(state.activeTab);
       setSearchData(state.searchData);
       setElapsedMs(state.elapsedMs);
-      clearPreviewRestoreState("search");
-      scrollFrame = window.requestAnimationFrame(() => {
-        window.scrollTo({ top: state.windowScrollY });
-        if (answerScrollRef.current) answerScrollRef.current.scrollTop = state.answerScrollTop;
-        if (resultsScrollRef.current) resultsScrollRef.current.scrollTop = state.resultsScrollTop;
-      });
+      setSessionStateHydrated(true);
+
+      if (previewState) {
+        clearPreviewRestoreState("search");
+        scrollFrame = window.requestAnimationFrame(() => {
+          window.scrollTo({ top: previewState.windowScrollY });
+          if (answerScrollRef.current) answerScrollRef.current.scrollTop = previewState.answerScrollTop;
+          if (resultsScrollRef.current) resultsScrollRef.current.scrollTop = previewState.resultsScrollTop;
+        });
+      }
     });
 
     return () => {
@@ -361,6 +418,19 @@ export function SearchPremiumPage() {
     executeSearch(submittedQuery, submittedFilters, searchData.nextCursor, true);
   };
 
+  const handleClearCurrentSearch = () => {
+    searchMutation.reset();
+    clearSearchSessionState();
+    setQuery("");
+    setSubmittedQuery("");
+    setSubmittedFilters(null);
+    setSearchData(null);
+    setElapsedMs(null);
+    setActiveTab("answer");
+    if (answerScrollRef.current) answerScrollRef.current.scrollTop = 0;
+    if (resultsScrollRef.current) resultsScrollRef.current.scrollTop = 0;
+  };
+
   const handleRecentSearchSelect = (item: RecentSearch) => {
     let scopeForSearch = activeAssetScope;
     const changesKbScope = JSON.stringify([...(item.kbIds ?? [])].sort())
@@ -431,6 +501,42 @@ export function SearchPremiumPage() {
     ],
   );
 
+  useEffect(() => {
+    if (!sessionStateHydrated) return;
+
+    writeSearchSessionState({
+      version: 1,
+      query,
+      submittedQuery,
+      submittedFilters,
+      selectedKbIds,
+      selectedAssetTypes,
+      selectedHitTypes,
+      activeAssetScope,
+      recallLimit: clampSearchLimit(recallLimit),
+      dateFrom,
+      dateTo,
+      activeTab,
+      searchData,
+      elapsedMs,
+    });
+  }, [
+    activeAssetScope,
+    activeTab,
+    dateFrom,
+    dateTo,
+    elapsedMs,
+    query,
+    recallLimit,
+    searchData,
+    selectedAssetTypes,
+    selectedHitTypes,
+    selectedKbIds,
+    sessionStateHydrated,
+    submittedFilters,
+    submittedQuery,
+  ]);
+
   const openPreview = useCallback(
     (
       segmentId: string | undefined,
@@ -497,19 +603,19 @@ export function SearchPremiumPage() {
         aria-hidden="true"
         className="ask-premium-grid-bg pointer-events-none fixed inset-0 bg-[linear-gradient(var(--premium-bg-grid)_1px,transparent_1px),linear-gradient(90deg,var(--premium-bg-grid)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:linear-gradient(to_bottom,black,transparent_78%)]"
       />
-      <div className="relative min-h-screen p-0 lg:p-6">
-        <div className="search-premium-shell grid min-h-screen overflow-hidden border border-black/15 bg-white/70 shadow-[var(--premium-shadow)] backdrop-blur-2xl lg:h-[calc(100vh-48px)] lg:min-h-0 lg:grid-cols-[60px_minmax(0,1fr)] lg:rounded-[8px]">
-          <PremiumRail theme={theme} onThemeChange={setTheme} />
+      <div className="relative h-screen overflow-hidden p-0">
+        <div className="search-premium-shell grid h-screen min-h-0 overflow-hidden border-0 bg-white/70 shadow-none backdrop-blur-2xl lg:grid-cols-[60px_minmax(0,1fr)]">
+          <PremiumRail />
 
           <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
-            <header className="ask-premium-hero relative grid h-[112px] gap-2 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
+            <header className="ask-premium-hero relative grid h-[112px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div
-                className="pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]"
+                className="ask-premium-watermark pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]"
                 aria-hidden="true"
               >
                 SEARCH
               </div>
-              <section className="relative z-10 flex min-w-0 flex-col justify-center gap-2">
+              <section className="premium-page-header-content relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
                   <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                     SEARCH / EVIDENCE RADAR
@@ -519,38 +625,67 @@ export function SearchPremiumPage() {
                   </h1>
                 </div>
               </section>
+              <PremiumHeaderUtilities theme={theme} onStartSearch={() => searchInputRef.current?.focus()} />
             </header>
 
             <main className="search-premium-content grid min-h-0 min-w-0 gap-3 px-4 py-3 sm:px-5">
               <section className="search-premium-main-column grid min-h-0 min-w-0 gap-2.5" aria-label="搜索结果">
-                <form
-                  className="search-premium-command premium-focusable"
-                  role="search"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    handleSubmit();
-                  }}
-                >
-                  <label>
-                    <Search size={22} aria-hidden="true" />
-                    <input
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                      className="search-premium-command-input"
-                      placeholder="搜索关键词、问题或文件内容"
-                      aria-label="搜索关键词"
-                    />
-                  </label>
-                  <SearchTabs activeTab={activeTab} onChange={handleTabChange} />
-                  <button
-                    type="submit"
-                    disabled={!query.trim() || searchMutation.isPending}
-                    className="search-premium-submit"
+                <div className="search-premium-toolbar">
+                  <form
+                    className="search-premium-command premium-focusable"
+                    role="search"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      handleSubmit();
+                    }}
                   >
-                    搜索
-                    {isSearching ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} strokeWidth={2.2} />}
-                  </button>
-                </form>
+                    <label>
+                      <Search size={21} className="premium-search-leading-icon shrink-0" aria-hidden="true" />
+                      <input
+                        ref={searchInputRef}
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        className="search-premium-command-input premium-search-input"
+                        placeholder="搜索关键词、问题或文件内容"
+                        aria-label="搜索关键词"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={!query.trim() || searchMutation.isPending}
+                      className="search-premium-submit search-kb-search-submit"
+                      aria-label="搜索"
+                    >
+                      {isSearching ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <svg
+                          className="search-premium-submit-arrow"
+                          aria-hidden="true"
+                          width="24"
+                          height="22"
+                          viewBox="0 0 24 22"
+                          fill="none"
+                        >
+                          <path
+                            d="M3 11H20"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                          />
+                          <path
+                            d="M14 5L20 11L14 17"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  </form>
+                  <SearchTabs activeTab={activeTab} onChange={handleTabChange} />
+                </div>
 
                 <article className="search-premium-answer-card premium-surface">
                   <div className="search-premium-answer-inner">
@@ -559,7 +694,9 @@ export function SearchPremiumPage() {
                       evidenceCount={normalizedCitations.length}
                       resultCount={searchData?.total ?? 0}
                       answer={searchData?.answer?.answer}
+                      canClear={Boolean((submittedQuery || searchData) && !searchMutation.isPending)}
                       canRegenerate={Boolean(submittedQuery && submittedFilters) && !searchMutation.isPending}
+                      onClear={handleClearCurrentSearch}
                       onRegenerate={() => {
                         if (!submittedQuery || !submittedFilters) return;
                         const filters = { ...submittedFilters, withAnswer: true };
@@ -597,7 +734,9 @@ export function SearchPremiumPage() {
                       <SearchErrorState message={searchMutation.error.message || "请稍后重新搜索。"} />
                     ) : isSearching ? (
                       <SearchLoadingState />
-                    ) : !hasSearched ? null : activeTab === "answer" ? (
+                    ) : !hasSearched ? (
+                      <SearchBlankState activeTab={activeTab} />
+                    ) : activeTab === "answer" ? (
                       <AnswerPanel
                         ref={answerScrollRef}
                         answer={searchData?.answer?.answer}
@@ -727,7 +866,9 @@ function AnswerHeader({
   evidenceCount,
   resultCount,
   answer,
+  canClear,
   canRegenerate,
+  onClear,
   onRegenerate,
   scopeContent,
 }: {
@@ -735,7 +876,9 @@ function AnswerHeader({
   evidenceCount: number;
   resultCount: number;
   answer?: string;
+  canClear: boolean;
   canRegenerate: boolean;
+  onClear: () => void;
   onRegenerate: () => void;
   scopeContent?: ReactNode;
 }) {
@@ -763,27 +906,37 @@ function AnswerHeader({
         </p>
         {scopeContent}
       </div>
-      {activeTab === "answer" && answer?.trim() ? (
+      {activeTab === "answer" && (canClear || answer?.trim()) ? (
         <div className="search-premium-answer-actions">
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={!canClear}
+            className="search-premium-answer-action is-clear"
+            aria-label="清除本次搜索结果"
+            title="清除本次搜索结果"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+          </button>
           <button
             type="button"
             onClick={handleCopy}
             disabled={!answer}
             className="search-premium-answer-action is-copy"
-            title="复制回答"
+            aria-label={copied ? "已复制" : "复制回答"}
+            title={copied ? "已复制" : "复制回答"}
           >
-            {copied ? <Check size={14} /> : <Copy size={14} />}
-            {copied ? "已复制" : "复制回答"}
+            {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
           </button>
           <button
             type="button"
             onClick={onRegenerate}
             disabled={!canRegenerate}
             className="search-premium-answer-action is-regenerate"
+            aria-label="重新生成"
             title="重新生成"
           >
-            <RefreshCcw size={14} />
-            重新生成
+            <RefreshCcw size={16} aria-hidden="true" />
           </button>
         </div>
       ) : null}
@@ -1066,7 +1219,10 @@ function RetrievalInsight({
   return (
     <section className="search-premium-insight premium-surface min-h-0 overflow-hidden rounded-[8px] p-2.5" aria-label="检索洞察">
       <div className="search-premium-insight-header">
-        <PanelLabel label="RETRIEVAL INSIGHT" />
+        <PanelLabel
+          label="RETRIEVAL INSIGHT"
+          icon={<ScanSearch size={14} strokeWidth={2} />}
+        />
         <span className={`search-premium-insight-latency ${latencyColor}`}>
           <span className="search-premium-insight-latency-bar" />
           <span className="search-premium-insight-latency-value">
@@ -1114,7 +1270,6 @@ function RetrievalInsight({
               detail: "BM25 精确命中",
               value: insight.pipeline.keywordCandidates,
               unit: "条候选",
-              tone: "blue",
             },
             {
               index: 2,
@@ -1122,7 +1277,6 @@ function RetrievalInsight({
               detail: "向量相似度匹配",
               value: insight.pipeline.vectorCandidates,
               unit: "条候选",
-              tone: "violet",
             },
             {
               index: 3,
@@ -1130,7 +1284,6 @@ function RetrievalInsight({
               detail: "RRF 合并排序",
               value: insight.pipeline.fusedRetained,
               unit: "条保留",
-              tone: "coral",
             },
             {
               index: 4,
@@ -1138,11 +1291,9 @@ function RetrievalInsight({
               detail: "Cross-encoder 精排",
               value: insight.pipeline.rerankAdopted ?? (hasSearched ? evidenceCount : null),
               unit: "条证据",
-              tone: "lime",
             },
           ].map((item) => (
-            <div key={item.index} className={`search-premium-pipe-item is-${item.tone}`}>
-              <span className="search-premium-pipe-number">{item.index}</span>
+            <div key={item.index} className="search-premium-pipe-item">
               <span className="search-premium-pipe-body">
                 <strong className="search-premium-pipe-name">{item.name}</strong>
                 <small className="search-premium-pipe-detail">{item.detail}</small>
@@ -1230,12 +1381,26 @@ function DistributionRow({ label, items, tone }: { label: string; items: string[
     <div className={`search-premium-dist-row is-${tone}`}>
       <span className="search-premium-dist-label">{label}</span>
       <div className="search-premium-dist-tags">
-        {items.map((item, index) => (
-          <span key={`${item}-${index}`} className={`search-premium-dist-tag is-${tagTones[index % tagTones.length]}`}>{item}</span>
-        ))}
+        {items.map((item, index) => {
+          const tagTone = tone === "coral"
+            ? getEvidenceDistributionTone(item)
+            : tagTones[index % tagTones.length];
+          return (
+            <span key={`${item}-${index}`} className={`search-premium-dist-tag is-${tagTone}`}>{item}</span>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+function getEvidenceDistributionTone(item: string) {
+  const sourceType = item.trim().split(/\s+/)[0]?.toLowerCase();
+  if (sourceType === "pdf") return "pdf";
+  if (sourceType === "md" || sourceType === "markdown") return "md";
+  if (["image", "img", "ocr", "png", "jpg", "jpeg", "webp", "gif", "bmp"].includes(sourceType)) return "image";
+  if (sourceType === "txt" || sourceType === "text") return "txt";
+  return "source";
 }
 
 function FilterPanel({
@@ -1289,7 +1454,7 @@ function FilterPanel({
   const selectedLabel = formatSelectedKbLabel(selectedKbIds, kbById);
 
   return (
-    <section className="search-premium-filter search-premium-filter-no-glow min-h-0 rounded-[8px] border border-white/10 px-4 pb-4 pt-3 text-white" aria-label="筛选范围">
+    <section className="search-premium-filter search-premium-filter-no-glow min-h-0 rounded-[8px] border border-white/10 px-4 pb-4 text-white" aria-label="筛选范围">
       <SearchSidePanelHeader label="FILTER SCOPE" icon={<SlidersHorizontal size={15} strokeWidth={2.4} />} />
       <div className="search-premium-filter-stack">
         <FilterBlock title="知识库">
@@ -1730,36 +1895,35 @@ function RecentSearchPanel({
   };
 
   return (
-    <section className="search-premium-recent flex min-h-0 flex-col rounded-[8px] border border-white/10 px-4 pb-4 pt-3 text-white" aria-label="最近搜索">
-      <SearchSidePanelHeader label="RECENT SEARCHES" count={items.length} icon={<History size={15} strokeWidth={2.4} />} />
+    <section className="search-premium-recent flex min-h-0 flex-col rounded-[8px] border border-white/10 px-4 pb-4 text-white" aria-label="最近搜索">
+      <SearchSidePanelHeader label="RECENT SEARCHES" icon={<TextCursorInput size={15} strokeWidth={2.1} />} />
       <div className="search-premium-recent-list min-h-0 flex-1" onScroll={handleScroll}>
         {isLoading ? <MiniLoading label="加载最近搜索" /> : null}
         {isError ? <span className="text-[10px] text-[var(--premium-muted)]">最近搜索暂不可用</span> : null}
         {!isLoading && !isError && !items.length ? (
           <span className="text-[10px] text-[var(--premium-muted)]">暂无最近搜索</span>
         ) : null}
-        {keyedItems.map(({ item, key }, index) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => onSelect(item)}
-            className="search-premium-recent-item"
-          >
-            <span className="search-premium-recent-num" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-            <span className="search-premium-recent-body">
-              <strong>{item.query || "未命名搜索"}</strong>
-              <span>
-                {item.knowledgeBaseNames?.length ? item.knowledgeBaseNames.slice(0, 2).join(" / ") : "全部知识库"}
-                {" · "}
-                {formatRelativeTime(item.searchedAt)}
+        {keyedItems.map(({ item, key }, index) => {
+          const query = item.query || "未命名搜索";
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onSelect(item)}
+              className="search-premium-recent-item"
+            >
+              <span className="search-premium-recent-num" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+              <span className="search-premium-recent-body">
+                <strong title={query}>{query}</strong>
+                <span>
+                  {item.knowledgeBaseNames?.length ? item.knowledgeBaseNames.slice(0, 2).join(" / ") : "全部知识库"}
+                  {" · "}
+                  {formatRelativeTime(item.searchedAt)}
+                </span>
               </span>
-            </span>
-            <span className="search-premium-recent-trail">
-              <span className="search-premium-recent-hit">{formatNumber(item.total)}</span>
-              <span className="search-premium-recent-arrow" aria-hidden="true"><ArrowUpRight size={12} /></span>
-            </span>
-          </button>
-        ))}
+            </button>
+          );
+        })}
         {isFetchingNextPage ? <MiniLoading label="加载更多" /> : null}
       </div>
     </section>
@@ -1769,31 +1933,41 @@ function RecentSearchPanel({
 function SearchSidePanelHeader({
   label,
   icon,
-  count,
 }: {
   label: string;
   icon: ReactNode;
-  count?: number;
 }) {
   return (
-    <header className="search-premium-side-header relative z-10 flex min-h-[49px] min-w-0 items-center justify-between gap-3 border-b border-white/10 pb-3">
+    <header className="search-premium-side-header relative z-10 flex h-[52px] min-h-[52px] min-w-0 items-center justify-between gap-3 border-b border-white/10">
       <span className="flex min-w-0 items-center gap-2">
-        <span className="search-premium-side-header-icon grid size-6 shrink-0 place-items-center rounded-full" aria-hidden="true">{icon}</span>
-        <h2 className="truncate text-xs font-black leading-none">{label}</h2>
-      </span>
-      {count !== undefined ? (
-        <span className="search-premium-side-count grid size-9 shrink-0 place-items-center rounded-full text-xs font-black" aria-label={`${count} 条`}>
-          {String(count).padStart(2, "0")}
+        <span
+          className="search-premium-side-header-icon grid size-6 shrink-0 place-items-center"
+          style={{ background: "transparent", border: 0, boxShadow: "none" }}
+          aria-hidden="true"
+        >
+          {icon}
         </span>
-      ) : null}
+        <h2 className="search-premium-section-title truncate">{label}</h2>
+      </span>
     </header>
   );
 }
 
-function PanelLabel({ label, value }: { label: string; value?: string }) {
+function PanelLabel({ label, value, icon }: { label: string; value?: string; icon?: ReactNode }) {
   return (
-    <p className="flex items-center justify-between gap-3 text-xs font-[900] leading-[normal] text-[var(--search-premium-label)]">
-      <span>{label}</span>
+    <p className="search-premium-section-title flex items-center justify-between gap-3">
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        {icon ? (
+          <span
+            className="search-premium-insight-icon shrink-0"
+            style={{ background: "transparent", border: 0, boxShadow: "none" }}
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
+        ) : null}
+        <span>{label}</span>
+      </span>
       {value ? <span className="inline-flex items-center gap-[5px] text-[10px]">{value}</span> : null}
     </p>
   );
@@ -1811,7 +1985,7 @@ function FilterBlock({ title, children }: { title: string; children: ReactNode }
 function SearchLoadingState() {
   return (
     <div className="grid min-h-0 place-items-center" role="status" aria-label="正在检索证据">
-      <Loader2 size={22} className="animate-spin text-[var(--premium-blue)]" />
+      <Loader2 size={22} className="animate-spin text-[#87ceeb]" />
     </div>
   );
 }
@@ -1824,6 +1998,28 @@ function SearchErrorState({ message }: { message: string }) {
     >
       <AlertCircle size={16} className="shrink-0" />
       <span>搜索暂时失败：{message}</span>
+    </div>
+  );
+}
+
+function SearchBlankState({ activeTab }: { activeTab: SearchTab }) {
+  return (
+    <div className="grid min-h-0 place-items-center px-6 text-center">
+      <p className="max-w-[460px] text-sm font-medium leading-7 text-[var(--premium-muted)]">
+        {activeTab === "answer" ? (
+          <>
+            在已选择的知识范围内搜索。回答将基于命中证据生成
+            <br />
+            并保留可追溯引用。
+          </>
+        ) : (
+          <>
+            在已选择的知识范围内搜索。命中来源将按相关性展示
+            <br />
+            并保留可定位的文档片段。
+          </>
+        )}
+      </p>
     </div>
   );
 }
@@ -2188,7 +2384,7 @@ function renderHighlightedText(value: string) {
     }
     if (!part) return null;
     return highlighted ? (
-      <mark key={`${part}-${index}`} className="rounded-[4px] bg-[#fff0a8] px-0.5 text-inherit dark:bg-amber-400/20">
+      <mark key={`${part}-${index}`} className="rounded-[4px] bg-[#fde98a] px-0.5 text-[#2b2412]">
         {part}
       </mark>
     ) : (

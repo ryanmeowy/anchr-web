@@ -12,20 +12,28 @@ export function FileTypeIcon({
   sourceType,
   compact = false,
   className = "",
+  palette = "default",
 }: {
   fileName: string;
   sourceType?: string;
   compact?: boolean;
   className?: string;
+  palette?: "default" | "imports" | "document";
 }) {
   const type = sourceType === "URL" ? "URL" : inferIconType(fileName, sourceType);
   const size = compact ? "size-5" : "size-11";
   const iconSize = compact ? 14 : 24;
   const shared = `${size} grid place-items-center rounded-[8px] ${className}`;
+  const paletteColor = palette === "imports" || palette === "document" ? fileTypeColor(type) : undefined;
+  const paletteStyle = paletteColor ? {
+    color: paletteColor,
+    borderColor: `color-mix(in srgb, ${paletteColor} 28%, transparent)`,
+    backgroundColor: `color-mix(in srgb, ${paletteColor} 12%, transparent)`,
+  } : undefined;
 
   if (type === "PDF") {
     return (
-      <span className={`${shared} border border-red-200 bg-red-50 text-red-500`}>
+      <span className={`${shared} border border-red-200 bg-red-50 text-red-500`} style={paletteStyle}>
         <FileText size={iconSize} />
       </span>
     );
@@ -46,7 +54,7 @@ export function FileTypeIcon({
   }
   if (type === "IMAGE") {
     return (
-      <span className={`${shared} border border-violet-200 bg-violet-50 text-violet-600`}>
+      <span className={`${shared} border border-violet-200 bg-violet-50 text-violet-600`} style={paletteStyle}>
         <FileImage size={iconSize} />
       </span>
     );
@@ -67,10 +75,19 @@ export function FileTypeIcon({
   }
 
   return (
-    <span className={`${shared} border border-slate-200 bg-slate-50 text-slate-600`}>
+    <span className={`${shared} border border-slate-200 bg-slate-50 text-slate-600`} style={paletteStyle}>
       <FileText size={iconSize} />
     </span>
   );
+}
+
+export function fileTypeColor(type: string) {
+  const normalizedType = type.toUpperCase();
+  if (normalizedType === "PDF") return "#819fd9";
+  if (normalizedType === "MD" || normalizedType === "MARKDOWN") return "#3158ff";
+  if (normalizedType === "IMAGE") return "#fac75e";
+  if (normalizedType === "TXT" || normalizedType === "TEXT") return "#aab2ac";
+  return undefined;
 }
 
 export function inferIconType(fileName: string, sourceType?: string) {
