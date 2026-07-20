@@ -23,7 +23,9 @@ import {
   apiClient,
   clearAccessToken,
   getConfiguredAccessToken,
+  getConfiguredAccessTokenRole,
   saveAccessToken,
+  type AccessTokenRole,
 } from "@/lib/api-client";
 import {
   getIndexCompatibilityIssue,
@@ -96,7 +98,7 @@ const BUTTON_SECONDARY_CLASS =
 const STATUS_ACTION_CLASS =
   "inline-flex h-5 shrink-0 items-center justify-center rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2 text-[10px] font-black leading-none text-[var(--premium-ink-soft)] transition hover:border-[var(--premium-blue)] hover:text-[var(--premium-blue)]";
 const SUCCESS_PILL_CLASS =
-  "settings-success-pill inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[rgba(187,255,102,0.28)] px-2.5 text-[11px] font-black text-[#426b09]";
+  "settings-success-pill inline-flex min-h-7 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[rgba(137,199,119,0.28)] px-2.5 text-[11px] font-black text-[#89c777]";
 const ACTION_BUTTON_LABEL_CLASS =
   "block max-w-full truncate text-center text-[12px] font-black leading-none";
 const ENABLE_BUTTON_LABEL_CLASS =
@@ -145,6 +147,22 @@ function getServerAccessTokenSnapshot(): string | null {
 
 function useAccessTokenSnapshot() {
   return useSyncExternalStore(subscribeAccessToken, getClientAccessTokenSnapshot, getServerAccessTokenSnapshot);
+}
+
+function getClientAccessTokenRoleSnapshot(): AccessTokenRole | null {
+  return getConfiguredAccessTokenRole();
+}
+
+function getServerAccessTokenRoleSnapshot(): AccessTokenRole | null {
+  return null;
+}
+
+function useAccessTokenRoleSnapshot() {
+  return useSyncExternalStore(
+    subscribeAccessToken,
+    getClientAccessTokenRoleSnapshot,
+    getServerAccessTokenRoleSnapshot,
+  );
 }
 
 function capabilityQueryKey(capability: CapabilityName) {
@@ -868,7 +886,7 @@ function CapabilitySelector({
                     onEnable(option.value, selectedConfig.id);
                   }
                 }}
-                className="settings-enable-button inline-flex min-h-[30px] w-full items-center justify-center rounded-full border border-[rgba(49,88,255,0.24)] bg-[var(--premium-ink)] px-3 text-[11px] font-black text-white transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] disabled:border-[rgba(66,107,9,0.24)] disabled:bg-[rgba(187,255,102,0.22)] disabled:text-[#426b09] disabled:opacity-100"
+                className="settings-enable-button inline-flex min-h-[30px] w-full items-center justify-center rounded-full border border-[rgba(49,88,255,0.24)] bg-[var(--premium-ink)] px-3 text-[11px] font-black text-white transition hover:-translate-y-0.5 hover:bg-[var(--premium-blue)] disabled:border-[rgba(137,199,119,0.24)] disabled:bg-[rgba(137,199,119,0.22)] disabled:text-[#89c777] disabled:opacity-100"
               >
                 <span className={ENABLE_BUTTON_LABEL_CLASS}>
                   {isSelectedConfigEnabling ? "启用中..." : canEnable ? "启用选中模型" : selectedConfig ? "当前已启用" : "暂无可启用模型"}
@@ -1400,8 +1418,15 @@ function RuntimeStatusPanel({
   storageLoading: boolean;
 }) {
   const token = useAccessTokenSnapshot();
+  const role = useAccessTokenRoleSnapshot();
   const enabledCount = Object.values(enabledConfigs).filter(Boolean).length;
-  const tokenStatus = token == null ? "检查中" : token ? "已启用" : "访客";
+  const roleLabel = token == null || role == null
+    ? "检查中"
+    : role === "ADMIN"
+      ? "管理员"
+      : role === "USER"
+        ? "用户"
+        : "访客";
   const compatibilityIssue = indexStatus ? getIndexCompatibilityIssue(indexStatus) : null;
   const rebuildFailed = indexStatus ? hasIndexRebuildFailed(indexStatus) : false;
   const indexUnavailable =
@@ -1582,11 +1607,8 @@ function RuntimeStatusPanel({
         <div className="settings-status-card rounded-[8px] border border-[rgba(16,18,20,0.1)] bg-white/50 p-2.5 dark:bg-[var(--premium-panel-muted)]">
           <div className="flex items-center justify-between gap-3 text-xs font-black leading-normal text-[var(--premium-ink-soft)]">
             <span>Token 配置状态</span>
-            <strong
-              className={token == null ? "text-[var(--premium-muted)]" : "text-[#89c777]"}
-              data-status={token == null ? "muted" : "success"}
-            >
-              {tokenStatus}
+            <strong className={role === "GUEST" || role == null ? "text-[var(--premium-muted)]" : "text-[var(--premium-ink)]"}>
+              {roleLabel}
             </strong>
           </div>
         </div>

@@ -677,7 +677,7 @@ export type ConversationMessage = {
   agentTask?: AgentTask;
 };
 
-export type ConversationAnswerStatus = "ANSWERED" | "PROCESSING" | "CANCELLED" | "NO_EVIDENCE" | "MODEL_FALLBACK";
+export type ConversationAnswerStatus = "ANSWERED" | "PROCESSING" | "CANCELLED" | "NO_EVIDENCE" | "MODEL_FALLBACK" | "GENERATION_FAILED";
 export type ConversationExecutionMode = "TRADITIONAL" | "AGENT" | "AGENT_FALLBACK";
 export type AgentTaskStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 export type AgentTask = {

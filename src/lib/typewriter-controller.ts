@@ -104,21 +104,23 @@ export function createTypewriterController({
     const next = characters(text);
     if (next.length === target.length && next.every((value, index) => value === target[index])) return;
 
-    let commonLength = 0;
-    while (commonLength < rendered.length
-      && commonLength < next.length
-      && rendered[commonLength] === next[commonLength]) {
-      commonLength += 1;
-    }
-
-    // A reconnect can provide a corrected canonical snapshot. Keep the shared
-    // prefix and type only the remaining suffix instead of flashing the full text.
-    if (commonLength < rendered.length) {
-      rendered = next.slice(0, commonLength);
-      characterBudget = 0;
-      onRender(rendered.join(""));
-    }
+    const renderedIsPrefix = rendered.length <= next.length
+      && rendered.every((value, index) => value === next[index]);
     target = next;
+
+    // Canonical corrections must not visibly rewind to a shared prefix and type
+    // the answer a second time. Extend a valid prefix normally; otherwise switch
+    // to the corrected snapshot atomically.
+    if (!renderedIsPrefix) {
+      scheduled = false;
+      clearScheduledCallbacks();
+      rendered = [...next];
+      characterBudget = 0;
+      lastTickAt = null;
+      onRender(rendered.join(""));
+      settleIfIdle();
+      return;
+    }
     schedule();
   };
 

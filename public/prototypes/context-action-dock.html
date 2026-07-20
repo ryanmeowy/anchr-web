@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Anchr · 上下文操作坞原型</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+        background: #111;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #111;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .prototype-frame {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #1b1b1b;
+      }
+
+      .prototype-caption {
+        position: fixed;
+        z-index: 1001;
+        top: 14px;
+        left: 76px;
+        display: flex;
+        min-height: 28px;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid rgba(236, 236, 236, 0.075);
+        border-radius: 999px;
+        padding: 0 11px;
+        background: rgba(23, 23, 23, 0.88);
+        color: rgba(233, 233, 233, 0.52);
+        font-size: 9px;
+        font-weight: 820;
+        letter-spacing: 0.08em;
+        pointer-events: none;
+        backdrop-filter: blur(16px);
+      }
+
+      .prototype-caption::before {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #9cc9f4;
+        content: "";
+      }
+
+      .prototype-controller {
+        position: fixed;
+        z-index: 1000;
+        right: 16px;
+        bottom: 16px;
+        display: grid;
+        width: min(260px, calc(100vw - 28px));
+        gap: 8px;
+        border: 1px solid rgba(236, 236, 236, 0.1);
+        border-radius: 14px;
+        padding: 9px;
+        background: rgba(23, 23, 23, 0.93);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
+        backdrop-filter: blur(20px);
+      }
+
+      .prototype-row {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 4px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .prototype-row::-webkit-scrollbar {
+        display: none;
+      }
+
+      .prototype-label {
+        min-width: 42px;
+        padding-left: 5px;
+        color: rgba(233, 233, 233, 0.38);
+        font-size: 8px;
+        font-weight: 850;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .prototype-button {
+        min-height: 29px;
+        flex: 0 0 auto;
+        border: 0;
+        border-radius: 999px;
+        padding: 0 10px;
+        background: transparent;
+        color: rgba(233, 233, 233, 0.56);
+        font-size: 10px;
+        font-weight: 760;
+        cursor: pointer;
+        transition: background-color 150ms ease, color 150ms ease;
+      }
+
+      .prototype-button:hover {
+        background: #242424;
+        color: #e9e9e9;
+      }
+
+      .prototype-button[aria-pressed="true"] {
+        background: #2d2d2d;
+        color: #fff;
+      }
+
+      .prototype-button:focus-visible {
+        outline: 2px solid #87ceeb;
+        outline-offset: 2px;
+      }
+
+      .prototype-hint {
+        padding: 0 5px 2px;
+        color: rgba(233, 233, 233, 0.38);
+        font-size: 9px;
+        font-weight: 650;
+        line-height: 1.5;
+      }
+
+      @media (max-width: 720px) {
+        .prototype-caption {
+          top: 8px;
+          left: 10px;
+        }
+
+        .prototype-controller {
+          right: 8px;
+          bottom: 8px;
+          left: 8px;
+          width: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <iframe class="prototype-frame" title="Anchr 上下文操作坞原型" src="/library"></iframe>
+
+    <div class="prototype-caption">INTERACTIVE CONTEXT ACTION DOCK</div>
+
+    <section class="prototype-controller" aria-label="原型控制器">
+      <div class="prototype-row" aria-label="页面选择">
+        <span class="prototype-label">页面</span>
+        <button class="prototype-button" type="button" data-page="library" aria-pressed="true">Library</button>
+        <button class="prototype-button" type="button" data-page="search" aria-pressed="false">Search</button>
+        <button class="prototype-button" type="button" data-page="imports" aria-pressed="false">Imports</button>
+        <button class="prototype-button" type="button" data-page="settings" aria-pressed="false">Settings</button>
+        <button class="prototype-button" type="button" data-page="preview" aria-pressed="false">Preview</button>
+      </div>
+
+      <div class="prototype-row" aria-label="状态选择">
+        <span class="prototype-label">状态</span>
+        <button class="prototype-button" type="button" data-state="idle" aria-pressed="true">空闲</button>
+        <button class="prototype-button" type="button" data-state="selected" aria-pressed="false">已选择</button>
+        <button class="prototype-button" type="button" data-state="running" aria-pressed="false">执行中</button>
+        <button class="prototype-button" type="button" data-state="complete" aria-pressed="false">完成</button>
+        <button class="prototype-button" type="button" data-state="error" aria-pressed="false">失败</button>
+      </div>
+
+      <div class="prototype-hint">也可以直接点击页面右上角的“新建 / 最近工作 / 系统状态”，观察底部操作坞的联动变化。</div>
+    </section>
+
+    <script>
+      (() => {
+        const frame = document.querySelector(".prototype-frame");
+        const pageButtons = [...document.querySelectorAll("[data-page]")];
+        const stateButtons = [...document.querySelectorAll("[data-state]")];
+        let activePage = "library";
+        let activeState = "idle";
+        let progress = 42;
+        let progressTimer = null;
+
+        const pagePaths = {
+          library: "/library",
+          search: "/search",
+          imports: "/imports",
+          settings: "/settings",
+          preview: "/preview/asset/demo",
+        };
+
+        const pageContent = {
+          library: {
+            idle: { eyebrow: "LIBRARY ACTIONS", title: "快捷操作", detail: "从当前知识库开始", primary: "新建知识库" },
+            selected: { eyebrow: "3 SELECTED", title: "已选择 3 个知识库", detail: "共 428 个文件", actions: ["移动", "删除", "批量导入"] },
+            running: { eyebrow: "BACKGROUND TASK", title: "正在更新知识库索引", detail: "产品技术文档 · 8,420 个片段", actions: ["暂停", "查看详情"] },
+            complete: { eyebrow: "COMPLETED", title: "知识库索引已更新", detail: "12,480 个片段现在可用于检索", actions: ["查看", "撤销"] },
+            error: { eyebrow: "NEEDS ATTENTION", title: "2 个文件处理失败", detail: "其余 16 个文件已完成", actions: ["查看原因", "重试"] },
+          },
+          search: {
+            idle: { eyebrow: "SEARCH ACTIONS", title: "快捷操作", detail: "针对当前检索结果", primary: "发起检索" },
+            selected: { eyebrow: "4 EVIDENCE SELECTED", title: "已选择 4 条证据", detail: "来自 3 个文件", actions: ["保存集合", "导出", "加入引用"] },
+            running: { eyebrow: "EXPORTING", title: "正在整理检索结果", detail: "回答、引用和来源记录", actions: ["暂停", "查看详情"] },
+            complete: { eyebrow: "COMPLETED", title: "检索结果已导出", detail: "包含 18 条证据来源", actions: ["打开文件", "撤销"] },
+            error: { eyebrow: "NEEDS ATTENTION", title: "导出未能完成", detail: "来源文件暂时不可访问", actions: ["查看原因", "重试"] },
+          },
+          imports: {
+            idle: { eyebrow: "IMPORT ACTIONS", title: "快捷操作", detail: "导入文件并建立索引", primary: "新建导入" },
+            selected: { eyebrow: "12 FILES READY", title: "12 个文件等待导入", detail: "PDF、Markdown 和图片", actions: ["选择知识库", "移除", "开始导入"] },
+            running: { eyebrow: "IMPORTING 12 / 18", title: "正在导入文件", detail: "RAG 研究论文 · 预计剩余 38 秒", actions: ["暂停", "查看详情"] },
+            complete: { eyebrow: "COMPLETED", title: "18 个文件导入完成", detail: "新增 3,240 个可检索片段", actions: ["查看记录", "撤销"] },
+            error: { eyebrow: "NEEDS ATTENTION", title: "2 个文件导入失败", detail: "16 个文件已成功建立索引", actions: ["查看原因", "重试"] },
+          },
+          settings: {
+            idle: { eyebrow: "SETTINGS ACTIONS", title: "配置已同步", detail: "当前没有未保存的修改", primary: "测试连接" },
+            selected: { eyebrow: "3 UNSAVED CHANGES", title: "3 项设置尚未保存", detail: "生成模型与对象存储", actions: ["放弃修改", "测试连接", "保存更改"] },
+            running: { eyebrow: "VERIFYING", title: "正在测试服务连接", detail: "检查模型、存储和向量索引", actions: ["取消", "查看详情"] },
+            complete: { eyebrow: "COMPLETED", title: "配置已保存并验证", detail: "全部服务连接正常", actions: ["查看状态", "撤销"] },
+            error: { eyebrow: "NEEDS ATTENTION", title: "对象存储连接失败", detail: "请检查 Endpoint 和访问密钥", actions: ["查看原因", "重新测试"] },
+          },
+          preview: {
+            idle: { eyebrow: "PREVIEW ACTIONS", title: "快捷操作", detail: "处理当前预览内容", primary: "复制当前段落" },
+            selected: { eyebrow: "3 SEGMENTS SELECTED", title: "已选择第 4 页的 3 个段落", detail: "Self-RAG 论文.pdf", actions: ["复制", "继续检索", "加入引用"] },
+            running: { eyebrow: "COLLECTING", title: "正在加入引用集合", detail: "保留页码和来源上下文", actions: ["取消", "查看详情"] },
+            complete: { eyebrow: "COMPLETED", title: "3 个段落已加入引用", detail: "可在 Search 中继续使用", actions: ["查看集合", "撤销"] },
+            error: { eyebrow: "NEEDS ATTENTION", title: "引用保存失败", detail: "预览来源已发生变化", actions: ["重新载入", "重试"] },
+          },
+        };
+
+        const icons = {
+          bolt: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m11.2 2.8-6 8h4.7l-1.1 6.4 6-8h-4.7l1.1-6.4Z"/></svg>',
+          check: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4.2 10.2 3.5 3.5 8.1-8"/></svg>',
+          alert: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.2 17 16H3L10 3.2Z"/><path d="M10 7.2v4.5M10 14.1v.1"/></svg>',
+          activity: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 10h3l1.7-4.2 3.2 8.4 2-4.2H17"/></svg>',
+          arrow: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 6l4 4-4 4"/></svg>',
+          close: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8"/></svg>',
+        };
+
+        const dockCss = `
+          #anchr-context-dock,
+          #anchr-context-dock * { box-sizing: border-box; }
+          #anchr-context-dock {
+            --dock-surface: rgba(36,36,36,.96);
+            --dock-hover: #303030;
+            --dock-line: rgba(236,236,236,.11);
+            --dock-line-strong: rgba(236,236,236,.17);
+            --dock-text: #e9e9e9;
+            --dock-soft: rgba(233,233,233,.72);
+            --dock-muted: rgba(233,233,233,.46);
+            position: fixed;
+            z-index: 2147482000;
+            right: 50%;
+            bottom: 22px;
+            width: min(690px, calc(100vw - 190px));
+            transform: translateX(50%);
+            color: var(--dock-text);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+          }
+          #anchr-context-dock svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: currentColor;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-width: 1.7;
+          }
+          #anchr-context-dock .dock-shell {
+            position: relative;
+            display: flex;
+            min-height: 54px;
+            align-items: center;
+            gap: 11px;
+            overflow: hidden;
+            border: 1px solid var(--dock-line);
+            border-radius: 999px;
+            padding: 7px 8px 7px 9px;
+            background: var(--dock-surface);
+            box-shadow: 0 18px 46px rgba(0,0,0,.38);
+            backdrop-filter: blur(22px);
+            animation: dockIn 240ms cubic-bezier(.19,1,.22,1) both;
+          }
+          #anchr-context-dock .dock-state-icon {
+            display: grid;
+            width: 36px;
+            height: 36px;
+            flex: 0 0 auto;
+            place-items: center;
+            border: 1px solid var(--dock-line);
+            border-radius: 50%;
+            background: rgba(255,255,255,.035);
+            color: var(--dock-soft);
+          }
+          #anchr-context-dock .dock-state-icon[data-tone="running"] { color: #9cc9f4; }
+          #anchr-context-dock .dock-state-icon[data-tone="complete"] { color: #89c777; }
+          #anchr-context-dock .dock-state-icon[data-tone="error"] { color: #ff9c93; }
+          #anchr-context-dock .dock-state-icon[data-tone="running"] svg { animation: dockPulse 1.5s ease-in-out infinite; }
+          #anchr-context-dock .dock-copy {
+            min-width: 130px;
+            flex: 1 1 auto;
+          }
+          #anchr-context-dock .dock-copy small,
+          #anchr-context-dock .dock-copy strong,
+          #anchr-context-dock .dock-copy span {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+          #anchr-context-dock .dock-copy small {
+            margin-bottom: 3px;
+            color: var(--dock-muted);
+            font-size: 8px;
+            font-weight: 850;
+            letter-spacing: .1em;
+          }
+          #anchr-context-dock .dock-copy strong {
+            color: var(--dock-text);
+            font-size: 11px;
+            font-weight: 780;
+          }
+          #anchr-context-dock .dock-copy span {
+            margin-top: 3px;
+            color: var(--dock-muted);
+            font-size: 9px;
+            font-weight: 620;
+          }
+          #anchr-context-dock .dock-divider {
+            width: 1px;
+            height: 26px;
+            flex: 0 0 auto;
+            background: var(--dock-line);
+          }
+          #anchr-context-dock .dock-actions {
+            display: flex;
+            flex: 0 0 auto;
+            align-items: center;
+            gap: 5px;
+          }
+          #anchr-context-dock .dock-action {
+            display: inline-flex;
+            min-height: 36px;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            padding: 0 12px;
+            background: transparent;
+            color: var(--dock-soft);
+            font: inherit;
+            font-size: 10px;
+            font-weight: 760;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, transform 150ms ease;
+          }
+          #anchr-context-dock .dock-action:hover {
+            border-color: var(--dock-line);
+            background: var(--dock-hover);
+            color: var(--dock-text);
+            transform: translateY(-1px);
+          }
+          #anchr-context-dock .dock-action[data-primary="true"] {
+            background: #e9e9e9;
+            color: #1b1b1b;
+          }
+          #anchr-context-dock .dock-action[data-primary="true"]:hover {
+            border-color: #fff;
+            background: #fff;
+            color: #111;
+          }
+          #anchr-context-dock .dock-action[data-danger="true"]:hover { color: #ff9c93; }
+          #anchr-context-dock .dock-action:focus-visible {
+            outline: 2px solid #87ceeb;
+            outline-offset: 2px;
+          }
+          #anchr-context-dock .dock-progress-track {
+            position: absolute;
+            right: 20px;
+            bottom: 0;
+            left: 20px;
+            height: 2px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(255,255,255,.06);
+          }
+          #anchr-context-dock .dock-progress-value {
+            width: var(--dock-progress, 42%);
+            height: 100%;
+            border-radius: inherit;
+            background: #9cc9f4;
+            transition: width 420ms cubic-bezier(.19,1,.22,1);
+          }
+          #anchr-context-dock .dock-toast {
+            position: absolute;
+            right: 50%;
+            bottom: calc(100% + 9px);
+            display: none;
+            min-height: 32px;
+            align-items: center;
+            border: 1px solid var(--dock-line);
+            border-radius: 999px;
+            padding: 0 11px;
+            transform: translateX(50%);
+            background: #212121;
+            color: var(--dock-muted);
+            box-shadow: 0 12px 34px rgba(0,0,0,.32);
+            font-size: 9px;
+            font-weight: 700;
+            white-space: nowrap;
+          }
+          #anchr-context-dock .dock-toast[data-open="true"] { display: flex; animation: dockToastIn 160ms ease-out both; }
+          .premium-header-utility-pill.anchr-dock-linked {
+            border-color: rgba(156,201,244,.36) !important;
+            box-shadow: 0 0 0 3px rgba(156,201,244,.055) !important;
+          }
+          @keyframes dockIn { from { opacity: .4; transform: translateY(9px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+          @keyframes dockToastIn { from { opacity: 0; transform: translate(50%,4px); } to { opacity: 1; transform: translate(50%,0); } }
+          @keyframes dockPulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+          @media (max-width: 980px) {
+            #anchr-context-dock { width: min(620px, calc(100vw - 28px)); bottom: 18px; }
+            #anchr-context-dock .dock-copy span { display: none; }
+          }
+          @media (max-width: 680px) {
+            #anchr-context-dock { right: 12px; bottom: 110px; left: 12px; width: auto; transform: none; }
+            #anchr-context-dock .dock-shell { border-radius: 16px; }
+            #anchr-context-dock .dock-copy small { display: none; }
+            #anchr-context-dock .dock-action { width: 36px; padding: 0; }
+            #anchr-context-dock .dock-action span { display: none; }
+            #anchr-context-dock .dock-divider { display: none; }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            #anchr-context-dock .dock-shell,
+            #anchr-context-dock .dock-toast,
+            #anchr-context-dock .dock-state-icon svg { animation: none; }
+            #anchr-context-dock .dock-action,
+            #anchr-context-dock .dock-progress-value { transition: none; }
+          }
+        `;
+
+        function actionMarkup(label, index, count) {
+          const isPrimary = index === count - 1 && !["撤销", "删除"].includes(label);
+          const isDanger = ["删除", "移除", "放弃修改"].includes(label);
+          return `<button class="dock-action" type="button" data-dock-action="${label}" data-primary="${isPrimary}" data-danger="${isDanger}"><span>${label}</span>${isPrimary ? icons.arrow : ""}</button>`;
+        }
+
+        function iconForState(state) {
+          if (state === "running") return { icon: icons.activity, tone: "running" };
+          if (state === "complete") return { icon: icons.check, tone: "complete" };
+          if (state === "error") return { icon: icons.alert, tone: "error" };
+          return { icon: icons.bolt, tone: "idle" };
+        }
+
+        function installDock() {
+          const doc = frame.contentDocument;
+          if (!doc?.body) return;
+
+          if (doc.__anchrContextDockCleanup) doc.__anchrContextDockCleanup();
+          doc.getElementById("anchr-context-dock")?.remove();
+          doc.getElementById("anchr-context-dock-style")?.remove();
+
+          const style = doc.createElement("style");
+          style.id = "anchr-context-dock-style";
+          style.textContent = dockCss;
+          doc.head.appendChild(style);
+
+          const root = doc.createElement("section");
+          root.id = "anchr-context-dock";
+          root.setAttribute("aria-label", "上下文操作坞");
+          doc.body.appendChild(root);
+
+          let toastTimer = null;
+
+          const showToast = (message) => {
+            const toast = root.querySelector(".dock-toast");
+            if (!toast) return;
+            toast.textContent = `${message} · 原型操作`;
+            toast.setAttribute("data-open", "true");
+            window.clearTimeout(toastTimer);
+            toastTimer = window.setTimeout(() => toast.setAttribute("data-open", "false"), 1800);
+          };
+
+          const highlightHeaderUtility = () => {
+            const pills = [...doc.querySelectorAll(".premium-header-utility-pill")];
+            pills.forEach((pill) => pill.classList.remove("anchr-dock-linked"));
+            const matcher = activeState === "running" || activeState === "error"
+              ? /系统|状态|任务/
+              : activeState === "complete"
+                ? /最近/
+                : activeState === "selected"
+                  ? /新建/
+                  : null;
+            if (!matcher) return;
+            pills.find((pill) => matcher.test(`${pill.getAttribute("aria-label") || ""} ${pill.textContent || ""}`))?.classList.add("anchr-dock-linked");
+          };
+
+          const renderDock = () => {
+            const content = pageContent[activePage][activeState];
+            const stateIcon = iconForState(activeState);
+            const actions = content.actions ?? [content.primary ?? "继续"];
+            const actionHtml = actions.map((label, index) => actionMarkup(label, index, actions.length)).join("");
+            root.innerHTML = `
+              <div class="dock-toast" data-open="false" role="status"></div>
+              <div class="dock-shell" data-state="${activeState}">
+                <span class="dock-state-icon" data-tone="${stateIcon.tone}">${stateIcon.icon}</span>
+                <span class="dock-copy">
+                  <small>${content.eyebrow}</small>
+                  <strong>${content.title}</strong>
+                  <span>${content.detail}</span>
+                </span>
+                <span class="dock-divider" aria-hidden="true"></span>
+                <span class="dock-actions">${actionHtml}</span>
+                ${activeState === "running" ? `<span class="dock-progress-track" aria-label="任务进度 ${progress}%"><span class="dock-progress-value" style="--dock-progress:${progress}%"></span></span>` : ""}
+              </div>`;
+            highlightHeaderUtility();
+          };
+
+          const setDockState = (nextState) => {
+            activeState = nextState;
+            if (nextState === "running" && progress >= 100) progress = 42;
+            setPressed(stateButtons, activeState, "state");
+            renderDock();
+            syncProgressTimer();
+          };
+
+          const syncProgressTimer = () => {
+            window.clearInterval(progressTimer);
+            progressTimer = null;
+            if (activeState !== "running") return;
+            progressTimer = window.setInterval(() => {
+              progress = Math.min(100, progress + 4);
+              const value = root.querySelector(".dock-progress-value");
+              const track = root.querySelector(".dock-progress-track");
+              if (value) value.style.setProperty("--dock-progress", `${progress}%`);
+              if (track) track.setAttribute("aria-label", `任务进度 ${progress}%`);
+              if (progress < 100) return;
+              window.clearInterval(progressTimer);
+              progressTimer = null;
+              window.setTimeout(() => setDockState("complete"), 420);
+            }, 900);
+          };
+
+          const handleDockClick = (event) => {
+            const action = event.target.closest?.("[data-dock-action]");
+            if (!action) return;
+            const label = action.dataset.dockAction;
+            if (/重试|重新测试|开始导入|保存更改|加入引用|新建|发起检索|复制当前/.test(label)) {
+              progress = 42;
+              setDockState("running");
+              return;
+            }
+            if (label === "撤销") {
+              setDockState("selected");
+              return;
+            }
+            showToast(label);
+          };
+
+          const handleHeaderClick = (event) => {
+            const pill = event.target.closest?.(".premium-header-utility-pill");
+            if (!pill) return;
+            const label = `${pill.getAttribute("aria-label") || ""} ${pill.textContent || ""}`;
+            if (/新建/.test(label)) setDockState("selected");
+            else if (/最近/.test(label)) setDockState("complete");
+            else if (/系统|状态|任务/.test(label)) {
+              progress = 42;
+              setDockState("running");
+            }
+          };
+
+          const observer = new MutationObserver(highlightHeaderUtility);
+          observer.observe(doc.body, { childList: true, subtree: true });
+          root.addEventListener("click", handleDockClick);
+          doc.addEventListener("click", handleHeaderClick, true);
+
+          doc.__anchrContextDockRender = renderDock;
+          doc.__anchrContextDockSetState = setDockState;
+          doc.__anchrContextDockCleanup = () => {
+            observer.disconnect();
+            root.removeEventListener("click", handleDockClick);
+            doc.removeEventListener("click", handleHeaderClick, true);
+            window.clearInterval(progressTimer);
+            window.clearTimeout(toastTimer);
+          };
+
+          renderDock();
+          syncProgressTimer();
+        }
+
+        function setPressed(buttons, active, dataKey) {
+          buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset[dataKey] === active)));
+        }
+
+        pageButtons.forEach((button) => {
+          button.addEventListener("click", () => {
+            activePage = button.dataset.page;
+            activeState = "idle";
+            progress = 42;
+            setPressed(pageButtons, activePage, "page");
+            setPressed(stateButtons, activeState, "state");
+            frame.src = pagePaths[activePage];
+          });
+        });
+
+        stateButtons.forEach((button) => {
+          button.addEventListener("click", () => {
+            activeState = button.dataset.state;
+            if (activeState === "running") progress = 42;
+            setPressed(stateButtons, activeState, "state");
+            const doc = frame.contentDocument;
+            if (doc?.__anchrContextDockSetState) doc.__anchrContextDockSetState(activeState);
+          });
+        });
+
+        frame.addEventListener("load", () => {
+          window.setTimeout(installDock, 100);
+          window.setTimeout(() => {
+            const doc = frame.contentDocument;
+            if (doc?.body && !doc.getElementById("anchr-context-dock")) installDock();
+          }, 900);
+        });
+      })();
+    </script>
+  </body>
+</html>

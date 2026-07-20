@@ -10,10 +10,11 @@ import {
   Download,
   FileSearch,
   History,
+  Link2,
   Loader2,
+  MessageCircle,
   MessageSquare,
   Plus,
-  Quote,
   Search,
   type LucideIcon,
 } from "lucide-react";
@@ -300,7 +301,8 @@ export function PremiumHeaderUtilities({
               work.kind === "question" ? (
                 <UtilityAction
                   key={work.id}
-                  icon={MessageSquare}
+                  icon={MessageCircle}
+                  iconStrokeWidth={2.4}
                   title={work.item.question?.trim() || "未命名问题"}
                   detail={`${work.item.knowledgeBaseNames?.join(" / ") || "Ask"} · ${formatRelativeTime(work.timestamp)}`}
                   meta="继续"
@@ -309,7 +311,8 @@ export function PremiumHeaderUtilities({
               ) : (
                 <UtilityAction
                   key={work.id}
-                  icon={Quote}
+                  icon={Link2}
+                  iconStrokeWidth={2.2}
                   title={work.item.fileName?.trim() || work.item.title?.trim() || "引用来源"}
                   detail={`${work.item.kbName || "Preview"} · ${formatRelativeTime(work.timestamp)}`}
                   meta="预览"
@@ -434,12 +437,14 @@ function UtilityPopoverHeader({ eyebrow, title }: { eyebrow: string; title: stri
 
 function UtilityAction({
   icon: Icon,
+  iconStrokeWidth = 1.8,
   title,
   detail,
   meta,
   onClick,
 }: {
   icon: UtilityIcon;
+  iconStrokeWidth?: number;
   title: string;
   detail: string;
   meta?: string;
@@ -447,7 +452,7 @@ function UtilityAction({
 }) {
   return (
     <button type="button" className="premium-header-utility-action" onClick={onClick}>
-      <span className="premium-header-utility-action-icon"><Icon size={15} strokeWidth={1.8} aria-hidden="true" /></span>
+      <span className="premium-header-utility-action-icon"><Icon size={15} strokeWidth={iconStrokeWidth} aria-hidden="true" /></span>
       <span className="premium-header-utility-action-copy">
         <strong>{title}</strong>
         <span>{detail}</span>

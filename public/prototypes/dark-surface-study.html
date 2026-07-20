@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Anchr dark surface study</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #111;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #111;
+      }
+
+      .prototype-frame {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #1b1b1b;
+      }
+
+      .prototype-toolbar {
+        position: fixed;
+        z-index: 1000;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        min-height: 40px;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 999px;
+        padding: 4px;
+        background: rgba(20, 20, 20, 0.9);
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.34);
+        color: #d9dad4;
+        backdrop-filter: blur(18px);
+      }
+
+      .prototype-label {
+        padding: 0 8px 0 10px;
+        color: rgba(255, 255, 255, 0.48);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        white-space: nowrap;
+      }
+
+      .prototype-divider {
+        width: 1px;
+        height: 20px;
+        margin: 0 2px;
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      button {
+        height: 32px;
+        border: 0;
+        border-radius: 999px;
+        padding: 0 12px;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.62);
+        font: inherit;
+        font-size: 11px;
+        font-weight: 750;
+        cursor: pointer;
+        transition: background-color 160ms ease, color 160ms ease;
+      }
+
+      button:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+      }
+
+      button[aria-pressed="true"] {
+        background: #2b2b2b;
+        color: #fff;
+      }
+
+      button:focus-visible {
+        outline: 2px solid #87ceeb;
+        outline-offset: 2px;
+      }
+
+      .mode-button[aria-pressed="true"] {
+        background: rgba(135, 206, 235, 0.13);
+        color: #9cc9f4;
+      }
+
+      .prototype-status {
+        position: fixed;
+        z-index: 999;
+        right: 14px;
+        bottom: 14px;
+        min-height: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        padding: 7px 11px;
+        background: rgba(20, 20, 20, 0.82);
+        color: rgba(255, 255, 255, 0.52);
+        font-size: 10px;
+        font-weight: 700;
+        backdrop-filter: blur(14px);
+        pointer-events: none;
+      }
+
+      @media (max-width: 720px) {
+        .prototype-toolbar {
+          top: 8px;
+          max-width: calc(100vw - 16px);
+          overflow-x: auto;
+        }
+
+        .prototype-label,
+        .prototype-divider {
+          display: none;
+        }
+
+        button {
+          padding-inline: 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="prototype-toolbar" aria-label="暗色表面原型控制器">
+      <span class="prototype-label">COLOR PROTOTYPE</span>
+      <span class="prototype-divider" aria-hidden="true"></span>
+      <button type="button" data-page="library" aria-pressed="true">Library</button>
+      <button type="button" data-page="search" aria-pressed="false">Search</button>
+      <button type="button" data-page="imports" aria-pressed="false">Imports</button>
+      <span class="prototype-divider" aria-hidden="true"></span>
+      <button type="button" class="mode-button" data-mode="optimized" aria-pressed="true">优化</button>
+      <button type="button" class="mode-button" data-mode="original" aria-pressed="false">原始</button>
+    </nav>
+
+    <iframe class="prototype-frame" title="Anchr 暗色表面原型" src="/library"></iframe>
+    <div class="prototype-status" role="status">真实页面 · 仅覆盖颜色</div>
+
+    <script>
+      (() => {
+        const frame = document.querySelector(".prototype-frame");
+        const status = document.querySelector(".prototype-status");
+        const pageButtons = [...document.querySelectorAll("[data-page]")];
+        const modeButtons = [...document.querySelectorAll("[data-mode]")];
+        let activePage = "library";
+        let activeMode = "optimized";
+
+        const optimizedCss = `
+          :root.dark {
+            color-scheme: dark;
+          }
+
+          .premium-theme {
+            --premium-bg: #1b1b1b !important;
+            --premium-panel: #212121 !important;
+            --premium-panel-strong: #242424 !important;
+            --premium-panel-muted: #242424 !important;
+            --premium-elevated: #292929 !important;
+            --premium-line: rgba(236, 236, 236, 0.075) !important;
+            --premium-line-strong: rgba(236, 236, 236, 0.11) !important;
+            --premium-tight-shadow: none !important;
+          }
+
+          .premium-theme,
+          .premium-theme .ask-premium-shell,
+          .library-premium-page .library-premium-content,
+          .search-premium-page .search-premium-content {
+            background-color: #1b1b1b !important;
+          }
+
+          .premium-theme .premium-rail {
+            background: #171717 !important;
+          }
+
+          /* Library: canvas -> major surface -> nested record. */
+          .library-premium-page {
+            --library-surface: #212121 !important;
+            --premium-panel: #212121 !important;
+            --premium-panel-strong: #242424 !important;
+            --premium-panel-muted: #242424 !important;
+            --premium-elevated: #292929 !important;
+          }
+
+          .library-premium-page .library-kb-card,
+          .library-premium-page .library-create-kb-card,
+          .library-premium-page .library-activity-panel,
+          .library-premium-page .library-health-panel {
+            background: #212121 !important;
+            box-shadow: none !important;
+          }
+
+          .library-premium-page .library-activity-item,
+          .library-premium-page .library-ingestion-panel,
+          .library-premium-page .library-ingestion-count,
+          .library-premium-page input,
+          .library-premium-page textarea,
+          .library-premium-page select {
+            background: #242424 !important;
+            box-shadow: none !important;
+          }
+
+          .library-premium-page .library-activity-item:hover,
+          .library-premium-page .library-kb-list-row:hover {
+            background-color: #292929 !important;
+          }
+
+          /* Search: keep large surfaces calm; reserve brighter gray for controls. */
+          .search-premium-page {
+            --search-insight-surface: #212121 !important;
+            --search-citation-surface: #242424 !important;
+            --search-result-record-surface: #242424 !important;
+            --search-result-record-hover-surface: #292929 !important;
+            --premium-panel: #212121 !important;
+            --premium-panel-strong: #242424 !important;
+            --premium-panel-muted: #242424 !important;
+            --premium-elevated: #292929 !important;
+          }
+
+          .search-premium-page .search-premium-answer-card,
+          .search-premium-page .search-premium-insight,
+          .search-premium-page .search-premium-filter,
+          .search-premium-page .search-premium-recent,
+          .search-premium-page .search-premium-result-group {
+            background: #212121 !important;
+            box-shadow: none !important;
+          }
+
+          .search-premium-page .search-premium-tabs,
+          .search-premium-page .search-premium-command,
+          .search-premium-page .search-premium-filter-row,
+          .search-premium-page .search-premium-filter-chip,
+          .search-premium-page .search-premium-citation,
+          .search-premium-page .search-premium-recent-item,
+          .search-premium-page .search-premium-result-record {
+            background-color: #242424 !important;
+            box-shadow: none !important;
+          }
+
+          .search-premium-page .search-premium-recent-item:hover,
+          .search-premium-page .search-premium-result-record:hover,
+          .search-premium-page .search-premium-filter-row:hover,
+          .search-premium-page .search-premium-filter-chip:hover:not(:disabled) {
+            background-color: #292929 !important;
+          }
+
+          /* Imports: remove bright card islands while preserving component states. */
+          .imports-premium-page {
+            --imports-main-panel: #212121 !important;
+            --imports-side-panel: #212121 !important;
+            --premium-panel: #242424 !important;
+            --premium-panel-strong: #242424 !important;
+            --premium-panel-muted: #242424 !important;
+            --premium-elevated: #292929 !important;
+          }
+
+          .imports-premium-page .ask-premium-main {
+            background: #1b1b1b !important;
+          }
+
+          .imports-premium-page .imports-panel,
+          .imports-premium-page .imports-session-glow,
+          .imports-premium-page .imports-task-glow,
+          .imports-premium-page .imports-pipeline-glow {
+            background: #212121 !important;
+            box-shadow: none !important;
+          }
+
+          .imports-premium-page article,
+          .imports-premium-page .imports-panel button.dark\\:bg-\\[rgb\\(49\\,49\\,49\\)\\],
+          .imports-premium-page [class*="dark:bg-[var(--premium-panel"] {
+            box-shadow: none !important;
+          }
+
+          .imports-premium-page button[class*="dark:bg-[rgb(49,49,49)]"] {
+            background: #242424 !important;
+          }
+
+          .imports-premium-page button[class*="dark:bg-[rgb(49,49,49)]"]:hover {
+            background: #202020 !important;
+          }
+
+          .library-premium-page [class*="border-white/10"],
+          .search-premium-page [class*="border-white/10"],
+          .imports-premium-page [class*="border-white/10"] {
+            border-color: rgba(236, 236, 236, 0.075) !important;
+          }
+        `;
+
+        function setPressed(buttons, activeValue, attribute) {
+          buttons.forEach((button) => {
+            button.setAttribute("aria-pressed", String(button.dataset[attribute] === activeValue));
+          });
+        }
+
+        function forceDark(doc) {
+          doc.documentElement.classList.add("dark");
+          const root = doc.querySelector(".premium-theme");
+          if (!root) return;
+          root.dataset.theme = "dark";
+          root.dataset.premiumTheme = "dark";
+        }
+
+        function applyPrototype() {
+          const doc = frame.contentDocument;
+          if (!doc?.head) return;
+
+          forceDark(doc);
+          doc.getElementById("anchr-dark-surface-prototype")?.remove();
+
+          if (activeMode === "optimized") {
+            const style = doc.createElement("style");
+            style.id = "anchr-dark-surface-prototype";
+            style.textContent = optimizedCss;
+            doc.head.appendChild(style);
+            status.textContent = "优化配色 · 真实页面 · 仅覆盖颜色";
+          } else {
+            status.textContent = "原始配色 · 真实页面";
+          }
+        }
+
+        frame.addEventListener("load", () => {
+          applyPrototype();
+          window.setTimeout(applyPrototype, 300);
+        });
+
+        pageButtons.forEach((button) => {
+          button.addEventListener("click", () => {
+            activePage = button.dataset.page;
+            setPressed(pageButtons, activePage, "page");
+            frame.src = `/${activePage}`;
+          });
+        });
+
+        modeButtons.forEach((button) => {
+          button.addEventListener("click", () => {
+            activeMode = button.dataset.mode;
+            setPressed(modeButtons, activeMode, "mode");
+            applyPrototype();
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

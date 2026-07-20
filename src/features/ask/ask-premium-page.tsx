@@ -17,6 +17,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   forwardRef,
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -35,7 +36,23 @@ import { ActionErrorNotice } from "@/components/shared/action-error-notice";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
 import { ErrorBlock } from "@/components/ui/query-state";
-import { apiClient, isAccessDeniedError } from "@/lib/api-client";
+import {
+  agentActivityStepKey,
+  compareAgentActivitySteps,
+  equalAgentActivityStep,
+  hasNewAgentActivityStep,
+  mergeAgentActivityStep,
+  mergeAgentRunActivity,
+  mergeAgentActivitySteps,
+  mergeAgentTaskProgressStep,
+  resolveAgentActivityHandoff,
+} from "@/features/ask/agent-activity-model";
+import {
+  clampPreviewMessageScrollTop,
+  resolvePreviewMessageScrollTop,
+} from "@/features/ask/preview-message-restore";
+import { recoverTraditionalTurn } from "@/features/ask/traditional-turn-recovery";
+import { ApiError, apiClient, isAccessDeniedError } from "@/lib/api-client";
 import { createTypewriterController, type TypewriterController } from "@/lib/typewriter-controller";
 import {
   consumeAssetScopeHandoff,
@@ -99,6 +116,13 @@ type MessageHistoryPage = {
 };
 type MessageHistoryPageCache = Record<string, MessageHistoryPage>;
 type ComposerMenu = "kb" | "mode" | "model" | null;
+type ActiveComposerMenu = Exclude<ComposerMenu, null>;
+type ComposerMenuPhase = "open" | "closing";
+type ComposerMenuPosition = {
+  menu: ActiveComposerMenu;
+  left: number;
+  top: number;
+};
 type ThemeMode = PremiumThemeMode;
 type PermissionNotice = {
   title: string;
@@ -112,6 +136,14 @@ type LiveAgentActivity = {
   activity?: AgentRunActivity;
 };
 
+type AskPreviewMessageOrigin = {
+  messageId: string;
+  sessionId: string;
+  turnId?: string;
+  role: ChatMessage["role"];
+  viewportOffset?: number;
+};
+
 type AskPremiumReturnState = {
   activeSessionId: string;
   query: string;
@@ -122,8 +154,19 @@ type AskPremiumReturnState = {
   messagesBySession: MessageCache;
   historyPagesBySession?: MessageHistoryPageCache;
   liveAgentActivity?: LiveAgentActivity;
+  previewOrigin?: AskPreviewMessageOrigin;
   messageScrollTop: number;
   conversationListScrollTop: number;
+};
+
+type PendingPreviewMessageRestore = {
+  sessionId: string;
+  hasCachedMessages: boolean;
+  messageId?: string;
+  turnId?: string;
+  role: ChatMessage["role"];
+  viewportOffset?: number;
+  fallbackScrollTop: number;
 };
 
 type MessageStreamCallbacks = Parameters<typeof apiClient.sendMessageStream>[2];
@@ -136,6 +179,10 @@ const ASK_AGENT_ENABLED_KEY = "anchr.ask.agent-enabled";
 const ASK_HISTORY_COLLAPSED_KEY = "anchr.ask.history-collapsed";
 const ASK_TRACE_COLLAPSED_KEY = "anchr.ask.trace-collapsed";
 const MESSAGE_SCROLL_EPSILON = 1;
+const TRADITIONAL_RECOVERY_DELAY_MS = 125_000;
+const TRADITIONAL_RECOVERY_POLL_MS = 2_000;
+const TRADITIONAL_RECOVERY_TOTAL_TIMEOUT_MS = 5 * 60_000;
+const GENERATION_FAILED_MESSAGE = "回答模型未能生成可靠结果，请稍后重试。";
 const ANSWER_MODES: Array<{ value: ConversationAnswerMode; label: string; detail: string }> = [
   { value: "STRICT", label: "严格回答", detail: "证据门槛最高，证据不足时拒答" },
   { value: "SUMMARY", label: "摘要回答", detail: "更短输出，保留核心证据" },
@@ -230,47 +277,24 @@ function activityBoolean(value: unknown) {
 }
 
 function mergeLiveAgentStep(steps: AgentActivityStep[], next: AgentActivityStep) {
-  const key = liveAgentStepKey(next);
+  const key = agentActivityStepKey(next);
   const index = steps.findIndex((step) => (
-    liveAgentStepKey(step)
+    agentActivityStepKey(step)
   ) === key);
   if (index < 0) {
     if (next.stepOrder <= 0) return steps;
-    return [...steps, next].sort(compareAgentSteps).slice(-50);
+    return [...steps, next].sort(compareAgentActivitySteps).slice(-50);
   }
   const merged = [...steps];
-  merged[index] = mergeDefinedAgentStep(merged[index], next);
-  return merged.sort(compareAgentSteps).slice(-50);
-}
-
-function mergeDefinedAgentStep(base: AgentActivityStep, update: AgentActivityStep) {
-  const defined = Object.fromEntries(
-    Object.entries(update).filter(([, value]) => value !== undefined && value !== null),
-  ) as Partial<AgentActivityStep>;
-  return {
-    ...base,
-    ...defined,
-    stepOrder: update.stepOrder > 0 ? update.stepOrder : base.stepOrder,
-    createdAt: base.createdAt ?? update.createdAt,
-  } as AgentActivityStep;
-}
-
-function compareAgentSteps(a: AgentActivityStep, b: AgentActivityStep) {
-  return a.stepOrder - b.stepOrder || (a.createdAt ?? 0) - (b.createdAt ?? 0);
-}
-
-function liveAgentStepKey(step: AgentActivityStep) {
-  if (step.callId && step.type === "TASK_STAGE") {
-    return `task:${step.callId}:${step.taskStage ?? "QUEUED"}`;
-  }
-  if (step.callId) return `tool:${step.callId}`;
-  return `${step.type}:${step.stepOrder}`;
+  merged[index] = mergeAgentActivityStep(merged[index], next);
+  return merged.sort(compareAgentActivitySteps).slice(-50);
 }
 
 function statusFromDone(
   executionMode?: ConversationExecutionMode,
   answerStatus?: ConversationAnswerStatus,
 ): AgentActivityStatus {
+  if (answerStatus === "GENERATION_FAILED") return "FAILED";
   if (executionMode === "AGENT_FALLBACK") return "AGENT_FALLBACK";
   if (answerStatus === "PROCESSING") return "WAITING_TASK";
   if (answerStatus === "CANCELLED") return "CANCELLED";
@@ -356,7 +380,8 @@ export function AskPremiumPage() {
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [composerMenu, setComposerMenu] = useState<ComposerMenu>(null);
-  const [composerMenuPosition, setComposerMenuPosition] = useState<{ left: number; top: number } | null>(null);
+  const [renderedComposerMenu, setRenderedComposerMenu] = useState<ActiveComposerMenu | null>(null);
+  const [composerMenuPosition, setComposerMenuPosition] = useState<ComposerMenuPosition | null>(null);
   const theme: ThemeMode = PREMIUM_THEME;
   const [isMessageSubmitting, setIsMessageSubmitting] = useState(false);
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
@@ -378,12 +403,14 @@ export function AskPremiumPage() {
   const [historyBottomScrollRequest, setHistoryBottomScrollRequest] = useState(0);
   const messageSubmissionLockRef = useRef(false);
   const activeSessionIdRef = useRef(activeSessionId);
+  const messagesBySessionRef = useRef(messagesBySession);
   const streamRef = useRef<{
     requestId: string;
     sessionId: string;
     controller: AbortController;
     agentEnabled: boolean;
     runId?: string;
+    turnId?: string;
   } | null>(null);
   const activeTaskStreamsRef = useRef<Map<string, {
     controller: AbortController;
@@ -417,6 +444,8 @@ export function AskPremiumPage() {
   const lastMessageTouchYRef = useRef<number | null>(null);
   const completedScrollTransitionFrameRef = useRef<number | null>(null);
   const completedScrollTransitionActiveRef = useRef(false);
+  const completedScrollTransitionTargetRef = useRef<number | null>(null);
+  const completedScrollTransitionMaxTopRef = useRef<number | null>(null);
   const pendingOlderScrollRef = useRef<{
     sessionId: string;
     scrollHeight: number;
@@ -424,6 +453,7 @@ export function AskPremiumPage() {
   } | null>(null);
   const lastMessageScrollTopRef = useRef(0);
   const positionedInitialTurnRef = useRef<string | null>(null);
+  const pendingPreviewMessageRestoreRef = useRef<PendingPreviewMessageRestore | null>(null);
   const pendingHistoryBottomSessionRef = useRef<string | null>(
     initialTurnId ? null : initialSessionId || null,
   );
@@ -435,6 +465,10 @@ export function AskPremiumPage() {
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
+
+  useEffect(() => {
+    messagesBySessionRef.current = messagesBySession;
+  }, [messagesBySession]);
 
   const releasePinnedQuestionLock = useCallback(() => {
     if (pinnedQuestionAnimationFrameRef.current !== null) {
@@ -661,17 +695,18 @@ export function AskPremiumPage() {
       return activityRunning || latestAgentTaskInProgress ? 2_000 : false;
     },
   });
-  const persistedActivityTerminal = isTerminalAgentActivity(agentActivityQuery.data?.status);
-  const runtimeActivityInProgress = Boolean(
-    runtimeActivityRequested
-    && !persistedActivityTerminal
-  );
-  const displayedLiveAgentActivity = runtimeActivityInProgress
+  const displayedLiveAgentActivity = activeLiveAgentActivity
+    && (!activityRunId || !activeLiveAgentActivity.runId || activeLiveAgentActivity.runId === activityRunId)
     ? activeLiveAgentActivity
     : undefined;
-  const displayedAgentActivity = runtimeActivityInProgress
-    ? activeLiveAgentActivity?.activity ?? agentActivityQuery.data
-    : agentActivityQuery.data;
+  // Keep the last valid runtime activity visible while the persisted query takes
+  // over. The previous implementation inserted an empty render between sources,
+  // unmounting every timeline node and replaying all entrance animations.
+  const displayedAgentActivity = resolveAgentActivityHandoff(
+    agentActivityQuery.data,
+    displayedLiveAgentActivity?.activity,
+    runtimeActivityRequested,
+  );
   const displayedAgentActivityLoading = agentActivityQuery.isLoading
     && !displayedAgentActivity;
   const displayedAgentActivityError = agentActivityQuery.isError
@@ -774,14 +809,25 @@ export function AskPremiumPage() {
   const presentRuntimeSnapshotAnswer = useCallback((snapshot: AgentRuntimeSnapshot) => {
     const terminal = snapshot.message;
     const finalAnswer = terminal?.answer;
+    const snapshotSessionId = snapshot.sessionId ?? activeSessionId;
+    const activeStream = streamRef.current;
+    const activeStreamOwnsAnswer = activeStream?.runId === snapshot.runId;
     if (!terminal
       || terminal.answerStatus === "PROCESSING"
       || !finalAnswer
+      || activeStreamOwnsAnswer
       || settledRuntimeRunsRef.current.has(snapshot.runId)) return Promise.resolve();
 
     let state = runtimeAnswerWritersRef.current.get(snapshot.runId);
     if (!state) {
+      const currentMessage = (messagesBySessionRef.current[snapshotSessionId] ?? [])
+        .find((message) => matchesRuntimeSnapshot(message, snapshot));
+      const currentContent = stripTraceText(currentMessage?.content ?? "");
+      const initialText = finalAnswer.startsWith(currentContent)
+        ? currentContent
+        : currentContent ? finalAnswer : "";
       const writer = createTypewriterController({
+        initialText,
         onRender: (content) => {
           if (settledRuntimeRunsRef.current.has(snapshot.runId)) return;
           const latest = runtimeAnswerWritersRef.current.get(snapshot.runId)?.snapshot ?? snapshot;
@@ -797,14 +843,6 @@ export function AskPremiumPage() {
       });
       state = { writer, snapshot };
       runtimeAnswerWritersRef.current.set(snapshot.runId, state);
-      setMessagesBySession((previous) => ({
-        ...previous,
-        [snapshot.sessionId ?? activeSessionId]: (previous[snapshot.sessionId ?? activeSessionId] ?? []).map((message) => (
-          matchesRuntimeSnapshot(message, snapshot)
-            ? applyRuntimeSnapshotMessage(message, snapshot, "", true)
-            : message
-        )),
-      }));
     } else {
       state.snapshot = snapshot;
     }
@@ -833,16 +871,30 @@ export function AskPremiumPage() {
 
   useEffect(() => {
     const snapshot = agentRuntimeSnapshotQuery.data;
-    if (!snapshot) return;
+    if (!snapshot || snapshot.runId !== activityRunId) return;
     runtimeSnapshotVersionsRef.current.set(snapshot.runId, snapshot.version);
 
     const frame = window.requestAnimationFrame(() => {
-      setLiveAgentActivity({
-        sessionId: snapshot.sessionId,
-        runId: snapshot.runId,
-        status: snapshot.status,
-        steps: snapshot.activity.steps ?? [],
-        activity: snapshot.activity,
+      setLiveAgentActivity((previous) => {
+        const sameRun = previous.runId === snapshot.runId
+          || (!previous.runId && previous.sessionId === snapshot.sessionId);
+        const previousSteps = sameRun ? previous.steps : [];
+        const steps = mergeAgentActivitySteps(previousSteps, snapshot.activity.steps ?? []);
+        const activity = mergeAgentRunActivity(
+          sameRun ? previous.activity : undefined,
+          snapshot.activity,
+          steps,
+        );
+        return {
+          ...(sameRun ? previous : {}),
+          sessionId: snapshot.sessionId,
+          runId: snapshot.runId,
+          status: sameRun && isTerminalAgentActivity(previous.status)
+            ? previous.status
+            : snapshot.status,
+          steps,
+          activity,
+        };
       });
     });
 
@@ -878,6 +930,7 @@ export function AskPremiumPage() {
     return () => window.cancelAnimationFrame(frame);
   }, [
     activeTrackedAgentTask,
+    activityRunId,
     agentRuntimeSnapshotQuery.data,
     finalizeAgentTaskAnswer,
     isStreamingActiveSession,
@@ -1211,9 +1264,19 @@ export function AskPremiumPage() {
     }
 
     const state = restored.context.returnState;
+    const restoredSessionId = handoff?.sessionId ?? state.previewOrigin?.sessionId ?? state.activeSessionId;
+    pendingPreviewMessageRestoreRef.current = {
+      sessionId: restoredSessionId,
+      hasCachedMessages: Object.prototype.hasOwnProperty.call(state.messagesBySession, restoredSessionId),
+      messageId: state.previewOrigin?.messageId,
+      turnId: state.previewOrigin?.turnId ?? restored.context.sourceId,
+      role: state.previewOrigin?.role ?? "assistant",
+      viewportOffset: state.previewOrigin?.viewportOffset,
+      fallbackScrollTop: state.messageScrollTop,
+    };
     pendingHistoryBottomSessionRef.current = null;
-    window.requestAnimationFrame(() => {
-      setActiveSessionId(handoff?.sessionId ?? state.activeSessionId);
+    const frame = window.requestAnimationFrame(() => {
+      setActiveSessionId(restoredSessionId);
       if (handoff) setActiveAssetScope(handoff.scope);
       setQuery(state.query);
       setSelectedKbIdsValue(state.selectedKbIdsValue);
@@ -1227,9 +1290,9 @@ export function AskPremiumPage() {
       setIsLoadingMessages(false);
       clearPreviewRestoreState("ask");
 
-      if (messageScrollRef.current) messageScrollRef.current.scrollTop = state.messageScrollTop;
       if (listScrollRef.current) listScrollRef.current.scrollTop = state.conversationListScrollTop;
     });
+    return () => window.cancelAnimationFrame(frame);
   }, [initialTurnId]);
 
   const loadConversations = useCallback(async (cursor?: string | null, append = false) => {
@@ -1272,16 +1335,33 @@ export function AskPremiumPage() {
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [openMenuSessionId, composerMenu]);
 
+  useEffect(() => {
+    if (composerMenu) {
+      const openFrame = window.requestAnimationFrame(() => setRenderedComposerMenu(composerMenu));
+      return () => window.cancelAnimationFrame(openFrame);
+    }
+
+    if (!renderedComposerMenu) return;
+
+    const closeTimer = window.setTimeout(() => {
+      setRenderedComposerMenu(null);
+    }, 190);
+
+    return () => window.clearTimeout(closeTimer);
+  }, [composerMenu, renderedComposerMenu]);
+
+  const positionedComposerMenu = composerMenu ?? renderedComposerMenu;
+
   const updateComposerMenuPosition = useCallback(() => {
-    if (!composerMenu) {
+    if (!positionedComposerMenu) {
       setComposerMenuPosition(null);
       return;
     }
 
     const form = composerFormRef.current;
-    const trigger = composerMenu === "kb"
+    const trigger = positionedComposerMenu === "kb"
       ? kbButtonRef.current
-      : composerMenu === "mode"
+      : positionedComposerMenu === "mode"
         ? modeButtonRef.current
         : modelButtonRef.current;
 
@@ -1295,14 +1375,19 @@ export function AskPremiumPage() {
     const desiredLeft = triggerRect.left - formRect.left;
 
     setComposerMenuPosition({
+      menu: positionedComposerMenu,
       left: Math.min(Math.max(desiredLeft, minLeft), maxLeft),
       top: triggerRect.top - formRect.top - 10,
     });
-  }, [composerMenu]);
+  }, [positionedComposerMenu]);
+
+  const activeComposerMenuPosition = composerMenuPosition?.menu === positionedComposerMenu
+    ? composerMenuPosition
+    : null;
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(updateComposerMenuPosition);
-    if (!composerMenu) {
+    if (!positionedComposerMenu) {
       return () => window.cancelAnimationFrame(frame);
     }
 
@@ -1313,10 +1398,30 @@ export function AskPremiumPage() {
       window.removeEventListener("resize", updateComposerMenuPosition);
       window.removeEventListener("scroll", updateComposerMenuPosition, true);
     };
-  }, [composerMenu, updateComposerMenuPosition]);
+  }, [positionedComposerMenu, updateComposerMenuPosition]);
 
   useEffect(() => {
-    if (!activeSessionId || hasLoadedActiveMessages) return;
+    if (!composerMenu) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const trigger = composerMenu === "kb"
+        ? kbButtonRef.current
+        : composerMenu === "mode"
+          ? modeButtonRef.current
+          : modelButtonRef.current;
+      setComposerMenu(null);
+      trigger?.focus();
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [composerMenu]);
+
+  useEffect(() => {
+    if (!activeSessionId
+      || hasLoadedActiveMessages
+      || pendingPreviewMessageRestoreRef.current?.hasCachedMessages) return;
 
     let cancelled = false;
     const loadMessages = async () => {
@@ -1618,6 +1723,53 @@ export function AskPremiumPage() {
     });
   }, []);
 
+  useLayoutEffect(() => {
+    const pending = pendingPreviewMessageRestoreRef.current;
+    const scroller = messageScrollRef.current;
+    const content = messageContentRef.current;
+    if (!pending
+      || pending.sessionId !== activeSessionId
+      || isLoadingMessages
+      || !hasLoadedActiveMessages
+      || !scroller
+      || !content) return;
+
+    const messageById = pending.messageId
+      ? content.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(pending.messageId)}"]`)
+      : null;
+    const messageByTurn = !messageById && pending.turnId
+      ? content.querySelector<HTMLElement>(
+        `[data-turn-id="${CSS.escape(pending.turnId)}"][data-message-role="${pending.role}"]`,
+      )
+      : null;
+    const messageElement = messageById ?? messageByTurn;
+
+    if (messageElement) {
+      setProgrammaticMessageScrollTop(resolvePreviewMessageScrollTop({
+        currentScrollTop: scroller.scrollTop,
+        scrollHeight: scroller.scrollHeight,
+        clientHeight: scroller.clientHeight,
+        messageTopInViewport: messageElement.offsetTop - scroller.scrollTop,
+        messageHeight: messageElement.offsetHeight,
+        savedViewportOffset: pending.viewportOffset,
+      }));
+    } else {
+      setProgrammaticMessageScrollTop(clampPreviewMessageScrollTop(
+        pending.fallbackScrollTop,
+        scroller.scrollHeight,
+        scroller.clientHeight,
+      ));
+    }
+
+    pendingPreviewMessageRestoreRef.current = null;
+  }, [
+    activeMessages.length,
+    activeSessionId,
+    hasLoadedActiveMessages,
+    isLoadingMessages,
+    setProgrammaticMessageScrollTop,
+  ]);
+
   const animateMessageScrollTo = useCallback((targetTop: number, bounce = false) => {
     const scroller = messageScrollRef.current;
     if (!scroller) return;
@@ -1819,13 +1971,24 @@ export function AskPremiumPage() {
     if (messageBottomSpacerRef.current) messageBottomSpacerRef.current.style.height = "0px";
     setMessageTopGapVisible(false);
     completedScrollTransitionActiveRef.current = false;
+    completedScrollTransitionTargetRef.current = null;
+    completedScrollTransitionMaxTopRef.current = null;
     programmaticMessageScrollRef.current = false;
   }, []);
 
-  const normalizeCompletedMessageScroll = useCallback((direction: "up" | "down") => {
-    if (pinnedQuestionMessageIdRef.current
-      || completedScrollTransitionActiveRef.current
-      || !messageTopGapVisible) return;
+  const normalizeCompletedMessageScroll = useCallback((scrollDelta = 0, smooth = true) => {
+    if (pinnedQuestionMessageIdRef.current || !messageTopGapVisible) return;
+    if (completedScrollTransitionActiveRef.current) {
+      const currentTarget = completedScrollTransitionTargetRef.current;
+      const maxTop = completedScrollTransitionMaxTopRef.current;
+      if (currentTarget !== null && maxTop !== null && scrollDelta !== 0) {
+        completedScrollTransitionTargetRef.current = Math.max(
+          0,
+          Math.min(maxTop, currentTarget + scrollDelta),
+        );
+      }
+      return;
+    }
     const scroller = messageScrollRef.current;
     const content = messageContentRef.current;
     const spacer = messageBottomSpacerRef.current;
@@ -1844,25 +2007,35 @@ export function AskPremiumPage() {
       scroller.scrollHeight - startSpacerHeight - startGapHeight,
     );
     const finalBottomTop = Math.max(0, finalScrollHeight - scroller.clientHeight);
-    const upwardTarget = Math.max(
+    const initialTarget = Math.max(
       0,
-      Math.min(finalBottomTop, startTop - startGapHeight - 32),
+      Math.min(finalBottomTop, startTop - startGapHeight + scrollDelta),
     );
-    const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 320;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const distance = Math.abs(initialTarget - startTop);
+    const duration = reducedMotion || !smooth
+      ? 0
+      : scrollDelta > 0
+        ? Math.min(380, 260 + distance * 0.3)
+        : Math.min(280, 180 + distance * 0.24);
     let startedAt: number | null = null;
 
     completedScrollTransitionActiveRef.current = true;
+    completedScrollTransitionTargetRef.current = initialTarget;
+    completedScrollTransitionMaxTopRef.current = finalBottomTop;
     programmaticMessageScrollRef.current = true;
     const finish = () => {
       spacer.style.height = "0px";
       gapMessage.style.paddingTop = "0px";
-      scroller.scrollTop = direction === "down" ? finalBottomTop : upwardTarget;
+      scroller.scrollTop = completedScrollTransitionTargetRef.current ?? initialTarget;
       lastMessageScrollTopRef.current = scroller.scrollTop;
       setMessageTopGapVisible(false);
       completedScrollTransitionFrameRef.current = window.requestAnimationFrame(() => {
         if (gapMessage.isConnected) gapMessage.style.removeProperty("padding-top");
         programmaticMessageScrollRef.current = false;
         completedScrollTransitionActiveRef.current = false;
+        completedScrollTransitionTargetRef.current = null;
+        completedScrollTransitionMaxTopRef.current = null;
         completedScrollTransitionFrameRef.current = null;
       });
     };
@@ -1874,14 +2047,11 @@ export function AskPremiumPage() {
     const animate = (timestamp: number) => {
       if (startedAt === null) startedAt = timestamp;
       const progress = Math.min(1, (timestamp - startedAt) / duration);
-      const easedProgress = 1 - ((1 - progress) ** 3);
+      const easedProgress = 1 - ((1 - progress) ** 4);
       spacer.style.height = `${startSpacerHeight * (1 - easedProgress)}px`;
       gapMessage.style.paddingTop = `${startGapHeight * (1 - easedProgress)}px`;
-      if (direction === "down") {
-        scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-      } else {
-        scroller.scrollTop = startTop + (upwardTarget - startTop) * easedProgress;
-      }
+      const liveTarget = completedScrollTransitionTargetRef.current ?? initialTarget;
+      scroller.scrollTop = startTop + (liveTarget - startTop) * easedProgress;
       lastMessageScrollTopRef.current = scroller.scrollTop;
       if (progress < 1) {
         completedScrollTransitionFrameRef.current = window.requestAnimationFrame(animate);
@@ -1895,13 +2065,14 @@ export function AskPremiumPage() {
   const handleMessageWheel = useCallback((event: ReactWheelEvent<HTMLElement>) => {
     if (completedScrollTransitionActiveRef.current) {
       event.preventDefault();
+      normalizeCompletedMessageScroll(event.deltaY);
       return;
     }
     cancelPinnedQuestionAnimation();
     if (!pinnedQuestionMessageIdRef.current) {
       if (messageTopGapVisible) {
         event.preventDefault();
-        normalizeCompletedMessageScroll(event.deltaY < 0 ? "up" : "down");
+        normalizeCompletedMessageScroll(event.deltaY);
       }
       return;
     }
@@ -1955,7 +2126,7 @@ export function AskPremiumPage() {
     if (programmaticMessageScrollRef.current || Math.abs(delta) <= MESSAGE_SCROLL_EPSILON) return;
 
     if (!pinnedQuestionMessageIdRef.current) {
-      normalizeCompletedMessageScroll(delta < 0 ? "up" : "down");
+      normalizeCompletedMessageScroll(0, false);
       return;
     }
     const liveTop = pinnedQuestionLiveTopRef.current;
@@ -2034,6 +2205,22 @@ export function AskPremiumPage() {
     const selectedChunk = targetChunk ?? citation.chunks?.[0];
     if (!selectedChunk?.segmentId) return;
 
+    const scroller = messageScrollRef.current;
+    const messageElement = messageContentRef.current?.querySelector<HTMLElement>(
+      `[data-message-id="${CSS.escape(message.id)}"]`,
+    );
+    const previewOrigin: AskPreviewMessageOrigin = {
+      messageId: message.id,
+      sessionId: message.sessionId,
+      turnId: message.turnId,
+      role: message.role,
+      ...(scroller && messageElement
+        ? {
+            viewportOffset: messageElement.offsetTop - scroller.scrollTop,
+          }
+        : {}),
+    };
+
     const contextKey = savePreviewNavigation<AskPremiumReturnState>({
       source: "ask",
       navigationMode: "CITATION",
@@ -2052,6 +2239,7 @@ export function AskPremiumPage() {
         messagesBySession,
         historyPagesBySession,
         liveAgentActivity,
+        previewOrigin,
         messageScrollTop: messageScrollRef.current?.scrollTop ?? 0,
         conversationListScrollTop: listScrollRef.current?.scrollTop ?? 0,
       },
@@ -2104,6 +2292,8 @@ export function AskPremiumPage() {
     let targetSessionId = activeSessionId;
     let backgroundTaskId: string | null = null;
     let answerWriter: TypewriterController | null = null;
+    let acceptedTurnId: string | undefined;
+    let traditionalRecoveryController: AbortController | null = null;
     const streamCompletion: { event: MessageStreamDoneEvent | null } = { event: null };
     try {
       if (!targetSessionId) {
@@ -2180,7 +2370,40 @@ export function AskPremiumPage() {
       }));
       moveConversationToTop(targetSessionId);
 
-      await apiClient.sendMessageStream(
+      const traditionalRecoveryWakeState: { resolve?: () => void } = {};
+      const traditionalRecoveryWake = new Promise<void>((resolve) => {
+        traditionalRecoveryWakeState.resolve = resolve;
+      });
+      traditionalRecoveryController = new AbortController();
+      const traditionalRecoveryPromise = requestUsesAgent ? null : recoverTraditionalTurn({
+        sessionId: targetSessionId,
+        resolveTurnId: () => acceptedTurnId,
+        fetchTurn: (sessionId, turnId, signal) => (
+          apiClient.getConversationMessage(sessionId, turnId, signal)
+        ),
+        isTerminal: isTerminalConversationTurn,
+        shouldRetry: (error) => (
+          !(error instanceof ApiError)
+          || error.status === 404
+          || error.status >= 500
+        ),
+        wake: traditionalRecoveryWake,
+        signal: traditionalRecoveryController.signal,
+        onRecoveryStarted: () => {
+          if (!isCurrentStream()) return;
+          updateAssistantMessage(targetSessionId, assistantMessage.id, (message) => ({
+            ...message,
+            pending: true,
+            presenting: false,
+            content: stripTraceText(message.content) || "正在同步回答结果...",
+          }));
+        },
+        delayMs: TRADITIONAL_RECOVERY_DELAY_MS,
+        pollMs: TRADITIONAL_RECOVERY_POLL_MS,
+        totalTimeoutMs: TRADITIONAL_RECOVERY_TOTAL_TIMEOUT_MS,
+      });
+
+      const streamRequest = apiClient.sendMessageStream(
         targetSessionId,
         {
           query: text,
@@ -2194,10 +2417,24 @@ export function AskPremiumPage() {
             if (!isCurrentStream()) return;
             if (event.runId && streamRef.current) streamRef.current.runId = event.runId;
             const traceDetails = event.details ?? {};
+            const traceTurnId = event.turnId
+              ?? (typeof traceDetails.turnId === "string" ? traceDetails.turnId : undefined);
+            if (traceTurnId) {
+              acceptedTurnId = traceTurnId;
+              if (streamRef.current) streamRef.current.turnId = traceTurnId;
+              setMessagesBySession((previous) => ({
+                ...previous,
+                [targetSessionId]: (previous[targetSessionId] ?? []).map((message) => (
+                  message.id === userMessage.id || message.id === assistantMessage.id
+                    ? { ...message, turnId: traceTurnId }
+                    : message
+                )),
+              }));
+            }
             if (requestUsesAgent) {
               updateBackgroundAgentTask(requestId, {
                 runId: event.runId,
-                turnId: typeof traceDetails.turnId === "string" ? traceDetails.turnId : undefined,
+                turnId: traceTurnId,
                 currentStage: typeof traceDetails.taskStage === "string"
                   ? traceDetails.taskStage
                   : event.message ?? event.stage,
@@ -2247,12 +2484,19 @@ export function AskPremiumPage() {
                 createdAt: Date.now(),
                 errorCode: typeof details.errorCode === "string" ? details.errorCode : undefined,
               };
-              setLiveAgentActivity((previous) => ({
-                sessionId: targetSessionId,
-                runId: event.runId ?? previous.runId,
-                status: event.stage === "task_queued" ? "WAITING_TASK" : previous.status ?? "RUNNING",
-                steps: mergeLiveAgentStep(previous.sessionId === targetSessionId ? previous.steps : [], nextStep),
-              }));
+              setLiveAgentActivity((previous) => {
+                const sameRun = previous.sessionId === targetSessionId
+                  && (!event.runId || !previous.runId || previous.runId === event.runId);
+                return {
+                  ...(sameRun ? previous : {}),
+                  sessionId: targetSessionId,
+                  runId: event.runId ?? (sameRun ? previous.runId : undefined),
+                  status: event.stage === "task_queued"
+                    ? "WAITING_TASK"
+                    : sameRun ? previous.status ?? "RUNNING" : "RUNNING",
+                  steps: mergeLiveAgentStep(sameRun ? previous.steps : [], nextStep),
+                };
+              });
             }
             updateAssistantMessage(targetSessionId, assistantMessage.id, (message) => ({
               ...message,
@@ -2290,6 +2534,11 @@ export function AskPremiumPage() {
           onDone: (event) => {
             if (!isCurrentStream()) return;
             streamCompletion.event = event;
+            if (event.runId && streamRef.current) streamRef.current.runId = event.runId;
+            if (event.turnId) {
+              acceptedTurnId = event.turnId;
+              if (streamRef.current) streamRef.current.turnId = event.turnId;
+            }
             if (requestUsesAgent) {
               updateBackgroundAgentTask(requestId, {
                 runId: event.runId,
@@ -2300,14 +2549,20 @@ export function AskPremiumPage() {
                   ? "running"
                   : event.answerStatus === "CANCELLED"
                     ? "cancelled"
-                    : event.answerStatus === "MODEL_FALLBACK" ? "error" : "success",
+                    : (
+                        event.answerStatus === "MODEL_FALLBACK"
+                        || event.answerStatus === "GENERATION_FAILED"
+                      ) ? "error" : "success",
               });
               setLiveAgentActivity((previous) => {
                 const status = statusFromDone(event.executionMode, event.answerStatus);
-                const steps = previous.sessionId === targetSessionId ? previous.steps : [];
+                const sameRun = previous.sessionId === targetSessionId
+                  && (!event.runId || !previous.runId || previous.runId === event.runId);
+                const steps = sameRun ? previous.steps : [];
                 return {
+                  ...(sameRun ? previous : {}),
                   sessionId: targetSessionId,
-                  runId: event.runId ?? previous.runId,
+                  runId: event.runId ?? (sameRun ? previous.runId : undefined),
                   status,
                   steps: settleRunningAgentSteps(steps, status, Date.now()),
                 };
@@ -2351,6 +2606,65 @@ export function AskPremiumPage() {
         },
         controller.signal,
       );
+      const streamOutcomePromise = streamRequest.then(
+        () => ({ source: "stream" as const }),
+        (error: unknown) => ({ source: "stream-error" as const, error }),
+      );
+      const firstOutcome = traditionalRecoveryPromise
+        ? await Promise.race([
+            streamOutcomePromise,
+            traditionalRecoveryPromise.then((turn) => ({ source: "recovery" as const, turn })),
+          ])
+        : await streamOutcomePromise;
+
+      let recoveredTurn: ConversationTurn | null = null;
+      if (firstOutcome.source === "recovery") {
+        recoveredTurn = firstOutcome.turn;
+        if (!recoveredTurn) {
+          controller.abort();
+          throw new Error("回答处理超时，请稍后重试。");
+        }
+        controller.abort();
+        await streamRequest.catch(() => undefined);
+      } else if (streamCompletion.event) {
+        traditionalRecoveryController.abort();
+      } else if (firstOutcome.source === "stream-error" && firstOutcome.error instanceof ApiError) {
+        throw firstOutcome.error;
+      } else if (!requestUsesAgent && acceptedTurnId && traditionalRecoveryPromise) {
+        traditionalRecoveryWakeState.resolve?.();
+        recoveredTurn = await traditionalRecoveryPromise;
+        if (!recoveredTurn) {
+          throw firstOutcome.source === "stream-error"
+            ? firstOutcome.error
+            : new Error("未能同步本轮回答结果，请稍后重试。");
+        }
+      } else if (firstOutcome.source === "stream-error") {
+        throw firstOutcome.error;
+      }
+
+      if (recoveredTurn) {
+        answerWriter.cancel();
+        traditionalRecoveryController.abort();
+        const recoveredMessages = turnsToMessages([recoveredTurn]);
+        setAssetNameCache(rememberAssetScopes(
+          (recoveredTurn.citations ?? []).map((citation) => ({
+            assetId: citation.assetId,
+            fileName: citation.fileName,
+          })),
+        ));
+        setMessagesBySession((previous) => ({
+          ...previous,
+          [targetSessionId]: mergeLatestHistoryMessages(
+            previous[targetSessionId] ?? [],
+            recoveredMessages,
+          ),
+        }));
+        await queryClient.invalidateQueries({
+          queryKey: ["conversation-messages", targetSessionId],
+        });
+        return;
+      }
+
       if (isCurrentStream()) {
         setStreamingSessionId(null);
         setStreamingUsesAgent(false);
@@ -2358,6 +2672,9 @@ export function AskPremiumPage() {
       await answerWriter.finish();
       const completedEvent = streamCompletion.event;
       if (!completedEvent) throw new Error("流式响应未正常结束，请重试。");
+      if (completedEvent.runId && completedEvent.answerStatus !== "PROCESSING") {
+        settledRuntimeRunsRef.current.add(completedEvent.runId);
+      }
       if (isCurrentStream()) {
         updateAssistantMessage(targetSessionId, assistantMessage.id, (message) => ({
           ...message,
@@ -2403,8 +2720,10 @@ export function AskPremiumPage() {
         }));
       }
     } finally {
+      traditionalRecoveryController?.abort();
       answerWriter?.cancel();
       if (streamRef.current?.sessionId === targetSessionId) {
+        streamRef.current.controller.abort();
         streamRef.current = null;
         setStreamingSessionId(null);
         setStreamingUsesAgent(false);
@@ -2657,7 +2976,7 @@ export function AskPremiumPage() {
                   ))}
                 </div>
               ) : (
-                <div className="ask-premium-empty-state rounded-[8px] border border-black/10 bg-white/70 p-4 text-sm text-slate-500">暂无历史会话。</div>
+                <div className="p-4 text-sm text-[var(--premium-muted)]">暂无历史会话。</div>
               )}
               {isLoadingMoreConversations ? (
                 <div className="flex justify-center py-3" aria-label="加载更多会话">
@@ -2833,6 +3152,7 @@ export function AskPremiumPage() {
                     <div className="ask-premium-control-strip flex min-w-0 flex-wrap items-center gap-1.5 overflow-visible pr-1 max-sm:w-full max-sm:max-w-full max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overflow-y-visible max-sm:py-1 max-sm:pr-[52px] max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden" data-composer-menu>
                       <ComposerButton
                         active={agentEnabled && agentAvailable}
+                        agent
                         disabled={!agentAvailable}
                         icon={<AiStarIcon />}
                         label={agentAvailable ? `Agent · ${agentEnabled ? "开启" : "关闭"}` : "Agent · 后端未开启"}
@@ -2841,6 +3161,7 @@ export function AskPremiumPage() {
                       <ComposerButton
                         ref={kbButtonRef}
                         active={composerMenu === "kb"}
+                        menu
                         icon={<KnowledgeControlIcon />}
                         label={`知识库 · ${selectedKbIds.length || 0} 个`}
                         onClick={() => setComposerMenu((value) => (value === "kb" ? null : "kb"))}
@@ -2848,6 +3169,7 @@ export function AskPremiumPage() {
                       <ComposerButton
                         ref={modeButtonRef}
                         active={composerMenu === "mode"}
+                        menu
                         icon={<ModeControlIcon />}
                         label={selectedAnswerModeLabel}
                         onClick={() => setComposerMenu((value) => (value === "mode" ? null : "mode"))}
@@ -2855,6 +3177,7 @@ export function AskPremiumPage() {
                       <ComposerButton
                         ref={modelButtonRef}
                         active={composerMenu === "model"}
+                        menu
                         icon={<ModelControlIcon />}
                         label={activeGenerationConfig?.modelName || activeGenerationConfig?.baseUrl || "选择模型"}
                         onClick={() => setComposerMenu((value) => (value === "model" ? null : "model"))}
@@ -2887,8 +3210,8 @@ export function AskPremiumPage() {
                     </button>
                   </div>
 
-                  {composerMenu === "kb" ? (
-                    <FloatingMenu position={composerMenuPosition}>
+                  {positionedComposerMenu === "kb" && activeComposerMenuPosition ? (
+                    <FloatingMenu key="kb" phase={composerMenu ? "open" : "closing"} position={activeComposerMenuPosition}>
                       <MenuHeader label="KNOWLEDGE BASES" value="MULTI" />
                       <MenuOption selected={allKbsSelected} onClick={toggleAllKbs} checkbox title="全部知识库" detail="发送时覆盖当前可用知识库" />
                       {kbsQuery.isLoading ? (
@@ -2911,8 +3234,8 @@ export function AskPremiumPage() {
                     </FloatingMenu>
                   ) : null}
 
-                  {composerMenu === "mode" ? (
-                    <FloatingMenu position={composerMenuPosition}>
+                  {positionedComposerMenu === "mode" && activeComposerMenuPosition ? (
+                    <FloatingMenu key="mode" phase={composerMenu ? "open" : "closing"} position={activeComposerMenuPosition}>
                       <MenuHeader label="ANSWER MODE" value="SINGLE" />
                       {ANSWER_MODES.map((mode) => (
                         <MenuOption
@@ -2929,24 +3252,26 @@ export function AskPremiumPage() {
                     </FloatingMenu>
                   ) : null}
 
-                  {composerMenu === "model" ? (
-                    <FloatingMenu position={composerMenuPosition}>
+                  {positionedComposerMenu === "model" && activeComposerMenuPosition ? (
+                    <FloatingMenu key="model" phase={composerMenu ? "open" : "closing"} position={activeComposerMenuPosition}>
                       <MenuHeader label="GENERATION MODEL" value="GLOBAL" />
-                      {generationQuery.isLoading ? (
-                        <div className="px-3 py-3 text-sm text-slate-500">加载模型配置...</div>
-                      ) : generationConfigs.length ? (
-                        generationConfigs.map((config) => (
-                          <MenuOption
-                            key={config.id}
-                            selected={config.id === activeGenerationConfig?.id}
-                            onClick={() => void handleSelectGenerationConfig(config)}
-                            title={config.modelName || config.baseUrl || "未命名模型"}
-                            detail={`${config.enabled ? "生效中" : "可切换"}`}
-                          />
-                        ))
-                      ) : (
-                        <div className="rounded-[8px] bg-[#f7f7f2] p-3 text-sm text-slate-500">暂无可用模型，请先到 Settings 配置</div>
-                      )}
+                      <div className="ask-premium-model-menu-options grid max-h-36 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] [&>button]:h-12 [&>button]:min-h-12">
+                        {generationQuery.isLoading ? (
+                          <div className="px-3 py-3 text-sm text-slate-500">加载模型配置...</div>
+                        ) : generationConfigs.length ? (
+                          generationConfigs.map((config) => (
+                            <MenuOption
+                              key={config.id}
+                              selected={config.id === (switchingGenerationConfigId ?? activeGenerationConfig?.id)}
+                              onClick={() => void handleSelectGenerationConfig(config)}
+                              title={config.modelName || config.baseUrl || "未命名模型"}
+                              detail={`${config.enabled ? "生效中" : "可切换"}`}
+                            />
+                          ))
+                        ) : (
+                          <div className="rounded-[8px] bg-[#f7f7f2] p-3 text-sm text-slate-500">暂无可用模型，请先到 Settings 配置</div>
+                        )}
+                      </div>
                     </FloatingMenu>
                   ) : null}
                 </form>
@@ -3056,55 +3381,46 @@ function AgentActivityCard({
     liveActivity?.status,
     statusFromTask(latestAssistantMessage?.agentTask),
   );
-  const mergedSteps = mergeAgentActivitySteps(serverActivity?.steps ?? [], liveActivity?.steps ?? []);
-  const taskSteps = mergeTaskProgressStep(mergedSteps, latestAssistantMessage?.agentTask);
-  const steps = settleRunningAgentSteps(taskSteps, status, serverActivity?.finishedAt ?? undefined);
+  const mergedSteps = useMemo(
+    () => mergeAgentActivitySteps(serverActivity?.steps ?? [], liveActivity?.steps ?? []),
+    [liveActivity?.steps, serverActivity?.steps],
+  );
+  const taskSteps = useMemo(
+    () => mergeAgentTaskProgressStep(mergedSteps, latestAssistantMessage?.agentTask),
+    [latestAssistantMessage?.agentTask, mergedSteps],
+  );
+  const steps = useMemo(
+    () => settleRunningAgentSteps(taskSteps, status, serverActivity?.finishedAt ?? undefined),
+    [serverActivity?.finishedAt, status, taskSteps],
+  );
   const totalTokens = (serverActivity?.promptTokens ?? 0) + (serverActivity?.completionTokens ?? 0);
   const promptTokens = serverActivity?.promptTokens ?? 0;
   const completionTokens = serverActivity?.completionTokens ?? 0;
   const activityScrollRef = useRef<HTMLDivElement | null>(null);
-  const activityContentRef = useRef<HTMLDivElement | null>(null);
-  const hasRunningStep = steps.some((step) => step.status === "RUNNING");
-  const activityInProgress = hasRunningStep
-    || status === "RUNNING"
-    || status === "AWAITING_TURN"
-    || status === "WAITING_TASK";
-  const [activityClock, setActivityClock] = useState<number>();
+  const followActivityBottomRef = useRef(true);
+  const previousActivityStepsRef = useRef<{ runId: string; keys: string[] }>({ runId: "", keys: [] });
+  const activityRunId = serverActivity?.runId ?? liveActivity?.runId ?? latestAssistantMessage?.agentRunId ?? "";
+  const activityStepSignature = steps.map(agentActivityStepKey).join("\u001f");
 
-  useEffect(() => {
-    if (!hasRunningStep) return;
-    const timer = window.setInterval(() => setActivityClock(Date.now()), 500);
-    return () => window.clearInterval(timer);
-  }, [hasRunningStep]);
-
-  useEffect(() => {
+  const handleActivityScroll = useCallback(() => {
     const scroller = activityScrollRef.current;
-    const content = activityContentRef.current;
-    if (!scroller || !content) return;
+    if (!scroller) return;
+    const distanceFromBottom = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+    followActivityBottomRef.current = distanceFromBottom <= 24;
+  }, []);
 
-    let frame: number | null = null;
-    const revealActivityBottom = () => {
-      if (frame !== null) window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => {
-        scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-        frame = null;
-      });
-    };
-
-    revealActivityBottom();
-    if (!activityInProgress || typeof ResizeObserver === "undefined") {
-      return () => {
-        if (frame !== null) window.cancelAnimationFrame(frame);
-      };
+  useLayoutEffect(() => {
+    const scroller = activityScrollRef.current;
+    const previous = previousActivityStepsRef.current;
+    const runChanged = previous.runId !== activityRunId;
+    if (runChanged) followActivityBottomRef.current = true;
+    const activityStepKeys = activityStepSignature ? activityStepSignature.split("\u001f") : [];
+    const hasNewStep = hasNewAgentActivityStep(runChanged ? [] : previous.keys, activityStepKeys);
+    if (scroller && hasNewStep && followActivityBottomRef.current) {
+      scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     }
-
-    const observer = new ResizeObserver(revealActivityBottom);
-    observer.observe(content);
-    return () => {
-      observer.disconnect();
-      if (frame !== null) window.cancelAnimationFrame(frame);
-    };
-  }, [activityInProgress, steps.length, status, latestAssistantMessage?.agentTask?.progress]);
+    previousActivityStepsRef.current = { runId: activityRunId, keys: activityStepKeys };
+  }, [activityRunId, activityStepSignature]);
 
   return (
     <section className="ask-premium-trace-timeline flex min-h-0 flex-1 flex-col rounded-[8px] border border-white/10 bg-white/10 p-4">
@@ -3149,15 +3465,18 @@ function AgentActivityCard({
       ) : failed && steps.length === 0 ? (
         <AgentActivityEmpty title="Agent 流程暂不可用" detail="回答与引用不受影响。" />
       ) : (
-        <div ref={activityScrollRef} className="ask-premium-activity-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1">
-          <div ref={activityContentRef} className="grid content-start gap-2 pb-2">
+        <div
+          ref={activityScrollRef}
+          className="ask-premium-activity-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1"
+          onScroll={handleActivityScroll}
+        >
+          <div className="grid content-start gap-2 pb-2">
             {steps.map((step, index) => (
               <AgentActivityStepItem
-                key={agentStepKey(step)}
+                key={agentActivityStepKey(step)}
                 step={step}
                 position={index + 1}
                 ordinal={steps.filter((candidate) => candidate.stepOrder <= step.stepOrder && candidate.type === step.type).length}
-                currentTime={activityClock}
                 isLast={index === steps.length - 1}
               />
             ))}
@@ -3193,22 +3512,23 @@ function AgentActivityEmpty({ title, detail, loading = false }: { title: string;
   );
 }
 
-function AgentActivityStepItem({
-  step,
-  position,
-  ordinal,
-  currentTime,
-  isLast,
-}: {
+type AgentActivityStepItemProps = {
   step: AgentActivityStep;
   position: number;
   ordinal: number;
-  currentTime?: number;
   isLast: boolean;
-}) {
+};
+
+const AgentActivityStepItem = memo(function AgentActivityStepItem({
+  step,
+  position,
+  ordinal,
+  isLast,
+}: AgentActivityStepItemProps) {
   const progress = displayedAgentStepProgress(step);
   const summary = agentStepSummary(step);
-  const metrics = agentStepMetrics(step, currentTime);
+  const metrics = agentStepMetrics(step);
+  const showElapsed = step.status === "RUNNING" && step.createdAt != null;
   const stepSurface = step.status === "RUNNING"
     ? "bg-[var(--ask-accent-softest)]"
     : step.status === "FAILED" || step.status === "CANCELLED" ? "bg-red-400/[0.05]" : "";
@@ -3218,67 +3538,69 @@ function AgentActivityStepItem({
         <span className={`relative z-[1] mt-2 flex size-5 items-center justify-center rounded-full p-0 text-center text-[9px] font-black leading-none tabular-nums ${step.status === "FAILED" || step.status === "CANCELLED" ? "bg-red-400/20 text-red-300" : step.status === "RUNNING" ? "bg-[var(--ask-accent-text)] text-[#111315]" : "border border-white/10 bg-black/20 text-white/55"}`}>{String(position).padStart(2, "0")}</span>
         {!isLast ? <span className="absolute bottom-[-8px] top-7 w-px bg-white/10" /> : null}
       </div>
-      <div className={`mb-2.5 min-w-0 flex-1 rounded-[7px] px-2.5 py-2 ${stepSurface}`}>
+      <div className={`mb-2.5 min-w-0 flex-1 rounded-[7px] px-2.5 py-2 transition-colors duration-200 ${stepSurface}`}>
         <div className="flex items-center justify-between gap-3 text-xs font-black text-white/90">
-          <span>{agentStepTitle(step, ordinal)}</span>
-          <span className="flex shrink-0 items-center gap-1 text-[9px] text-white/45">
+          <span className="min-w-0 truncate">{agentStepTitle(step, ordinal)}</span>
+          <span className="flex min-w-[4.5em] shrink-0 items-center justify-end gap-1 text-[9px] text-white/45">
             {step.status === "RUNNING" ? <Loader2 className="h-3 w-3 animate-spin text-[var(--ask-accent-text)]" /> : null}
             {agentStepStatusLabel(step.status)}
           </span>
         </div>
-        {summary ? <p className="mt-1 break-words text-[11px] leading-[1.55] text-white/60">{summary}</p> : null}
-        {metrics.length > 0 ? (
-          <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-white/10 pt-2">
-            {metrics.map((metric) => (
-              <div
-                key={`${metric.label}:${metric.value}`}
-                className="flex min-w-0 items-baseline justify-between gap-1.5 text-[9px]"
-              >
-                <dt className="shrink-0 text-white/45">{metric.label}</dt>
-                <dd className={`truncate font-semibold ${metric.tone === "accent" ? "text-[var(--ask-accent-text)]" : metric.tone === "danger" ? "text-red-300" : "text-white/60"}`}>{metric.value}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-        {progress != null ? (
+        <p
+          aria-hidden={!summary}
+          className={`mt-1 break-words text-[11px] leading-[1.55] text-white/60 ${step.type === "TASK_STAGE" ? "min-h-[34px]" : "min-h-[17px]"} ${summary ? "line-clamp-2" : "invisible"}`}
+        >
+          {summary || "占位"}
+        </p>
+        <dl className="mt-2 grid min-h-[40px] grid-cols-2 content-start gap-x-3 gap-y-1 border-t border-white/10 pt-2">
+          {metrics.map((metric) => (
+            <div
+              key={metric.label}
+              className="flex min-w-0 items-baseline justify-between gap-1.5 text-[9px]"
+            >
+              <dt className="shrink-0 text-white/45">{metric.label}</dt>
+              <dd className={`min-w-[5.5em] truncate text-right font-semibold tabular-nums ${metric.tone === "accent" ? "text-[var(--ask-accent-text)]" : metric.tone === "danger" ? "text-red-300" : "text-white/60"}`}>{metric.value}</dd>
+            </div>
+          ))}
+          {showElapsed ? <AgentElapsedMetric createdAt={step.createdAt!} /> : null}
+        </dl>
+        {step.type === "TASK_STAGE" ? (
           <div className="mt-2.5">
             <div className="mb-1 flex items-center justify-between text-[9px] text-white/45">
               <span>阶段进度</span>
-              <strong className="text-white/60">{progress}%</strong>
+              <strong className="min-w-[3em] text-right text-white/60 tabular-nums">{progress == null ? "—" : `${progress}%`}</strong>
             </div>
             <div className="h-1 overflow-hidden rounded-full bg-white/10">
-              <span className="block h-full rounded-full bg-[var(--ask-accent)] transition-[width]" style={{ width: `${progress}%` }} />
+              <span className="block h-full rounded-full bg-[var(--ask-accent)] transition-[width] duration-300 ease-out" style={{ width: `${progress ?? 0}%` }} />
             </div>
           </div>
         ) : null}
       </div>
     </div>
   );
-}
+}, (previous, next) => (
+  previous.position === next.position
+  && previous.ordinal === next.ordinal
+  && previous.isLast === next.isLast
+  && equalAgentActivityStep(previous.step, next.step)
+));
 
-function mergeAgentActivitySteps(persisted: AgentActivityStep[], live: AgentActivityStep[]) {
-  const merged = new Map<string, AgentActivityStep>();
-  persisted.filter(hasValidAgentStepOrder).forEach((step) => merged.set(agentStepKey(step), step));
-  live.filter(hasValidAgentStepOrder).forEach((step) => {
-    const key = agentStepKey(step);
-    const stored = merged.get(key);
-    if (!stored) {
-      merged.set(key, step);
-    } else if (step.errorCode && !stored.errorCode) {
-      merged.set(key, mergeDefinedAgentStep(stored, step));
-    } else if (stored.status === "RUNNING" && step.status !== "RUNNING") {
-      merged.set(key, mergeDefinedAgentStep(stored, step));
-    } else {
-      merged.set(key, { ...step, ...stored });
-    }
-  });
-  return Array.from(merged.values())
-    .sort(compareAgentSteps)
-    .slice(-50);
-}
+function AgentElapsedMetric({ createdAt }: { createdAt: number }) {
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
 
-function hasValidAgentStepOrder(step: AgentActivityStep) {
-  return Number.isFinite(step.stepOrder) && step.stepOrder > 0;
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="flex min-w-0 items-baseline justify-between gap-1.5 text-[9px]">
+      <dt className="shrink-0 text-white/45">已用时</dt>
+      <dd className="min-w-[5.5em] truncate text-right font-semibold tabular-nums text-[var(--ask-accent-text)]">
+        {formatMilliseconds(Math.max(0, currentTime - createdAt))}
+      </dd>
+    </div>
+  );
 }
 
 function cancelRunningAgentSteps(steps: AgentActivityStep[]) {
@@ -3319,35 +3641,6 @@ function settleRunningAgentSteps(
           : Math.max(0, terminalAt - step.createdAt)),
       }
     : step);
-}
-
-function agentStepKey(step: AgentActivityStep) {
-  if (step.callId && step.type === "TOOL") return `tool:${step.callId}`;
-  if (step.callId && step.type === "TASK_STAGE") return `task:${step.callId}:${step.taskStage ?? "QUEUED"}`;
-  return `${step.type}:${step.stepOrder}:${step.taskStage ?? ""}`;
-}
-
-function mergeTaskProgressStep(steps: AgentActivityStep[], task?: AgentTask) {
-  if (!task) return steps;
-  const taskStage = task.currentStage || (task.status === "PENDING" ? "QUEUED" : undefined);
-  if (!taskStage) return steps;
-  const status: AgentActivityStep["status"] = task.status === "FAILED"
-    ? "FAILED"
-    : task.status === "CANCELLED" ? "CANCELLED" : task.status === "SUCCEEDED" ? "COMPLETED" : "RUNNING";
-  const index = steps.findIndex((step) => step.type === "TASK_STAGE" && step.taskStage === taskStage);
-  if (index >= 0) {
-    const next = [...steps];
-    next[index] = { ...next[index], progress: task.progress, status };
-    return next;
-  }
-  return [...steps, {
-    stepOrder: Math.max(0, ...steps.map((step) => step.stepOrder)) + 1,
-    type: "TASK_STAGE",
-    taskStage,
-    status,
-    progress: task.progress,
-    attempt: 1,
-  }];
 }
 
 function resolveAgentActivityStatus(
@@ -3408,7 +3701,7 @@ type AgentStepMetric = {
   tone?: "default" | "accent" | "danger";
 };
 
-function agentStepMetrics(step: AgentActivityStep, currentTime?: number): AgentStepMetric[] {
+function agentStepMetrics(step: AgentActivityStep): AgentStepMetric[] {
   const metrics: AgentStepMetric[] = [];
   const modelLatency = step.modelLatencyMs
     ?? (step.type === "MODEL_DECISION" && step.status !== "RUNNING" ? step.durationMs : undefined);
@@ -3435,9 +3728,7 @@ function agentStepMetrics(step: AgentActivityStep, currentTime?: number): AgentS
   }
   if (step.attempt != null && step.attempt > 1) metrics.push({ label: "尝试", value: `第 ${step.attempt} 次` });
   if (step.errorCode) metrics.push({ label: "错误", value: step.errorCode, tone: "danger" });
-  if (step.status === "RUNNING" && currentTime != null && step.createdAt != null && currentTime >= step.createdAt) {
-    metrics.push({ label: "已用时", value: formatMilliseconds(currentTime - step.createdAt), tone: "accent" });
-  } else if (step.durationMs != null && modelLatency !== step.durationMs) {
+  if (step.status !== "RUNNING" && step.durationMs != null && modelLatency !== step.durationMs) {
     metrics.push({
       label: step.type === "FINAL" ? "端到端" : "阶段耗时",
       value: formatMilliseconds(step.durationMs),
@@ -3588,13 +3879,17 @@ function SendGlyph() {
 
 const ComposerButton = forwardRef<HTMLButtonElement, {
   active: boolean;
+  agent?: boolean;
   disabled?: boolean;
+  menu?: boolean;
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
 }>(function ComposerButton({
   active,
+  agent = false,
   disabled = false,
+  menu = false,
   icon,
   label,
   onClick,
@@ -3606,10 +3901,14 @@ const ComposerButton = forwardRef<HTMLButtonElement, {
       disabled={disabled}
       onClick={onClick}
       className={[
-        "ask-premium-control-button inline-flex h-[34px] min-h-[34px] min-w-0 shrink-0 cursor-pointer items-center gap-1.5 border px-2.5 transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0",
+        "ask-premium-control-button inline-flex h-[34px] min-h-[34px] min-w-0 shrink-0 cursor-pointer items-center gap-1.5 border px-2.5 transition disabled:cursor-not-allowed disabled:opacity-50",
+        agent ? "ask-premium-agent-control" : "",
+        menu ? "" : "hover:-translate-y-px disabled:hover:translate-y-0",
         active ? "border-blue-600/30 bg-[#111315] text-white" : "border-black/10 bg-[#f7f7f2]/90 text-[#111315] hover:border-blue-600/30 hover:bg-[#111315] hover:text-white",
       ].join(" ")}
-      aria-expanded={active}
+      aria-expanded={menu ? active : undefined}
+      aria-haspopup={menu ? "listbox" : undefined}
+      aria-pressed={agent ? active : undefined}
     >
       {icon}
       <span className="max-w-[154px] truncate max-sm:max-w-28">{label}</span>
@@ -3617,16 +3916,26 @@ const ComposerButton = forwardRef<HTMLButtonElement, {
   );
 });
 
-function FloatingMenu({ children, position }: { children: React.ReactNode; position: { left: number; top: number } | null }) {
+function FloatingMenu({
+  children,
+  phase,
+  position,
+}: {
+  children: React.ReactNode;
+  phase: ComposerMenuPhase;
+  position: { left: number; top: number } | null;
+}) {
   return (
     <div
       data-composer-menu
-      className="ask-premium-floating-menu absolute z-50 grid w-[286px] max-w-[calc(100vw-28px)] gap-1 rounded-[8px] border border-black/10 bg-white/95 p-2 shadow-[0_24px_64px_rgba(17,19,21,0.18)] backdrop-blur-xl"
+      data-state={phase}
+      className="ask-premium-floating-menu absolute z-50 grid w-[286px] max-w-[calc(100vw-28px)] gap-1 rounded-[8px] border border-black/10 bg-white/95 p-2 shadow-[0_24px_64px_rgba(17,19,21,0.18)]"
       style={{
         left: position ? `${position.left}px` : "12px",
         top: position ? `${position.top}px` : "0px",
       }}
       role="listbox"
+      aria-hidden={phase === "closing" || undefined}
     >
       {children}
     </div>
@@ -3661,21 +3970,22 @@ function MenuOption({
       type="button"
       onClick={onClick}
       className={[
-        "flex min-h-11 w-full items-center gap-3 rounded-[8px] p-2 text-left text-sm transition hover:translate-x-0.5 hover:bg-blue-50",
+        "ask-premium-menu-option relative isolate flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-[8px] p-2 text-left text-sm",
         selected ? "text-blue-700" : "text-slate-700",
       ].join(" ")}
       role="option"
       aria-selected={selected}
+      data-selected={selected}
     >
       <span
         className={[
-          "grid size-4 shrink-0 place-items-center border text-white",
+          "ask-premium-menu-option-indicator grid size-4 shrink-0 place-items-center border text-white",
           checkbox ? "rounded-[5px]" : "rounded-full",
           selected ? "border-blue-600 bg-blue-600" : "border-black/15 bg-white text-transparent",
         ].join(" ")}
         aria-hidden="true"
       >
-        <Check size={12} strokeWidth={2.4} />
+        <Check className="ask-premium-menu-option-check" size={12} strokeWidth={2.4} />
       </span>
       {icon ? <span className="shrink-0 text-slate-500">{icon}</span> : null}
       <span className="min-w-0">
@@ -3889,6 +4199,7 @@ function PremiumChatBubble({
       <article
         data-message-id={message.id}
         data-turn-id={message.turnId}
+        data-message-role={message.role}
         className={[
           "ask-premium-message-enter ask-premium-user-message flex justify-end",
           topGap ? "has-top-gap" : "",
@@ -3974,7 +4285,12 @@ function PremiumChatBubble({
   }
 
   return (
-    <article data-turn-id={message.turnId} className="ask-premium-assistant-message ask-premium-message-enter flex gap-2.5">
+    <article
+      data-message-id={message.id}
+      data-turn-id={message.turnId}
+      data-message-role={message.role}
+      className="ask-premium-assistant-message ask-premium-message-enter flex gap-2.5"
+    >
       <div className="ask-premium-assistant-avatar grid size-8 shrink-0 place-items-center rounded-full bg-[#111315] text-white shadow-none">
         <AiStarIcon />
       </div>
@@ -3993,9 +4309,11 @@ function PremiumChatBubble({
             {message.executionMode === "AGENT_FALLBACK" ? (
               <span
                 className="inline-flex min-h-6 items-center rounded-full border border-orange-500/20 bg-orange-500/10 px-2.5 text-[10px] font-black text-orange-700 dark:text-orange-200"
-                title="Agent 执行失败后已降级为传统回答"
+                title={message.answerStatus === "GENERATION_FAILED"
+                  ? "Agent 与传统 RAG 均未生成可靠回答"
+                  : "Agent 执行失败后已降级为传统回答"}
               >
-                Agent 降级
+                {message.answerStatus === "GENERATION_FAILED" ? "Agent 降级失败" : "Agent 降级"}
               </span>
             ) : null}
             {message.answerMode ? (
@@ -4013,7 +4331,12 @@ function PremiumChatBubble({
             ) : null}
             {message.answerStatus === "MODEL_FALLBACK" ? (
               <span className="inline-flex min-h-6 items-center rounded-full border border-orange-500/20 bg-orange-500/10 px-2.5 text-[10px] font-black text-orange-700 dark:text-orange-200">
-                降级回答
+                模型兜底
+              </span>
+            ) : null}
+            {message.answerStatus === "GENERATION_FAILED" ? (
+              <span className="inline-flex min-h-6 items-center rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 text-[10px] font-black text-rose-700 dark:text-rose-200">
+                生成失败
               </span>
             ) : null}
             {message.answerStatus === "PROCESSING" && message.agentTask ? (
@@ -4077,10 +4400,19 @@ function PremiumChatBubble({
           <div className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-200">当前检索内容不足以支持可靠回答，可补充关键词或限定资料范围后重试。</div>
         ) : null}
         {message.answerStatus === "MODEL_FALLBACK" ? (
-          <div className="mt-2 text-xs font-semibold text-orange-700 dark:text-orange-200">模型生成发生降级，以下内容仅基于当前可确认的证据整理。</div>
+          <div className="mt-2 text-xs font-semibold text-orange-700 dark:text-orange-200">模型未能生成完整回答，当前显示系统兜底结果。</div>
+        ) : null}
+        {message.executionMode === "AGENT_FALLBACK" && message.answerStatus !== "GENERATION_FAILED" ? (
+          <div className="mt-2 text-xs font-semibold text-orange-700 dark:text-orange-200">Agent 执行异常，本轮已切换为传统 RAG。</div>
+        ) : null}
+        {message.answerStatus === "GENERATION_FAILED"
+          && stripTraceText(message.content).trim() !== GENERATION_FAILED_MESSAGE ? (
+          <div className="mt-2 text-xs font-semibold text-rose-700 dark:text-rose-200">{GENERATION_FAILED_MESSAGE}</div>
         ) : null}
         {message.error ? <div className="mt-3 text-sm text-rose-600">{message.error}</div> : null}
-        {message.answerStatus !== "NO_EVIDENCE" && message.citations?.length ? (
+        {message.answerStatus !== "NO_EVIDENCE"
+          && message.answerStatus !== "GENERATION_FAILED"
+          && message.citations?.length ? (
           <div className="mt-4 flex flex-wrap gap-2" aria-label="引用来源">
             {message.citations.map((citation, index) => {
               const citationFileName = citation.fileName?.trim()

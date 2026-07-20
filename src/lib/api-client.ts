@@ -20,6 +20,7 @@ import type {
   ConversationExecutionMode,
   ConversationSession,
   ConversationSessionList,
+  ConversationTurn,
   ElasticsearchHealth,
   IngestionCapability,
   IngestionTaskList,
@@ -66,7 +67,7 @@ type RequestOptions = {
 };
 
 type StreamMessageCallbacks = {
-  onTrace?: (event: { stage?: string; message?: string; runId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown> }) => void;
+  onTrace?: (event: { stage?: string; message?: string; runId?: string; turnId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown> }) => void;
   onDelta?: (text: string) => void;
   onAnswerReset?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
@@ -268,7 +269,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
 
   if (eventName === "trace") {
     callbacks.onTrace?.(parseSseJson<{
-      stage?: string; message?: string; runId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string;
+      stage?: string; message?: string; runId?: string; turnId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string;
       intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown>;
     }>(data) ?? {});
     return;
@@ -529,6 +530,11 @@ export const apiClient = {
     request<null>(`/api/v1/conversations/${encodeURIComponent(sessionId)}`, {
       method: "DELETE",
     }),
+  getConversationMessage: (sessionId: string, turnId: string, signal?: AbortSignal) =>
+    request<ConversationTurn>(
+      `/api/v1/conversations/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(turnId)}`,
+      { signal },
+    ),
   sendMessageStream: async (
     sessionId: string,
     body: ConversationMessageRequest,

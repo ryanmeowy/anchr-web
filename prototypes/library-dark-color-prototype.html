@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Anchr Library · Dark Color Prototype</title>
+    <style>
+      :root {
+        color-scheme: dark;
+
+        /* Existing dark surfaces — intentionally unchanged. */
+        --page: #1b1b1b;
+        --rail: #171717;
+        --surface: #262626;
+        --surface-hover: #2b2b2b;
+        --surface-raised: #303030;
+        --ink: #ffffff;
+        --ink-soft: #ededed;
+        --muted: #b8b8b8;
+        --line: rgba(236, 236, 236, 0.1);
+        --line-strong: rgba(236, 236, 236, 0.15);
+
+        /* Three accents only; translucent states derive from these. */
+        --accent-primary: #60ffd5;
+        --accent-info: #87ceeb;
+        --accent-success: #74c96d;
+
+        --primary-soft: rgba(96, 255, 213, 0.1);
+        --primary-line: rgba(96, 255, 213, 0.28);
+        --info-soft: rgba(135, 206, 235, 0.1);
+        --info-line: rgba(135, 206, 235, 0.25);
+        --success-soft: rgba(116, 201, 109, 0.12);
+        --success-line: rgba(116, 201, 109, 0.28);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        min-width: 1180px;
+        min-height: 760px;
+        margin: 0;
+        background: var(--page);
+      }
+
+      body {
+        color: var(--ink);
+        font-family: "Sora", "Outfit", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        font-size: 14px;
+      }
+
+      button,
+      input {
+        color: inherit;
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+        cursor: pointer;
+      }
+
+      svg {
+        display: block;
+      }
+
+      .page {
+        min-height: 100vh;
+        padding: 24px;
+        background: var(--page);
+      }
+
+      .shell {
+        display: grid;
+        width: 100%;
+        min-height: calc(100vh - 48px);
+        grid-template-columns: 60px minmax(0, 1fr);
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--page);
+      }
+
+      .rail {
+        display: flex;
+        min-height: 100%;
+        flex-direction: column;
+        align-items: center;
+        border-right: 1px solid var(--line);
+        background: var(--rail);
+        padding: 12px 8px;
+      }
+
+      .logo,
+      .nav-item,
+      .theme-button,
+      .user {
+        display: grid;
+        width: 40px;
+        height: 40px;
+        place-items: center;
+        border-radius: 8px;
+      }
+
+      .logo {
+        background: #fff;
+        color: #111315;
+        font-size: 18px;
+        font-weight: 900;
+      }
+
+      .nav {
+        display: grid;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .nav-item {
+        position: relative;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.64);
+      }
+
+      .nav-item:hover {
+        background: var(--surface-hover);
+        color: var(--accent-primary);
+      }
+
+      .nav-item.active {
+        background: var(--surface-hover);
+        color: var(--accent-info);
+      }
+
+      .nav-item.active::before {
+        position: absolute;
+        left: -8px;
+        width: 4px;
+        height: 24px;
+        border-radius: 999px;
+        background: var(--accent-info);
+        content: "";
+      }
+
+      .rail-bottom {
+        display: grid;
+        gap: 8px;
+        margin-top: auto;
+      }
+
+      .theme-button {
+        background: transparent;
+        color: rgba(255, 255, 255, 0.72);
+      }
+
+      .user {
+        height: 44px;
+        border: 1px solid var(--primary-line);
+        background: var(--primary-soft);
+        color: var(--accent-primary);
+        font-size: 9px;
+        font-weight: 900;
+      }
+
+      .workspace {
+        display: grid;
+        min-width: 0;
+        grid-template-rows: 112px minmax(0, 1fr);
+        background: var(--page);
+      }
+
+      .hero {
+        position: relative;
+        display: grid;
+        align-content: center;
+        overflow: hidden;
+        border-bottom: 1px solid var(--line);
+        padding: 12px 20px;
+      }
+
+      .kicker {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--accent-info);
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+      }
+
+      .kicker-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        margin-top: 8px;
+        font-size: clamp(28px, 2.7vw, 44px);
+        font-weight: 900;
+        letter-spacing: -0.045em;
+        line-height: 0.96;
+      }
+
+      .hero-description {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .watermark {
+        position: absolute;
+        right: 16px;
+        bottom: -18px;
+        color: rgba(255, 255, 255, 0.045);
+        font-size: clamp(64px, 9vw, 132px);
+        font-weight: 900;
+        line-height: 0.8;
+      }
+
+      .main {
+        display: grid;
+        min-width: 0;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
+        align-items: start;
+        gap: 12px;
+        padding: 12px 20px;
+        background: transparent;
+      }
+
+      .library {
+        min-width: 0;
+      }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .search {
+        display: flex;
+        min-height: 44px;
+        align-items: center;
+        gap: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: 0 8px 0 16px;
+      }
+
+      .search:focus-within {
+        border-color: var(--primary-line);
+        box-shadow: 0 0 0 3px var(--primary-soft);
+      }
+
+      .search-icon {
+        color: var(--muted);
+      }
+
+      .search input {
+        min-width: 0;
+        flex: 1;
+        border: 0;
+        outline: 0;
+        background: transparent;
+      }
+
+      .search input::placeholder {
+        color: var(--muted);
+      }
+
+      .search-button {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border: 1px solid var(--primary-line);
+        border-radius: 999px;
+        background: var(--primary-soft);
+        color: var(--accent-primary);
+      }
+
+      .view-switch {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--surface);
+        padding: 4px;
+      }
+
+      .view-button {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+      }
+
+      .view-button.active {
+        background: var(--primary-soft);
+        color: var(--accent-primary);
+      }
+
+      .section-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .section-head h2 {
+        font-size: clamp(18px, 2vw, 24px);
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .section-head p {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .filters {
+        display: flex;
+        gap: 6px;
+      }
+
+      .filter {
+        width: 68px;
+        height: 28px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--ink-soft);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .filter.active {
+        border-color: var(--primary-line);
+        background: var(--primary-soft);
+        color: var(--accent-primary);
+      }
+
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .kb-card,
+      .create-card,
+      .activity-panel,
+      .health-panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      .kb-card {
+        display: grid;
+        min-height: 254px;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        gap: 6px;
+        padding: 10px;
+      }
+
+      .kb-card.selected {
+        border-color: var(--primary-line);
+        box-shadow: 0 0 0 1px var(--primary-soft);
+      }
+
+      .kb-top {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .glyph {
+        position: relative;
+        display: grid;
+        width: 42px;
+        height: 42px;
+        flex: 0 0 auto;
+        place-items: center;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-raised);
+      }
+
+      .glyph::before,
+      .glyph::after {
+        position: absolute;
+        border-radius: 50%;
+        content: "";
+      }
+
+      .glyph::before {
+        width: 26px;
+        height: 26px;
+        border: 1px dashed rgba(237, 237, 237, 0.2);
+      }
+
+      .glyph::after {
+        right: 8px;
+        top: 8px;
+        width: 7px;
+        height: 7px;
+        background: var(--glyph-color, var(--accent-primary));
+      }
+
+      .glyph-book {
+        position: relative;
+        width: 14px;
+        height: 18px;
+        border: 1.5px solid var(--ink-soft);
+        border-radius: 2px;
+      }
+
+      .glyph-book::after {
+        position: absolute;
+        left: 4px;
+        top: -1px;
+        width: 1px;
+        height: 18px;
+        background: rgba(237, 237, 237, 0.32);
+        content: "";
+      }
+
+      .kb-copy {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .kb-title {
+        overflow: hidden;
+        font-size: 16px;
+        font-weight: 900;
+        line-height: 1.05;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .status {
+        display: inline-flex;
+        min-height: 24px;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--success-line);
+        border-radius: 999px;
+        background: var(--success-soft);
+        padding: 0 8px;
+        color: var(--accent-success);
+        font-size: 10px;
+        font-weight: 900;
+      }
+
+      .status::before {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        content: "";
+      }
+
+      .kb-description {
+        overflow: hidden;
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        margin-top: 12px;
+      }
+
+      .stat {
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.035);
+        padding: 6px;
+        color: var(--muted);
+        font-size: 9px;
+      }
+
+      .stat strong {
+        display: block;
+        margin-bottom: 2px;
+        color: var(--ink);
+        font-size: 14px;
+      }
+
+      .ingestion {
+        display: grid;
+        gap: 7px;
+        margin-top: 7px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-raised);
+        padding: 7px;
+      }
+
+      .ingestion-head,
+      .kb-footer,
+      .panel-head,
+      .activity-item,
+      .health-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .ingestion-head {
+        color: var(--muted);
+        font-size: 9px;
+      }
+
+      .ingestion-head b {
+        color: var(--ink-soft);
+        font-size: 10px;
+      }
+
+      .success-pill {
+        border: 1px solid var(--success-line);
+        border-radius: 999px;
+        background: var(--success-soft);
+        padding: 3px 7px;
+        color: var(--accent-success);
+        font-size: 9px;
+        font-weight: 900;
+      }
+
+      .progress {
+        height: 5px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .progress span {
+        display: block;
+        width: 82%;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--accent-success);
+      }
+
+      .kb-footer {
+        min-height: 44px;
+        border-top: 1px solid var(--line);
+        margin-top: 8px;
+        padding-top: 8px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .open-button {
+        display: inline-flex;
+        min-height: 30px;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--primary-line);
+        border-radius: 999px;
+        background: var(--primary-soft);
+        padding: 0 10px;
+        color: var(--accent-primary);
+        font-size: 10px;
+        font-weight: 900;
+      }
+
+      .create-card {
+        display: grid;
+        min-height: 254px;
+        place-items: center;
+        border-style: dashed;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .create-plus {
+        display: grid;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        border: 1px solid var(--primary-line);
+        border-radius: 50%;
+        margin: 0 auto 12px;
+        background: var(--primary-soft);
+        color: var(--accent-primary);
+        font-size: 24px;
+      }
+
+      .create-card strong {
+        display: block;
+        color: var(--ink-soft);
+        font-size: 13px;
+      }
+
+      .create-card small {
+        display: block;
+        margin-top: 6px;
+        font-size: 10px;
+      }
+
+      .pagination {
+        display: flex;
+        min-height: 52px;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 12px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .page-buttons {
+        display: flex;
+        gap: 6px;
+      }
+
+      .page-button {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--surface);
+        color: var(--muted);
+      }
+
+      .page-button.active {
+        border: 1px solid var(--primary-line);
+        background: var(--primary-soft);
+        color: var(--accent-primary);
+      }
+
+      .insights {
+        display: grid;
+        gap: 12px;
+      }
+
+      .activity-panel {
+        min-height: 222px;
+        overflow: hidden;
+        padding: 14px;
+      }
+
+      .panel-head {
+        margin-bottom: 10px;
+      }
+
+      .panel-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .panel-icon,
+      .panel-count {
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--info-line);
+        background: var(--info-soft);
+        color: var(--accent-info);
+      }
+
+      .panel-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+      }
+
+      .panel-count {
+        min-width: 24px;
+        height: 24px;
+        border-radius: 999px;
+        padding: 0 7px;
+        font-size: 9px;
+        font-weight: 900;
+      }
+
+      .activity-list {
+        display: grid;
+      }
+
+      .activity-item {
+        min-height: 56px;
+        border-top: 1px solid var(--line);
+        color: var(--ink-soft);
+      }
+
+      .activity-item:first-child {
+        border-top: 0;
+      }
+
+      .activity-index {
+        display: grid;
+        width: 24px;
+        height: 24px;
+        flex: 0 0 auto;
+        place-items: center;
+        border: 1px solid var(--info-line);
+        border-radius: 50%;
+        background: var(--info-soft);
+        color: var(--accent-info);
+        font-size: 9px;
+        font-weight: 900;
+      }
+
+      .activity-copy {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .activity-copy strong {
+        display: block;
+        overflow: hidden;
+        font-size: 10px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .activity-copy span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 9px;
+      }
+
+      .arrow {
+        color: var(--muted);
+      }
+
+      .health-panel {
+        min-height: 152px;
+        padding: 14px;
+      }
+
+      .health-row {
+        margin-top: 12px;
+      }
+
+      .health-score {
+        color: var(--accent-success);
+        font-size: 26px;
+        font-weight: 900;
+      }
+
+      .health-meta {
+        flex: 1;
+      }
+
+      .health-meta p {
+        display: flex;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 9px;
+      }
+
+      .health-meta p + p {
+        margin-top: 7px;
+      }
+
+      .health-meta b {
+        color: var(--ink-soft);
+      }
+
+      @media (max-height: 850px) {
+        .activity-panel {
+          min-height: 190px;
+        }
+
+        .activity-item:nth-child(3) {
+          display: none;
+        }
+
+        .kb-card,
+        .create-card {
+          min-height: 232px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="shell">
+        <aside class="rail" aria-label="主导航">
+          <div class="logo">A</div>
+          <nav class="nav">
+            <button class="nav-item" aria-label="Ask" title="Ask">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></svg>
+            </button>
+            <button class="nav-item active" aria-label="Library" title="Library">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/></svg>
+            </button>
+            <button class="nav-item" aria-label="Search" title="Search">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            </button>
+            <button class="nav-item" aria-label="Imports" title="Imports">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            </button>
+            <button class="nav-item" aria-label="Settings" title="Settings">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1v.1h-4v-.1A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1-.4h-.1v-4H3A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1v-.1h4V3A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.22.37.6.72 1 .82h.1v4h-.1c-.4.1-.78.45-1 .82z"/></svg>
+            </button>
+          </nav>
+          <div class="rail-bottom">
+            <button class="theme-button" aria-label="切换浅色主题">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5 8.5 8.5 0 1 0 20.5 14.7z"/></svg>
+            </button>
+            <div class="user">访客</div>
+          </div>
+        </aside>
+
+        <div class="workspace">
+          <header class="hero">
+            <div class="kicker"><span class="kicker-dot"></span> KNOWLEDGE LIBRARY</div>
+            <h1>知识库</h1>
+            <p class="hero-description">组织、追踪并维护可问答的知识资产。</p>
+            <div class="watermark" aria-hidden="true">LIBRARY</div>
+          </header>
+
+          <main class="main">
+            <section class="library" aria-label="我的知识库">
+              <div class="toolbar">
+                <label class="search">
+                  <svg class="search-icon" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                  <input type="search" placeholder="搜索知识库" />
+                  <button class="search-button" aria-label="搜索">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+                  </button>
+                </label>
+                <div class="view-switch" aria-label="视图方式">
+                  <button class="view-button active" aria-label="网格视图">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                  </button>
+                  <button class="view-button" aria-label="列表视图">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="section-head">
+                <div>
+                  <h2>我的知识库</h2>
+                  <p>按可问答状态、文档数量和最近活动组织。</p>
+                </div>
+                <div class="filters" aria-label="筛选">
+                  <button class="filter active">全部</button>
+                  <button class="filter">可问答</button>
+                  <button class="filter">已归档</button>
+                  <button class="filter">最近更新</button>
+                </div>
+              </div>
+
+              <div class="card-grid">
+                <article class="kb-card selected">
+                  <div class="kb-top">
+                    <div class="glyph" style="--glyph-color: var(--accent-primary)"><span class="glyph-book"></span></div>
+                    <div class="kb-copy">
+                      <div class="title-row"><h3 class="kb-title">产品知识库</h3><span class="status">可问答</span></div>
+                      <p class="kb-description">产品说明、功能文档与版本记录</p>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="stats">
+                      <div class="stat"><strong>128</strong>文档</div>
+                      <div class="stat"><strong>3,842</strong>片段</div>
+                      <div class="stat"><strong>97%</strong>可检索</div>
+                    </div>
+                    <div class="ingestion">
+                      <div class="ingestion-head"><span><b>07-18 15:42</b><br/>最近导入</span><span class="success-pill">已完成</span></div>
+                      <div class="progress"><span></span></div>
+                    </div>
+                  </div>
+                  <div class="kb-footer"><span>更新于 12 分钟前</span><button class="open-button">打开知识库 <span>→</span></button></div>
+                </article>
+
+                <article class="kb-card">
+                  <div class="kb-top">
+                    <div class="glyph" style="--glyph-color: var(--accent-info)"><span class="glyph-book"></span></div>
+                    <div class="kb-copy">
+                      <div class="title-row"><h3 class="kb-title">客户支持</h3><span class="status">可问答</span></div>
+                      <p class="kb-description">常见问题、服务流程与问题排查</p>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="stats">
+                      <div class="stat"><strong>86</strong>文档</div>
+                      <div class="stat"><strong>2,116</strong>片段</div>
+                      <div class="stat"><strong>94%</strong>可检索</div>
+                    </div>
+                    <div class="ingestion">
+                      <div class="ingestion-head"><span><b>07-18 14:20</b><br/>最近导入</span><span class="success-pill">已完成</span></div>
+                      <div class="progress"><span style="width: 74%"></span></div>
+                    </div>
+                  </div>
+                  <div class="kb-footer"><span>更新于 1 小时前</span><button class="open-button">打开知识库 <span>→</span></button></div>
+                </article>
+
+                <article class="create-card">
+                  <div><div class="create-plus">+</div><strong>新建知识库</strong><small>创建新的知识范围</small></div>
+                </article>
+              </div>
+
+              <div class="pagination">
+                <span>共 5 个知识库 · 当前显示 2 个</span>
+                <div class="page-buttons"><button class="page-button">‹</button><button class="page-button active">1</button><button class="page-button">2</button><button class="page-button">›</button></div>
+              </div>
+            </section>
+
+            <aside class="insights" aria-label="活动洞察">
+              <section class="activity-panel">
+                <div class="panel-head"><div class="panel-title"><span class="panel-icon">↗</span>最近引用</div><span class="panel-count">3</span></div>
+                <div class="activity-list">
+                  <div class="activity-item"><span class="activity-index">01</span><div class="activity-copy"><strong>Product Strategy 2026.pdf</strong><span>产品知识库 · 12 分钟前</span></div><span class="arrow">→</span></div>
+                  <div class="activity-item"><span class="activity-index">02</span><div class="activity-copy"><strong>API Integration Guide.md</strong><span>开发文档 · 36 分钟前</span></div><span class="arrow">→</span></div>
+                  <div class="activity-item"><span class="activity-index">03</span><div class="activity-copy"><strong>Support Playbook.pdf</strong><span>客户支持 · 1 小时前</span></div><span class="arrow">→</span></div>
+                </div>
+              </section>
+
+              <section class="activity-panel">
+                <div class="panel-head"><div class="panel-title"><span class="panel-icon">?</span>最近问题</div><span class="panel-count">5</span></div>
+                <div class="activity-list">
+                  <div class="activity-item"><span class="activity-index">01</span><div class="activity-copy"><strong>当前版本支持哪些数据源？</strong><span>产品知识库 · 8 分钟前</span></div><span class="arrow">→</span></div>
+                  <div class="activity-item"><span class="activity-index">02</span><div class="activity-copy"><strong>如何处理索引构建失败？</strong><span>开发文档 · 27 分钟前</span></div><span class="arrow">→</span></div>
+                  <div class="activity-item"><span class="activity-index">03</span><div class="activity-copy"><strong>访客权限的默认范围是什么？</strong><span>客户支持 · 52 分钟前</span></div><span class="arrow">→</span></div>
+                </div>
+              </section>
+
+              <section class="health-panel">
+                <div class="panel-head"><div class="panel-title"><span class="panel-icon">✓</span>知识健康度</div><span class="status">正常</span></div>
+                <div class="health-row"><strong class="health-score">96</strong><div class="health-meta"><p><span>索引覆盖</span><b>98%</b></p><p><span>解析成功率</span><b>94%</b></p><p><span>最近同步</span><b>12 分钟前</b></p></div></div>
+              </section>
+            </aside>
+          </main>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

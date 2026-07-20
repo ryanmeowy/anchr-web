@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Anchr · 跨页面后台任务坞</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+        background: #111;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #111;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .prototype-frame {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #1b1b1b;
+      }
+
+      .prototype-caption {
+        position: fixed;
+        z-index: 1001;
+        top: 14px;
+        left: 76px;
+        display: flex;
+        min-height: 28px;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid rgba(236, 236, 236, 0.075);
+        border-radius: 999px;
+        padding: 0 11px;
+        background: rgba(23, 23, 23, 0.88);
+        color: rgba(233, 233, 233, 0.52);
+        font-size: 9px;
+        font-weight: 820;
+        letter-spacing: 0.08em;
+        pointer-events: none;
+        backdrop-filter: blur(16px);
+      }
+
+      .prototype-caption::before {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #9cc9f4;
+        content: "";
+      }
+
+      .prototype-controller {
+        position: fixed;
+        z-index: 1000;
+        bottom: 16px;
+        left: 76px;
+        display: grid;
+        width: min(250px, calc(100vw - 28px));
+        gap: 8px;
+        border: 1px solid rgba(236, 236, 236, 0.1);
+        border-radius: 14px;
+        padding: 9px;
+        background: rgba(23, 23, 23, 0.93);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
+        backdrop-filter: blur(20px);
+      }
+
+      .prototype-row {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 4px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .prototype-row::-webkit-scrollbar {
+        display: none;
+      }
+
+      .prototype-label {
+        min-width: 38px;
+        padding-left: 4px;
+        color: rgba(233, 233, 233, 0.38);
+        font-size: 8px;
+        font-weight: 850;
+        letter-spacing: 0.1em;
+      }
+
+      .prototype-button {
+        min-height: 29px;
+        flex: 0 0 auto;
+        border: 0;
+        border-radius: 999px;
+        padding: 0 10px;
+        background: transparent;
+        color: rgba(233, 233, 233, 0.58);
+        font-size: 10px;
+        font-weight: 760;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background-color 150ms ease, color 150ms ease;
+      }
+
+      .prototype-button:hover {
+        background: #292929;
+        color: #e9e9e9;
+      }
+
+      .prototype-button[aria-pressed="true"] {
+        background: #303030;
+        color: #fff;
+      }
+
+      .prototype-button:focus-visible {
+        outline: 2px solid #87ceeb;
+        outline-offset: 2px;
+      }
+
+      .prototype-hint {
+        padding: 0 4px 2px;
+        color: rgba(233, 233, 233, 0.4);
+        font-size: 9px;
+        font-weight: 640;
+        line-height: 1.5;
+      }
+
+      .prototype-toast {
+        position: fixed;
+        z-index: 1002;
+        top: 14px;
+        right: 18px;
+        display: none;
+        min-height: 34px;
+        align-items: center;
+        border: 1px solid rgba(236, 236, 236, 0.1);
+        border-radius: 999px;
+        padding: 0 12px;
+        background: #212121;
+        color: rgba(233, 233, 233, 0.7);
+        box-shadow: 0 14px 38px rgba(0, 0, 0, 0.34);
+        font-size: 10px;
+        font-weight: 720;
+      }
+
+      .prototype-toast[data-open="true"] {
+        display: flex;
+        animation: prototypeToastIn 180ms ease-out both;
+      }
+
+      @keyframes prototypeToastIn {
+        from { opacity: 0; transform: translateY(-5px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      @media (max-width: 720px) {
+        .prototype-caption {
+          top: 8px;
+          left: 10px;
+        }
+
+        .prototype-controller {
+          right: 8px;
+          bottom: 8px;
+          left: 8px;
+          width: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <iframe class="prototype-frame" title="Anchr 跨页面后台任务坞原型" src="/library"></iframe>
+
+    <div class="prototype-caption">PERSISTENT BACKGROUND TASK DOCK</div>
+    <div class="prototype-toast" data-open="false" role="status"></div>
+
+    <section class="prototype-controller" aria-label="原型控制器">
+      <div class="prototype-row" aria-label="页面选择">
+        <span class="prototype-label">页面</span>
+        <button class="prototype-button" type="button" data-page="ask" aria-pressed="false">Ask</button>
+        <button class="prototype-button" type="button" data-page="library" aria-pressed="true">Library</button>
+        <button class="prototype-button" type="button" data-page="search" aria-pressed="false">Search</button>
+        <button class="prototype-button" type="button" data-page="imports" aria-pressed="false">Imports</button>
+        <button class="prototype-button" type="button" data-page="settings" aria-pressed="false">Settings</button>
+      </div>
+
+      <div class="prototype-row" aria-label="任务模拟">
+        <span class="prototype-label">任务</span>
+        <button class="prototype-button" type="button" data-simulation="agent">Agent</button>
+        <button class="prototype-button" type="button" data-simulation="import">导入</button>
+        <button class="prototype-button" type="button" data-simulation="both">同时运行</button>
+        <button class="prototype-button" type="button" data-simulation="complete">全部完成</button>
+        <button class="prototype-button" type="button" data-simulation="error">导入失败</button>
+        <button class="prototype-button" type="button" data-simulation="reset">清空</button>
+      </div>
+
+      <div class="prototype-hint">默认同时运行两个任务。来源页内不显示自己的任务；切到其他页面后，任务才出现在底部。</div>
+    </section>
+
+    <script>
+      (() => {
+        const frame = document.querySelector(".prototype-frame");
+        const toast = document.querySelector(".prototype-toast");
+        const pageButtons = [...document.querySelectorAll("[data-page]")];
+        const simulationButtons = [...document.querySelectorAll("[data-simulation]")];
+        let activePage = "library";
+        let taskTimer = null;
+        let toastTimer = null;
+        let tasks = createTasks("both");
+
+        const pagePaths = {
+          ask: "/ask",
+          library: "/library",
+          search: "/search",
+          imports: "/imports",
+          settings: "/settings",
+        };
+
+        const icons = {
+          agent: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.8 11.5 7l4.2 1.5-4.2 1.5-1.5 4.2L8.5 10 4.3 8.5 8.5 7 10 2.8Z"/><path d="m14.8 13 .7 2 .7-2 2-.7-2-.7-.7-2-.7 2-2 .7 2 .7Z"/></svg>',
+          import: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.2v8.6M6.7 8.7 10 12l3.3-3.3M4 16h12"/></svg>',
+          check: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4.2 10.2 3.5 3.5 8.1-8"/></svg>',
+          alert: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.2 17 16H3L10 3.2Z"/><path d="M10 7.2v4.5M10 14.1v.1"/></svg>',
+          arrow: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 6l4 4-4 4"/></svg>',
+          close: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8"/></svg>',
+        };
+
+        const taskDockCss = `
+          #anchr-background-task-dock,
+          #anchr-background-task-dock * { box-sizing: border-box; }
+          #anchr-background-task-dock {
+            --task-surface: rgba(36,36,36,.97);
+            --task-hover: #292929;
+            --task-line: rgba(236,236,236,.11);
+            --task-line-strong: rgba(236,236,236,.17);
+            --task-text: #e9e9e9;
+            --task-soft: rgba(233,233,233,.7);
+            --task-muted: rgba(233,233,233,.46);
+            position: fixed;
+            z-index: 2147482000;
+            right: 50%;
+            bottom: 22px;
+            display: flex;
+            width: max-content;
+            max-width: min(680px, calc(100vw - 370px));
+            align-items: stretch;
+            justify-content: center;
+            gap: 8px;
+            transform: translateX(50%);
+            color: var(--task-text);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+            pointer-events: none;
+          }
+          #anchr-background-task-dock:empty { display: none; }
+          #anchr-background-task-dock svg {
+            width: 15px;
+            height: 15px;
+            fill: none;
+            stroke: currentColor;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-width: 1.7;
+          }
+          #anchr-background-task-dock .task-card {
+            position: relative;
+            display: grid;
+            width: min(316px, calc((100vw - 390px) / 2));
+            min-width: 258px;
+            min-height: 62px;
+            grid-template-columns: minmax(0,1fr) auto;
+            overflow: hidden;
+            border: 1px solid var(--task-line);
+            border-radius: 999px;
+            background: var(--task-surface);
+            box-shadow: 0 18px 46px rgba(0,0,0,.38);
+            backdrop-filter: blur(22px);
+            pointer-events: auto;
+            transition: border-color 180ms ease, background-color 180ms ease;
+          }
+          #anchr-background-task-dock .task-card[data-status="complete"] {
+            border-color: rgba(137,199,119,.28);
+          }
+          #anchr-background-task-dock .task-card[data-status="error"] { border-color: rgba(255,156,147,.24); }
+          #anchr-background-task-dock .task-open {
+            display: grid;
+            min-width: 0;
+            grid-template-columns: auto minmax(0,1fr) auto;
+            align-items: center;
+            gap: 10px;
+            border: 0;
+            padding: 8px 4px 8px 9px;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+          }
+          #anchr-background-task-dock .task-open:hover { background: rgba(255,255,255,.025); }
+          #anchr-background-task-dock .task-open:focus-visible {
+            outline: 2px solid #87ceeb;
+            outline-offset: -3px;
+          }
+          #anchr-background-task-dock .task-icon {
+            position: relative;
+            display: grid;
+            width: 38px;
+            height: 38px;
+            place-items: center;
+            border: 1px solid var(--task-line);
+            border-radius: 50%;
+            background: rgba(255,255,255,.035);
+            color: #9cc9f4;
+          }
+          #anchr-background-task-dock .task-card[data-kind="import"] .task-icon { color: #c3cc89; }
+          #anchr-background-task-dock .task-card[data-status="complete"] .task-icon { color: #89c777; }
+          #anchr-background-task-dock .task-card[data-status="error"] .task-icon { color: #ff9c93; }
+          #anchr-background-task-dock .task-copy { min-width: 0; }
+          #anchr-background-task-dock .task-copy small,
+          #anchr-background-task-dock .task-copy strong,
+          #anchr-background-task-dock .task-copy span {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+          #anchr-background-task-dock .task-copy small {
+            margin-bottom: 3px;
+            color: var(--task-muted);
+            font-size: 8px;
+            font-weight: 850;
+            letter-spacing: .09em;
+          }
+          #anchr-background-task-dock .task-copy strong {
+            color: var(--task-text);
+            font-size: 11px;
+            font-weight: 780;
+          }
+          #anchr-background-task-dock .task-copy span {
+            margin-top: 3px;
+            color: var(--task-muted);
+            font-size: 9px;
+            font-weight: 620;
+          }
+          #anchr-background-task-dock .task-meta {
+            display: flex;
+            min-width: 58px;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+            color: var(--task-soft);
+            font-size: 9px;
+            font-weight: 760;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+          }
+          #anchr-background-task-dock .task-meta svg { width: 13px; height: 13px; }
+          #anchr-background-task-dock .task-card[data-status="complete"] .task-meta { color: #89c777; }
+          #anchr-background-task-dock .task-card[data-status="error"] .task-meta { color: #ff9c93; }
+          #anchr-background-task-dock .task-dismiss {
+            display: grid;
+            width: 30px;
+            height: 30px;
+            align-self: center;
+            place-items: center;
+            border: 0;
+            border-radius: 50%;
+            margin-right: 6px;
+            background: transparent;
+            color: var(--task-muted);
+            cursor: pointer;
+          }
+          #anchr-background-task-dock .task-dismiss:hover { background: var(--task-hover); color: var(--task-text); }
+          #anchr-background-task-dock .task-dismiss:focus-visible { outline: 2px solid #87ceeb; outline-offset: 1px; }
+          #anchr-background-task-dock .task-progress {
+            position: absolute;
+            right: 22px;
+            bottom: 0;
+            left: 22px;
+            height: 2px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(255,255,255,.06);
+          }
+          #anchr-background-task-dock .task-progress-value {
+            width: var(--task-progress, 36%);
+            height: 100%;
+            border-radius: inherit;
+            background: #9cc9f4;
+            transition: width 500ms cubic-bezier(.19,1,.22,1);
+          }
+          #anchr-background-task-dock .task-card[data-kind="import"] .task-progress-value { background: #c3cc89; }
+          @media (max-width: 1080px) {
+            #anchr-background-task-dock { max-width: calc(100vw - 32px); }
+            #anchr-background-task-dock .task-card { width: min(300px, calc((100vw - 48px) / 2)); min-width: 230px; }
+            #anchr-background-task-dock .task-copy span { display: none; }
+          }
+          @media (max-width: 680px) {
+            #anchr-background-task-dock { right: 12px; bottom: 126px; left: 12px; display: grid; width: auto; max-width: none; transform: none; }
+            #anchr-background-task-dock .task-card { width: 100%; min-width: 0; }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            #anchr-background-task-dock .task-card,
+            #anchr-background-task-dock .task-progress-value { transition: none; }
+          }
+        `;
+
+        function createTasks(mode) {
+          const next = {};
+          if (mode === "agent" || mode === "both") {
+            next.agent = {
+              kind: "agent",
+              source: "ask",
+              status: "running",
+              phase: 0,
+              elapsedSeconds: 0,
+              dismissed: false,
+            };
+          }
+          if (mode === "import" || mode === "both") {
+            next.import = {
+              kind: "import",
+              source: "imports",
+              status: "running",
+              processed: 6,
+              total: 18,
+              progress: 33,
+              dismissed: false,
+            };
+          }
+          return next;
+        }
+
+        function taskPresentation(task) {
+          if (task.kind === "agent") {
+            if (task.status === "complete") {
+              return { eyebrow: "AGENT COMPLETED", title: "Agent 回答已完成", detail: "参数化记忆与非参数化记忆的关系", meta: "查看回答", icon: icons.check };
+            }
+            if (task.status === "error") {
+              return { eyebrow: "AGENT NEEDS ATTENTION", title: "Agent 回答生成失败", detail: "可以返回 Ask 重新尝试", meta: "查看原因", icon: icons.alert };
+            }
+            const phases = ["正在理解问题", "正在检索相关证据", "正在整理证据上下文", "正在生成回答", "正在校验引用来源"];
+            return { eyebrow: "AGENT WORKING", title: "Agent 正在处理回答", detail: phases[task.phase], meta: `已运行 ${task.elapsedSeconds} 秒`, icon: icons.agent };
+          }
+
+          if (task.status === "complete") {
+            return { eyebrow: "IMPORT COMPLETED", title: "18 个文件导入完成", detail: "RAG 研究论文 · 新增 3,240 个片段", meta: "查看任务", icon: icons.check };
+          }
+          if (task.status === "error") {
+            return { eyebrow: "IMPORT NEEDS ATTENTION", title: "2 个文件导入失败", detail: "其余 16 个文件已成功建立索引", meta: "查看原因", icon: icons.alert };
+          }
+          return { eyebrow: "IMPORT RUNNING", title: "正在导入 RAG 研究论文", detail: `${task.processed} / ${task.total} 个文件已处理`, meta: `${task.processed} / ${task.total}`, icon: icons.import };
+        }
+
+        function taskMarkup(task) {
+          const content = taskPresentation(task);
+          return `
+            <article class="task-card" data-kind="${task.kind}" data-status="${task.status}">
+              <button class="task-open" type="button" data-open-task="${task.kind}" aria-label="${content.title}，${content.meta}">
+                <span class="task-icon">${content.icon}</span>
+                <span class="task-copy">
+                  <small>${content.eyebrow}</small>
+                  <strong>${content.title}</strong>
+                  <span>${content.detail}</span>
+                </span>
+                <span class="task-meta">${content.meta}${task.status !== "running" ? icons.arrow : ""}</span>
+              </button>
+              <button class="task-dismiss" type="button" data-dismiss-task="${task.kind}" aria-label="关闭${task.kind === "agent" ? " Agent" : "导入"}任务提醒">${icons.close}</button>
+              ${task.status === "running" && task.kind === "import" ? `<span class="task-progress" aria-label="任务进度 ${task.progress}%"><span class="task-progress-value" style="--task-progress:${task.progress}%"></span></span>` : ""}
+            </article>`;
+        }
+
+        function installTaskDock() {
+          const doc = frame.contentDocument;
+          if (!doc?.body) return;
+
+          if (doc.__anchrBackgroundTaskCleanup) doc.__anchrBackgroundTaskCleanup();
+          doc.getElementById("anchr-background-task-dock")?.remove();
+          doc.getElementById("anchr-background-task-dock-style")?.remove();
+
+          const style = doc.createElement("style");
+          style.id = "anchr-background-task-dock-style";
+          style.textContent = taskDockCss;
+          doc.head.appendChild(style);
+
+          const root = doc.createElement("section");
+          root.id = "anchr-background-task-dock";
+          root.setAttribute("aria-label", "后台任务状态");
+          root.setAttribute("aria-live", "polite");
+          doc.body.appendChild(root);
+
+          const handleClick = (event) => {
+            const openButton = event.target.closest?.("[data-open-task]");
+            if (openButton) {
+              navigateToTask(openButton.dataset.openTask);
+              return;
+            }
+            const dismissButton = event.target.closest?.("[data-dismiss-task]");
+            if (!dismissButton) return;
+            const task = tasks[dismissButton.dataset.dismissTask];
+            if (task) task.dismissed = true;
+            renderTaskDock();
+          };
+
+          root.addEventListener("click", handleClick);
+          doc.__anchrBackgroundTaskRoot = root;
+          doc.__anchrBackgroundTaskCleanup = () => root.removeEventListener("click", handleClick);
+          renderTaskDock();
+        }
+
+        function renderTaskDock() {
+          const doc = frame.contentDocument;
+          const root = doc?.__anchrBackgroundTaskRoot;
+          if (!root) return;
+          const visibleTasks = Object.values(tasks).filter((task) => !task.dismissed && task.source !== activePage);
+          root.innerHTML = visibleTasks.map(taskMarkup).join("");
+        }
+
+        function startTimer() {
+          window.clearInterval(taskTimer);
+          taskTimer = window.setInterval(() => {
+            let completionMessage = "";
+            const agentTask = tasks.agent;
+            if (agentTask?.status === "running") {
+              agentTask.elapsedSeconds += 1;
+              agentTask.phase = Math.min(4, Math.floor(agentTask.elapsedSeconds / 3));
+              if (agentTask.elapsedSeconds >= 15) {
+                agentTask.status = "complete";
+                completionMessage = "Agent 回答已完成";
+              }
+            }
+
+            const importTask = tasks.import;
+            if (importTask?.status === "running") {
+              importTask.processed = Math.min(importTask.total, importTask.processed + 1);
+              importTask.progress = Math.round((importTask.processed / importTask.total) * 100);
+              if (importTask.processed >= importTask.total) {
+                importTask.status = "complete";
+                completionMessage = completionMessage ? "Agent 回答与导入任务均已完成" : "文件导入已完成";
+              }
+            }
+
+            renderTaskDock();
+            if (completionMessage) showToast(completionMessage);
+          }, 1100);
+        }
+
+        function navigateToPage(page, path = pagePaths[page]) {
+          activePage = page;
+          setPressed(pageButtons, activePage);
+          frame.src = path;
+        }
+
+        function navigateToTask(kind) {
+          const task = tasks[kind];
+          if (!task) return;
+          task.dismissed = true;
+          if (kind === "agent") {
+            showToast(task.status === "complete" ? "正在打开 Agent 回答" : "正在返回 Agent 执行现场");
+            navigateToPage("ask", "/ask?session=prototype-agent&turn=prototype-answer");
+            return;
+          }
+          showToast(task.status === "complete" ? "正在打开导入任务记录" : "正在返回导入任务");
+          navigateToPage("imports", "/imports?session=prototype-import");
+        }
+
+        function showToast(message) {
+          toast.textContent = `${message} · 原型`;
+          toast.setAttribute("data-open", "true");
+          window.clearTimeout(toastTimer);
+          toastTimer = window.setTimeout(() => toast.setAttribute("data-open", "false"), 2200);
+        }
+
+        function setPressed(buttons, active) {
+          buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.page === active)));
+        }
+
+        function simulate(mode) {
+          if (mode === "reset") {
+            tasks = {};
+            renderTaskDock();
+            showToast("已清空全部后台任务");
+            return;
+          }
+
+          if (mode === "complete") {
+            if (!Object.keys(tasks).length) tasks = createTasks("both");
+            Object.values(tasks).forEach((task) => {
+              task.status = "complete";
+              task.dismissed = false;
+              if (task.kind === "import") {
+                task.progress = 100;
+                task.processed = task.total;
+              } else {
+                task.elapsedSeconds = Math.max(task.elapsedSeconds, 15);
+              }
+            });
+            renderTaskDock();
+            showToast("Agent 回答与导入任务均已完成");
+            return;
+          }
+
+          if (mode === "error") {
+            if (!tasks.import) tasks.import = createTasks("import").import;
+            tasks.import.status = "error";
+            tasks.import.dismissed = false;
+            renderTaskDock();
+            showToast("导入任务需要处理");
+            return;
+          }
+
+          tasks = createTasks(mode);
+          if (mode === "agent") navigateToPage("ask");
+          else if (mode === "import") navigateToPage("imports");
+          else {
+            navigateToPage("library");
+            showToast("两个后台任务已同时启动");
+          }
+        }
+
+        pageButtons.forEach((button) => {
+          button.addEventListener("click", () => navigateToPage(button.dataset.page));
+        });
+
+        simulationButtons.forEach((button) => {
+          button.addEventListener("click", () => simulate(button.dataset.simulation));
+        });
+
+        frame.addEventListener("load", () => {
+          window.setTimeout(installTaskDock, 100);
+          window.setTimeout(() => {
+            const doc = frame.contentDocument;
+            if (doc?.body && !doc.getElementById("anchr-background-task-dock")) installTaskDock();
+          }, 900);
+        });
+
+        startTimer();
+      })();
+    </script>
+  </body>
+</html>

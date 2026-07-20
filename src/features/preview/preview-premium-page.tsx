@@ -8,7 +8,6 @@ import {
   ChevronRight,
   ChevronUp,
   Copy,
-  ExternalLink,
   FileText,
   Loader2,
   Maximize2,
@@ -802,21 +801,9 @@ function DocumentInfoSidebar({ asset }: { asset: AssetPreview }) {
             <InfoRow label="文件名称" value={asset.fileName} />
             <InfoRow label="文档标题" value={asset.title ?? "-"} />
             <InfoRow label="知识库" value={asset.kbName ?? asset.kbId} />
-            <InfoRow label="文件类型" value={asset.mimeType ?? asset.fileType} />
+            <InfoRow label="文件类型" value={asset.fileType || "-"} />
             <InfoRow label="文件大小" value={formatFileSize(asset.sizeBytes ?? undefined)} />
             <InfoRow label="入库时间" value={formatDateTime(asset.createdAt)} />
-          </div>
-        </SidePanel>
-
-        <SidePanel>
-          <PanelLabel label="VERSION" value={`V${asset.versionNo ?? 1}`} />
-          <div className="mt-3.5 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-3.5">
-            <strong className="block text-[clamp(34px,5vw,58px)] font-black leading-none text-[var(--premium-ink)]">
-              V{asset.versionNo ?? 1}
-            </strong>
-            <p className="mt-3 break-all font-mono text-[10px] leading-5 text-[var(--premium-muted)]">
-              ASSET / {asset.assetId}
-            </p>
           </div>
         </SidePanel>
 
@@ -834,10 +821,9 @@ function DocumentInfoSidebar({ asset }: { asset: AssetPreview }) {
               href={asset.previewUrl}
               target="_blank"
               rel="noreferrer"
-              className="preview-source-action mt-4 inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-full border px-3 text-[13px] font-black transition hover:-translate-y-0.5"
+              className="preview-source-action preview-open-original-action mt-4 inline-flex min-h-[42px] w-full items-center justify-center rounded-full border px-3 text-[13px] font-black transition"
             >
               打开原始文件
-              <ExternalLink size={16} />
             </a>
           ) : null}
         </SidePanel>
@@ -952,10 +938,9 @@ function CitationSidebar({
               href={item.previewUrl}
               target="_blank"
               rel="noreferrer"
-              className="preview-source-action preview-source-action-lift-only inline-flex min-h-[42px] items-center justify-center gap-2 rounded-full border px-3 text-[13px] font-black transition"
+              className="preview-source-action preview-open-original-action inline-flex min-h-[42px] items-center justify-center rounded-full border px-3 text-[13px] font-black transition"
             >
               打开原始文件
-              <ExternalLink size={16} />
             </a>
           ) : null}
           {from !== "library" && item.assetId ? (
