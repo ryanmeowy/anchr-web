@@ -1012,14 +1012,15 @@ export function AskPremiumPage() {
         ? { sessionId: targetSessionId, status: "RUNNING", steps: [] }
         : { steps: [] });
 
+      const requestId = makeMessageId("stream");
       const userMessage: ChatMessage = {
-        id: makeMessageId("user"),
+        id: `${requestId}-user`,
         role: "user",
         content: text,
         sessionId: targetSessionId,
       };
       const assistantMessage: ChatMessage = {
-        id: makeMessageId("assistant"),
+        id: `${requestId}-assistant`,
         role: "assistant",
         content: "",
         sessionId: targetSessionId,
@@ -1028,7 +1029,6 @@ export function AskPremiumPage() {
         executionMode: agentEnabled ? "AGENT" : "TRADITIONAL",
         pending: true,
       };
-      const requestId = makeMessageId("stream");
       const controller = new AbortController();
       const isCurrentStream = () => (
         streamRef.current?.requestId === requestId &&
@@ -2518,13 +2518,13 @@ function PremiumConversationItem({
         >
           {confirmingDelete ? (
             <>
-              <button type="button" onClick={onDelete} className="flex h-9 items-center gap-2 rounded-[6px] px-2 text-sm font-bold text-rose-600 hover:bg-rose-50"><Trash2 size={15} />确认删除</button>
+              <button type="button" onClick={onDelete} className="flex h-9 items-center gap-2 rounded-[6px] px-2 text-sm font-bold hover:bg-rose-50" style={{ color: "#DF836D" }}><Trash2 size={15} />确认删除</button>
               <button type="button" onClick={() => setConfirmingDelete(false)} className="ask-premium-conversation-delete-cancel h-9 rounded-[6px] px-2 text-left text-sm text-slate-700 hover:bg-slate-50">取消</button>
             </>
           ) : (
             <>
               <button type="button" onClick={onStartRename} className="ask-premium-conversation-rename-action flex h-9 items-center gap-2 rounded-[6px] px-2 text-sm text-slate-700 hover:bg-slate-50"><Edit3 size={15} />重命名</button>
-              <button type="button" onClick={() => setConfirmingDelete(true)} className="flex h-9 items-center gap-2 rounded-[6px] px-2 text-sm text-rose-600 hover:bg-rose-50"><Trash2 size={15} />删除</button>
+              <button type="button" onClick={() => setConfirmingDelete(true)} className="flex h-9 items-center gap-2 rounded-[6px] px-2 text-sm hover:bg-rose-50" style={{ color: "#DF836D" }}><Trash2 size={15} />删除</button>
             </>
           )}
         </div>,
