@@ -45,7 +45,7 @@ import {
   type AssetScope,
 } from "@/lib/asset-scope";
 import { formatNumber } from "@/lib/format";
-import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
+import { PREMIUM_THEME, type PremiumThemeMode } from "@/lib/premium-theme";
 import {
   clearPreviewRestoreState,
   normalizeSearchCitations,
@@ -181,8 +181,7 @@ export function SearchPremiumPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const answerScrollRef = useRef<HTMLDivElement>(null);
   const resultsScrollRef = useRef<HTMLDivElement>(null);
-  const [theme, setTheme] = useState<ThemeMode>("dark");
-  const [themeHydrated, setThemeHydrated] = useState(false);
+  const theme: ThemeMode = PREMIUM_THEME;
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [submittedFilters, setSubmittedFilters] = useState<SearchFiltersValue | null>(null);
@@ -199,21 +198,6 @@ export function SearchPremiumPage() {
   const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
   const [scopeNotice, setScopeNotice] = useState<string | null>(null);
   const [sessionStateHydrated, setSessionStateHydrated] = useState(false);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setTheme(getInitialPremiumTheme());
-      setThemeHydrated(true);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    if (themeHydrated) {
-      applyPremiumTheme(theme);
-    }
-  }, [theme, themeHydrated]);
 
   const kbsQuery = useQuery({
     queryKey: ["kbs"],

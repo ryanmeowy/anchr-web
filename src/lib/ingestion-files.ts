@@ -41,46 +41,71 @@ export async function uploadFilesToOss(
   formats: SupportedFormat[],
   onFileUploaded?: (completedCount: number, totalCount: number, fileName: string) => void,
 ): Promise<UploadIngestionItem[]> {
+  const batchId = createUploadBatchId();
+  const prepared: Array<{ file: File; item: UploadIngestionItem }> = [];
+  for (const [index, file] of files.entries()) {
+    const fileType = inferFileType(file.name, file.type, formats);
+    if (fileType === null) {
+      throw new Error(`${file.name} 格式不支持，请选择支持的文件格式。`);
+    }
+    prepared.push({
+      file,
+      item: {
+        fileName: file.name,
+        title: file.name,
+        fileType,
+        mimeType: file.type || undefined,
+        sizeBytes: file.size,
+        objectKey: buildObjectKey(token.prefix, batchId, index, file.name),
+        fileHash: await sha256(file),
+      },
+    });
+  }
+
+  const client = await createOssClient(token);
+  const uploadedObjectKeys: string[] = [];
+  try {
+    for (const [index, entry] of prepared.entries()) {
+      await client.put(entry.item.objectKey, entry.file, {
+        headers: { "Content-Type": entry.file.type || "application/octet-stream" },
+      });
+      uploadedObjectKeys.push(entry.item.objectKey);
+      onFileUploaded?.(index + 1, prepared.length, entry.file.name);
+    }
+  } catch (error) {
+    await deleteOssObjects(client, uploadedObjectKeys);
+    throw error;
+  }
+  return prepared.map((entry) => entry.item);
+}
+
+export async function deleteUploadedFilesFromOss(token: StsToken, items: UploadIngestionItem[]) {
+  if (items.length === 0) return;
+  const client = await createOssClient(token);
+  await deleteOssObjects(client, items.map((item) => item.objectKey));
+}
+
+async function createOssClient(token: StsToken) {
   const { default: OSS } = await import("ali-oss/dist/aliyun-oss-sdk.min.js");
-  const endpoint = normalizeEndpoint(token.endpoint);
-  const client = new OSS({
+  return new OSS({
     bucket: token.bucket,
-    endpoint,
+    endpoint: normalizeEndpoint(token.endpoint),
     accessKeyId: token.accessKeyId,
     accessKeySecret: token.accessKeySecret,
     stsToken: token.securityToken,
     secure: true,
   });
+}
 
-  const items: UploadIngestionItem[] = [];
-  for (const file of files) {
-    const objectKey = buildObjectKey(token.prefix, file.name);
-    await client.put(objectKey, file, {
-      headers: { "Content-Type": file.type || "application/octet-stream" },
-    });
-    const fileType = inferFileType(file.name, file.type, formats);
-    if (fileType === null) {
-      throw new Error(`${file.name} 格式不支持，请选择支持的文件格式。`);
-    }
-    items.push({
-      fileName: file.name,
-      title: file.name,
-      fileType,
-      mimeType: file.type || undefined,
-      sizeBytes: file.size,
-      objectKey,
-      fileHash: await sha256(file),
-    });
-    onFileUploaded?.(items.length, files.length, file.name);
-  }
-  return items;
+async function deleteOssObjects(client: { delete: (objectKey: string) => Promise<unknown> }, objectKeys: string[]) {
+  await Promise.allSettled(objectKeys.map((objectKey) => client.delete(objectKey)));
 }
 
 function normalizeEndpoint(rawEndpoint: string) {
   const trimmed = rawEndpoint.trim().replace(/\/+$/g, "");
   try {
     const url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
-    return `${url.protocol}//${url.hostname}`;
+    return `${url.protocol}//${url.host}`;
   } catch {
     return trimmed;
   }
@@ -93,11 +118,19 @@ function extensionOf(value: string) {
   return extension?.toLowerCase() ?? "";
 }
 
-function buildObjectKey(prefix: string, fileName: string) {
+function buildObjectKey(prefix: string, batchId: string, index: number, fileName: string) {
   const cleanPrefix = prefix.trim().replace(/^\/+|\/+$/g, "");
   const cleanName = fileName.trim().replace(/[\\/]+/g, "_");
-  const key = cleanName || "untitled";
-  return cleanPrefix ? `${cleanPrefix}/${key}` : key;
+  const key = `${String(index + 1).padStart(3, "0")}-${cleanName || "untitled"}`;
+  const batchKey = `${batchId}/${key}`;
+  return cleanPrefix ? `${cleanPrefix}/${batchKey}` : batchKey;
+}
+
+function createUploadBatchId() {
+  const uuid = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `upload-${uuid}`;
 }
 
 async function sha256(file: File) {

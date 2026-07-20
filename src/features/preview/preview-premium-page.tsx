@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   ChevronDown,
@@ -30,7 +30,7 @@ import {
   saveSearchAssetScope,
   type AssetScope,
 } from "@/lib/asset-scope";
-import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
+import { PREMIUM_THEME, type PremiumThemeMode } from "@/lib/premium-theme";
 import { formatDateTime, formatFileSize, statusText } from "@/lib/format";
 import { normalizeCitationLabel, parseAssetCitationIndex } from "@/lib/citation-reference";
 import {
@@ -95,8 +95,8 @@ function mergePreviewChunk(item: PreviewSegment | undefined, chunk: CitationChun
 export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [theme, setTheme] = useState<PremiumThemeMode>("dark");
-  const [themeHydrated, setThemeHydrated] = useState(false);
+  const queryClient = useQueryClient();
+  const theme: PremiumThemeMode = PREMIUM_THEME;
   const decodedSegmentId = useMemo(() => decodeURIComponent(segmentId), [segmentId]);
   const fromParam = searchParams.get("from");
   const from: PreviewSource = fromParam === "search"
@@ -125,34 +125,20 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
     [citationLabelFromUrl, context, decodedSegmentId, from],
   );
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setTheme(getInitialPremiumTheme());
-      setThemeHydrated(true);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    if (themeHydrated) {
-      applyPremiumTheme(theme);
-    }
-  }, [theme, themeHydrated]);
-
+  const previewQueryKey = ["preview", decodedSegmentId, from, contextKey, citationLabelFromUrl] as const;
   const previewQuery = useQuery({
-    queryKey: ["preview", decodedSegmentId, from, contextKey, citationLabelFromUrl],
+    queryKey: previewQueryKey,
     queryFn: () => apiClient.previewSegment(decodedSegmentId, previewRequest),
   });
 
   const refreshMutation = useMutation({
     mutationFn: () => apiClient.refreshSegmentPreview(decodedSegmentId, previewRequest),
-    onSuccess: () => {
-      void previewQuery.refetch();
+    onSuccess: (refreshedPreview) => {
+      queryClient.setQueryData(previewQueryKey, refreshedPreview);
     },
   });
 
-  const item = refreshMutation.data ?? previewQuery.data;
+  const item = previewQuery.data;
   const activeCitation = useMemo(() => {
     const citations = context?.citations ?? [];
     return citations.find((citation) => citation.chunks.some((chunk) => chunk.segmentId === activeSegmentId))
@@ -217,6 +203,7 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
       router.replace(sessionId ? `/ask?session=${encodeURIComponent(sessionId)}` : "/ask");
       return;
     }
+    if (from === "library") clearPreviewRestoreState("library");
     router.replace(from === "search" ? "/search" : "/library");
   };
 

@@ -29,7 +29,7 @@ import {
   getIndexCompatibilityIssue,
   hasIndexRebuildFailed,
 } from "@/lib/index-status";
-import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
+import { PREMIUM_THEME, type PremiumThemeMode } from "@/lib/premium-theme";
 import type {
   CapabilityConfig,
   CapabilityConfigUpdateRequest,
@@ -314,8 +314,7 @@ export function SettingsPremiumPage() {
   const isGuest = configuredAccessToken === "";
   const tokenResolved = configuredAccessToken !== null;
   const hasOwnerAccess = Boolean(configuredAccessToken);
-  const [theme, setTheme] = useState<PremiumThemeMode>("dark");
-  const [themeHydrated, setThemeHydrated] = useState(false);
+  const theme: PremiumThemeMode = PREMIUM_THEME;
   const [selection, setSelection] = useState<CapabilitySelection>({
     type: "GENERATION",
     configId: null,
@@ -324,20 +323,6 @@ export function SettingsPremiumPage() {
   const [rebuildDialog, setRebuildDialog] = useState<RebuildDialogState>(null);
   const [enablingTarget, setEnablingTarget] = useState<{ capability: CapabilityName; id: number } | null>(null);
   const [enableError, setEnableError] = useState<{ capability: CapabilityName; message: string } | null>(null);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setTheme(getInitialPremiumTheme());
-      setThemeHydrated(true);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    if (!themeHydrated) return;
-    applyPremiumTheme(theme);
-  }, [theme, themeHydrated]);
 
   useEffect(() => {
     if (!enableError) return;
@@ -352,20 +337,6 @@ export function SettingsPremiumPage() {
       queryClient.removeQueries({ queryKey: paramsQueryKey(option.value) });
     });
   }, [isGuest, queryClient]);
-
-  useEffect(() => {
-    if (!tokenResolved) return;
-    void queryClient.resetQueries({
-      queryKey: ["settings", "storage"],
-      exact: true,
-    });
-    CAPABILITY_OPTIONS.forEach((option) => {
-      void queryClient.resetQueries({
-        queryKey: capabilityQueryKey(option.value),
-        exact: true,
-      });
-    });
-  }, [configuredAccessToken, queryClient, tokenResolved]);
 
   const generationQuery = useQuery({
     queryKey: capabilityQueryKey("GENERATION"),
@@ -427,11 +398,6 @@ export function SettingsPremiumPage() {
         queryClient.invalidateQueries({ queryKey: capabilityQueryKey(affectedCapability) }),
       ),
     );
-    await Promise.all(
-      affectedCapabilities.map((affectedCapability) =>
-        queryClient.refetchQueries({ queryKey: capabilityQueryKey(affectedCapability), type: "active" }),
-      ),
-    );
   }, [queryClient]);
 
   const markCapabilityConfigEnabled = useCallback((capability: CapabilityName, id: number) => {
@@ -456,9 +422,7 @@ export function SettingsPremiumPage() {
     },
     onSuccess: (_, variables) => {
       markCapabilityConfigEnabled(variables.capability, variables.id);
-      void refreshCapabilityConfigs(variables.capability).finally(() => {
-        markCapabilityConfigEnabled(variables.capability, variables.id);
-      });
+      void refreshCapabilityConfigs(variables.capability);
     },
     onError: (error, variables) => {
       setEnableError({
@@ -1141,7 +1105,6 @@ function ConfigPanel({
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
       await queryClient.invalidateQueries({ queryKey: capabilityQueryKey(capability) });
-      await queryClient.refetchQueries({ queryKey: capabilityQueryKey(capability), type: "active" });
       onSaved(savedConfig);
       if (shouldPrepareRebuild) {
         onActiveEmbeddingUpdated();
@@ -1167,11 +1130,6 @@ function ConfigPanel({
       await Promise.all(
         affectedCapabilities.map((affectedCapability) =>
           queryClient.invalidateQueries({ queryKey: capabilityQueryKey(affectedCapability) }),
-        ),
-      );
-      await Promise.all(
-        affectedCapabilities.map((affectedCapability) =>
-          queryClient.refetchQueries({ queryKey: capabilityQueryKey(affectedCapability), type: "active" }),
         ),
       );
     },
@@ -1773,7 +1731,6 @@ function StoragePanel({
       setDeleteError(null);
       initialized.current = false;
       await queryClient.invalidateQueries({ queryKey: ["settings", "storage"] });
-      await queryClient.refetchQueries({ queryKey: ["settings", "storage"], type: "active" });
     },
     onError: (error) => {
       setDeleteError(getErrorMessage(error, "请稍后重试"));
@@ -1957,11 +1914,9 @@ function SecurityPanel() {
 
               const validation = await apiClient.validateAccessToken(normalizedToken);
               if (!validation.valid || validation.role === "GUEST") {
-                clearAccessToken();
                 throw new Error(validation.role === "GUEST" ? "访客 Token 不会保存" : "Token 无效");
               }
               if (validation.role !== "ADMIN" && validation.role !== "USER") {
-                clearAccessToken();
                 throw new Error("Token 角色无效");
               }
 
@@ -1970,10 +1925,9 @@ function SecurityPanel() {
               setSaveError(null);
               setSaved(true);
               window.setTimeout(() => setSaved(false), 2000);
-            } catch {
-              clearAccessToken();
+            } catch (error) {
               setSaved(false);
-              setSaveError(null);
+              setSaveError(getErrorMessage(error, "Token 校验失败，请稍后重试"));
             } finally {
               setSavingToken(false);
             }

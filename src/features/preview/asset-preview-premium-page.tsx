@@ -3,32 +3,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
-import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
+import { PREMIUM_THEME, type PremiumThemeMode } from "@/lib/premium-theme";
 import { apiClient } from "@/lib/api-client";
 import { AssetPreviewContent } from "./preview-premium-page";
 
 export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [theme, setTheme] = useState<PremiumThemeMode>("dark");
-  const [themeHydrated, setThemeHydrated] = useState(false);
+  const theme: PremiumThemeMode = PREMIUM_THEME;
   const decodedAssetId = useMemo(() => decodeURIComponent(assetId), [assetId]);
   const kbId = searchParams.get("kbId")?.trim() ?? "";
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setTheme(getInitialPremiumTheme());
-      setThemeHydrated(true);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    if (themeHydrated) applyPremiumTheme(theme);
-  }, [theme, themeHydrated]);
 
   const previewQuery = useQuery({
     queryKey: ["preview", "asset", kbId, decodedAssetId],

@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { Download, MessageSquare, Search, Settings, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -8,8 +9,10 @@ import {
   ACCESS_TOKEN_CHANGED_EVENT,
   apiClient,
   clearAccessToken,
+  getAccessTokenIdentityKey,
   getConfiguredAccessToken,
   getConfiguredAccessTokenRole,
+  isAuthenticationError,
   saveAccessToken,
 } from "@/lib/api-client";
 
@@ -67,27 +70,27 @@ export function PremiumRail() {
     user: { label: "用户", detail: "部分权限", tone: "user" },
   }[userStatus];
 
+  const tokenValidationQuery = useQuery({
+    queryKey: ["auth", "validate-token", getAccessTokenIdentityKey(configuredAccessToken)],
+    queryFn: () => apiClient.validateAccessToken(configuredAccessToken ?? ""),
+    enabled: Boolean(configuredAccessToken),
+    staleTime: 5 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
   useEffect(() => {
-    if (!configuredAccessToken) return;
-    let cancelled = false;
-
-    void apiClient.validateAccessToken(configuredAccessToken)
-      .then((result) => {
-        if (cancelled) return;
-        if (result.valid && result.role !== "GUEST") {
-          saveAccessToken(configuredAccessToken, result.role);
-          return;
-        }
+    const result = tokenValidationQuery.data;
+    if (result && configuredAccessToken) {
+      if (result.valid && result.role !== "GUEST") {
+        saveAccessToken(configuredAccessToken, result.role);
+      } else {
         clearAccessToken();
-      })
-      .catch(() => {
-        if (!cancelled) clearAccessToken();
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [configuredAccessToken]);
+      }
+      return;
+    }
+    if (isAuthenticationError(tokenValidationQuery.error)) clearAccessToken();
+  }, [configuredAccessToken, tokenValidationQuery.data, tokenValidationQuery.error]);
 
   return (
     <aside className="premium-rail flex items-center justify-between gap-3 overflow-x-auto border-b border-white/10 bg-[#111315] px-4 py-3 text-white lg:w-[60px] lg:flex-col lg:justify-start lg:overflow-visible lg:border-b-0 lg:border-r lg:px-2 lg:py-3" aria-label="主导航">

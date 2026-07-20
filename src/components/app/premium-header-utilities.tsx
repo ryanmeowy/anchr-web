@@ -24,6 +24,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 import { apiClient } from "@/lib/api-client";
@@ -48,6 +49,10 @@ type PremiumHeaderUtilitiesProps = {
 
 const MENU_WIDTH = 304;
 
+function subscribeClientReady() {
+  return () => undefined;
+}
+
 export function PremiumHeaderUtilities({
   theme,
   onCreateKnowledgeBase,
@@ -63,11 +68,9 @@ export function PremiumHeaderUtilities({
     recent: null,
     status: null,
   });
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeClientReady, () => true, () => false);
   const [openMenu, setOpenMenu] = useState<UtilityMenu | null>(null);
   const [popoverPosition, setPopoverPosition] = useState({ top: 60, left: 12 });
-
-  useEffect(() => setMounted(true), []);
 
   const recentQuestionsQuery = useQuery({
     queryKey: ["header-utilities", "recent-questions"],
@@ -102,7 +105,7 @@ export function PremiumHeaderUtilities({
   });
 
   const knowledgeBasesQuery = useQuery({
-    queryKey: ["header-utilities", "knowledge-bases"],
+    queryKey: ["kbs"],
     queryFn: () => apiClient.listKnowledgeBases(1, 50),
     staleTime: 30_000,
     refetchInterval: 30_000,
@@ -113,7 +116,7 @@ export function PremiumHeaderUtilities({
     [knowledgeBasesQuery.data?.items],
   );
   const knowledgeBaseStatsQuery = useQuery({
-    queryKey: ["header-utilities", "knowledge-base-stats", knowledgeBaseIds.join("|")],
+    queryKey: ["kbs", "stats", knowledgeBaseIds.join("|")],
     queryFn: () => apiClient.getKnowledgeBaseStats(knowledgeBaseIds),
     enabled: knowledgeBaseIds.length > 0,
     staleTime: 30_000,

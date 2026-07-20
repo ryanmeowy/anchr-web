@@ -1254,7 +1254,13 @@ a {
   max-width: 100%;
 }
 
+.ask-premium-user-message.has-top-gap {
+  padding-top: 16px;
+}
+
 .ask-premium-message-scroll {
+  overflow-anchor: none;
+  overscroll-behavior-y: contain;
   scrollbar-color: color-mix(in srgb, var(--premium-ink) 10%, transparent) transparent;
   scrollbar-width: thin;
 }

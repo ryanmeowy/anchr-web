@@ -72,11 +72,11 @@
   text-align: left;
 }
 
-.open:hover {
+.openButton:hover {
   background: rgba(255, 255, 255, 0.025);
 }
 
-.open:focus-visible,
+.openButton:focus-visible,
 .dismiss:focus-visible {
   outline: 2px solid #9cc9f4;
   outline-offset: -3px;

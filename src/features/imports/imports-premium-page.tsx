@@ -26,10 +26,15 @@ import { useBackgroundTasks } from "@/components/app/background-task-provider";
 import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
 import { ActionErrorNotice } from "@/components/shared/action-error-notice";
 import { FileTypeIcon, normalizeExtension } from "@/components/shared/file-type-icon";
-import { apiClient, isAccessDeniedError } from "@/lib/api-client";
-import { formatDateTime, formatFileSize, formatNumber, statusText } from "@/lib/format";
-import { buildDisplayNameFromUrl, inferFileType, uploadFilesToOss } from "@/lib/ingestion-files";
-import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
+import { ApiError, apiClient, isAccessDeniedError } from "@/lib/api-client";
+import { formatFileSize, formatNumber, statusText } from "@/lib/format";
+import {
+  buildDisplayNameFromUrl,
+  deleteUploadedFilesFromOss,
+  inferFileType,
+  uploadFilesToOss,
+} from "@/lib/ingestion-files";
+import { PREMIUM_THEME, type PremiumThemeMode } from "@/lib/premium-theme";
 import type {
   IngestionTask,
   IngestionTaskItem,
@@ -65,8 +70,7 @@ export function ImportsPremiumPage({
     updateImportTask,
   } = useBackgroundTasks();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [theme, setTheme] = useState<ThemeMode>("dark");
-  const [themeHydrated, setThemeHydrated] = useState(false);
+  const theme: ThemeMode = PREMIUM_THEME;
   const [kbId, setKbId] = useState(initialKbId);
   const [sourceUrl, setSourceUrl] = useState("");
   const [urlTitle, setUrlTitle] = useState("");
@@ -76,21 +80,6 @@ export function ImportsPremiumPage({
   const [currentTaskId, setCurrentTaskId] = useState(initialTaskId);
   const [files, setFiles] = useState<File[]>([]);
   const [permissionNotice, setPermissionNotice] = useState<{ title: string; message: string } | null>(null);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setTheme(getInitialPremiumTheme());
-      setThemeHydrated(true);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    if (!themeHydrated) return;
-
-    applyPremiumTheme(theme);
-  }, [theme, themeHydrated]);
 
   const kbsQuery = useQuery({
     queryKey: ["kbs"],
@@ -200,10 +189,17 @@ export function ImportsPremiumPage({
         });
       });
 
-      return apiClient.createUploadIngestionTask(selectedKbId, {
-        dedupeStrategy: effectiveDedupeStrategy,
-        items,
-      });
+      try {
+        return await apiClient.createUploadIngestionTask(selectedKbId, {
+          dedupeStrategy: effectiveDedupeStrategy,
+          items,
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+          await deleteUploadedFilesFromOss(stsToken, items);
+        }
+        throw error;
+      }
     },
     onSuccess: async (task, { trackingId }) => {
       resolveImportTask(trackingId, task);
@@ -1083,13 +1079,12 @@ function validateUploadInput(files: File[], maxFileSizeBytes?: number, maxFilesP
   if (files.length === 0) {
     throw new Error("请选择至少一个文件。");
   }
-  if (!maxFilesPerBatch || !maxFileSizeBytes) {
-    return;
-  }
-  if (files.length > maxFilesPerBatch) {
+  if (maxFilesPerBatch && files.length > maxFilesPerBatch) {
     throw new Error(`单批最多上传 ${maxFilesPerBatch} 个文件。`);
   }
-  const oversize = files.find((file) => file.size > maxFileSizeBytes);
+  const oversize = maxFileSizeBytes
+    ? files.find((file) => file.size > maxFileSizeBytes)
+    : undefined;
   if (oversize) {
     throw new Error(`${oversize.name} 超过单文件大小上限 ${formatFileSize(maxFileSizeBytes)}。`);
   }
