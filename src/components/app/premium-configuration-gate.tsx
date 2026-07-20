@@ -4,13 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { apiClient } from "@/lib/api-client";
-import {
-  applyPremiumTheme,
-  getInitialPremiumTheme,
-  type PremiumThemeMode,
-} from "@/lib/premium-theme";
+import { PREMIUM_THEME, type PremiumThemeMode } from "@/lib/premium-theme";
 import {
   getIndexCompatibilityIssue,
   hasIndexRebuildFailed,
@@ -24,74 +20,6 @@ const PREMIUM_CONFIGURATION_FONT_STACK =
 
 const SETTINGS_BUTTON_CLASS =
   "imports-primary-action inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#111315] px-3.5 text-[12px] font-black text-white shadow-[0_16px_38px_rgba(17,19,21,0.2)] transition hover:-translate-y-0.5 dark:bg-white dark:text-[#111315]";
-
-export type PremiumConfigurationStatus = {
-  label: string;
-  missing: boolean;
-};
-
-export function usePremiumModelConfiguration({ requireGeneration = true }: { requireGeneration?: boolean } = {}) {
-  const embeddingQuery = useQuery({
-    queryKey: ["settings", "embedding"],
-    queryFn: () => apiClient.getCapabilityConfig("EMBEDDING"),
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
-  const multiEmbeddingQuery = useQuery({
-    queryKey: ["settings", "multi-embedding"],
-    queryFn: () => apiClient.getCapabilityConfig("MULTI_EMBEDDING"),
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
-  const generationQuery = useQuery({
-    queryKey: ["settings", "generation"],
-    queryFn: () => apiClient.getCapabilityConfig("GENERATION"),
-    enabled: requireGeneration,
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
-
-  const indexStatusQuery = useQuery({
-    queryKey: ["index", "status"],
-    queryFn: () => apiClient.getIndexStatus(),
-    retry: false,
-    refetchInterval: (query) => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
-      const status = query.state.data?.status;
-      if (status === "INITIALIZING" || status === "REBUILDING") return 2000;
-      if (status === "NOT_READY") return 5000;
-      return 30000;
-    },
-  });
-
-  const hasEmbedding =
-    (embeddingQuery.isSuccess && (embeddingQuery.data?.length ?? 0) > 0) ||
-    (multiEmbeddingQuery.isSuccess && (multiEmbeddingQuery.data?.length ?? 0) > 0);
-  const hasGeneration =
-    !requireGeneration ||
-    (generationQuery.isSuccess && (generationQuery.data?.length ?? 0) > 0);
-
-  const indexStatus = indexStatusQuery.data;
-  const indexReady = isIndexFullyOperational(indexStatus);
-
-  return {
-    isLoading:
-      embeddingQuery.isPending ||
-      embeddingQuery.isFetching ||
-      multiEmbeddingQuery.isPending ||
-      multiEmbeddingQuery.isFetching ||
-      (requireGeneration && (generationQuery.isPending || generationQuery.isFetching)) ||
-      indexStatusQuery.isPending,
-    missing: {
-      embedding: !hasEmbedding,
-      generation: !hasGeneration,
-    },
-    indexReady,
-    indexStatus,
-    indexStatusError: indexStatusQuery.isError,
-    refetchIndexStatus: indexStatusQuery.refetch,
-  };
-}
 
 export function usePremiumSystemConfiguration() {
   const storageQuery = useQuery({
@@ -173,17 +101,8 @@ export function usePremiumSystemConfiguration() {
  * in the protected page cannot start business requests while access is blocked.
  */
 export function PremiumSystemConfigurationBoundary({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<PremiumThemeMode>("dark");
+  const theme = PREMIUM_THEME;
   const systemConfig = usePremiumSystemConfiguration();
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const nextTheme = getInitialPremiumTheme();
-      setTheme(nextTheme);
-      applyPremiumTheme(nextTheme);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
 
   if (systemConfig.isLoading) {
     return (
@@ -307,36 +226,6 @@ export function PremiumConfigurationLoading({
       title={title}
       description={description}
     />
-  );
-}
-
-export function PremiumConfigurationGate({
-  theme,
-  description,
-  statuses,
-}: {
-  theme: PremiumThemeMode;
-  description: string;
-  statuses: PremiumConfigurationStatus[];
-}) {
-  return (
-    <div className={`premium-configuration-state-page grid min-h-0 min-w-0 place-items-center px-4 ${statePageBackgroundClass(theme)}`}>
-      <div className="premium-surface w-full max-w-[460px] rounded-[8px] p-6 text-center">
-        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] bg-[#fde98a]/[0.14] text-[#fde98a]">
-          <TriangleAlert size={24} strokeWidth={1.8} />
-        </div>
-        <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">需要先完成配置</h1>
-        <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">{description}</p>
-        <div className="mx-auto mt-4 grid max-w-[280px] gap-2 text-left text-sm font-bold text-[var(--premium-ink-soft)]">
-          {statuses.map((status) => (
-            <PremiumConfigurationStatusRow key={status.label} {...status} />
-          ))}
-        </div>
-        <Link href="/settings" className={`${SETTINGS_BUTTON_CLASS} mt-5 justify-center`}>
-          <span className="text-white dark:text-[#111315]">前往设置</span>
-        </Link>
-      </div>
-    </div>
   );
 }
 
@@ -486,17 +375,6 @@ function PremiumConfigurationState({
         <h1 className="text-xl font-black leading-none text-[var(--premium-ink)]">{title}</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--premium-ink-soft)]">{description}</p>
       </div>
-    </div>
-  );
-}
-
-function PremiumConfigurationStatusRow({ label, missing }: PremiumConfigurationStatus) {
-  return (
-    <div className="flex items-center justify-between rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] px-3 py-2">
-      <span>{label}</span>
-      <span className={missing ? "text-rose-600 dark:text-rose-300" : "text-emerald-700 dark:text-emerald-300"}>
-        {missing ? "未配置" : "已就绪"}
-      </span>
     </div>
   );
 }

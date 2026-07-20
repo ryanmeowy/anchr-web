@@ -22,7 +22,7 @@ import { apiClient } from "@/lib/api-client";
 import type { AgentRunActivity, AgentRunSummary, IngestionTask } from "@/lib/types";
 import styles from "./background-task-provider.module.css";
 
-const STORAGE_KEY = "anchr.background-tasks.v1";
+const STORAGE_KEY_PREFIX = "anchr.background-tasks.v2";
 const MAX_STORED_TASKS = 20;
 const COMPLETED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -39,6 +39,7 @@ export type TrackedAgentTask = {
   status: BackgroundTaskStatus;
   currentStage?: string;
   startedAt: number;
+  updatedAt: number;
   finishedAt?: number;
   dismissed?: boolean;
 };
@@ -58,6 +59,7 @@ export type TrackedImportTask = {
   uploadedCount?: number;
   currentStage?: string;
   startedAt: number;
+  updatedAt: number;
   finishedAt?: number;
   dismissed?: boolean;
 };
@@ -80,38 +82,47 @@ type BackgroundTaskContextValue = {
 
 const BackgroundTaskContext = createContext<BackgroundTaskContextValue | null>(null);
 
-export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
+export function BackgroundTaskProvider({
+  children,
+  authIdentityKey,
+}: {
+  children: ReactNode;
+  authIdentityKey: string | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+  const storageKey = authIdentityKey === null ? null : `${STORAGE_KEY_PREFIX}.${authIdentityKey}`;
   const [tasks, setTasks] = useState<TrackedBackgroundTask[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
+    if (!storageKey) return;
     const frame = window.requestAnimationFrame(() => {
-      setTasks(readStoredTasks());
+      setTasks(readStoredTasks(storageKey));
       setHydrated(true);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !storageKey) return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trimStoredTasks(tasks)));
+      window.localStorage.setItem(storageKey, JSON.stringify(trimStoredTasks(tasks)));
     } catch {
       // Task tracking remains available for the current tab when storage is unavailable.
     }
-  }, [hydrated, tasks]);
+  }, [hydrated, storageKey, tasks]);
 
   useEffect(() => {
+    if (!storageKey) return;
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== STORAGE_KEY) return;
-      setTasks(readStoredTasks());
+      if (event.key !== storageKey) return;
+      setTasks((previous) => mergeStoredTasks(previous, readStoredTasks(storageKey)));
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-  }, []);
+  }, [storageKey]);
 
   const registerAgentTask = useCallback<BackgroundTaskContextValue["registerAgentTask"]>((task) => {
     setTasks((previous) => upsertTask(previous, {
@@ -119,6 +130,7 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
       kind: "agent",
       status: "running",
       currentStage: "ANALYZING",
+      updatedAt: Date.now(),
       dismissed: false,
     }));
   }, []);
@@ -135,6 +147,7 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
         ...task,
         ...definedPatch,
         status: nextStatus,
+        updatedAt: Date.now(),
         finishedAt: justFinished
           ? definedPatch.finishedAt ?? Date.now()
           : definedPatch.finishedAt ?? task.finishedAt,
@@ -158,6 +171,7 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
       progress: 0,
       uploadedCount: 0,
       currentStage: "UPLOADING",
+      updatedAt: Date.now(),
       dismissed: false,
     }));
   }, []);
@@ -171,6 +185,7 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
         ...task,
         ...patch,
         status: nextStatus,
+        updatedAt: Date.now(),
         finishedAt: justFinished ? patch.finishedAt ?? Date.now() : patch.finishedAt ?? task.finishedAt,
         dismissed: justFinished ? false : patch.dismissed ?? task.dismissed,
       };
@@ -180,12 +195,14 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
   const resolveImportTask = useCallback<BackgroundTaskContextValue["resolveImportTask"]>((id, snapshot) => {
     const resolved = trackedImportTask(snapshot);
     setTasks((previous) => previous.map((task) => task.kind === "import" && task.id === id
-      ? { ...resolved, id, startedAt: task.startedAt, dismissed: task.dismissed }
+      ? { ...resolved, id, startedAt: task.startedAt, updatedAt: Date.now(), dismissed: task.dismissed }
       : task));
   }, []);
 
   const dismissTask = useCallback((id: string) => {
-    setTasks((previous) => previous.map((task) => task.id === id ? { ...task, dismissed: true } : task));
+    setTasks((previous) => previous.map((task) => task.id === id
+      ? { ...task, dismissed: true, updatedAt: Date.now() }
+      : task));
   }, []);
 
   useEffect(() => {
@@ -201,20 +218,24 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    void recover();
-    const timer = window.setInterval(recover, 10_000);
+    let timer: number | undefined;
+    const scheduleRecover = async () => {
+      await recover();
+      if (!cancelled) timer = window.setTimeout(scheduleRecover, 10_000);
+    };
+    void scheduleRecover();
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer) window.clearTimeout(timer);
     };
   }, [hydrated]);
 
   const activeTaskKey = useMemo(() => JSON.stringify(tasks
-    .filter((task) => task.status === "running")
+    .filter((task) => task.status === "running" && !isSourceRoute(pathname, task.kind))
     .map((task) => task.kind === "agent"
       ? { id: task.id, kind: task.kind, runId: task.runId }
       : { id: task.id, kind: task.kind, kbId: task.kbId, taskId: task.taskId })
-    .sort((a, b) => a.id.localeCompare(b.id))), [tasks]);
+    .sort((a, b) => a.id.localeCompare(b.id))), [pathname, tasks]);
 
   useEffect(() => {
     if (!hydrated || activeTaskKey === "[]") return;
@@ -247,11 +268,15 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
       }, previous));
     };
 
-    void poll();
-    const timer = window.setInterval(poll, 2_500);
+    let timer: number | undefined;
+    const schedulePoll = async () => {
+      await poll();
+      if (!cancelled) timer = window.setTimeout(schedulePoll, 2_500);
+    };
+    void schedulePoll();
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer) window.clearTimeout(timer);
     };
   }, [activeTaskKey, hydrated]);
 
@@ -271,16 +296,10 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer);
   }, [visibleCards]);
 
-  const openTask = useCallback((task: TrackedBackgroundTask) => {
-    if (task.kind === "agent") {
-      const params = new URLSearchParams({ session: task.sessionId });
-      if (task.turnId) params.set("turn", task.turnId);
-      router.push(`/ask?${params.toString()}`);
-    } else {
-      const params = new URLSearchParams({ kbId: task.kbId });
-      if (task.taskId) params.set("taskId", task.taskId);
-      router.push(`/imports?${params.toString()}`);
-    }
+  const openImportTask = useCallback((task: TrackedImportTask) => {
+    const params = new URLSearchParams({ kbId: task.kbId });
+    if (task.taskId) params.set("taskId", task.taskId);
+    router.push(`/imports?${params.toString()}`);
     if (task.status !== "running") dismissTask(task.id);
   }, [dismissTask, router]);
 
@@ -314,7 +333,7 @@ export function BackgroundTaskProvider({ children }: { children: ReactNode }) {
             task={task}
             count={count}
             now={now}
-            onOpen={() => openTask(task)}
+            onOpen={task.kind === "import" ? () => openImportTask(task) : undefined}
             onDismiss={() => dismissTask(task.id)}
           />
         ))}
@@ -339,7 +358,7 @@ function BackgroundTaskCard({
   task: TrackedBackgroundTask;
   count: number;
   now: number;
-  onOpen: () => void;
+  onOpen?: () => void;
   onDismiss: () => void;
 }) {
   const presentation = taskPresentation(task, count, now);
@@ -348,21 +367,30 @@ function BackgroundTaskCard({
     : task.status === "error" || task.status === "cancelled"
       ? AlertTriangle
       : task.kind === "agent" ? Sparkles : Download;
+  const content = (
+    <>
+      <span className={styles.icon}><Icon size={15} aria-hidden="true" /></span>
+      <span className={styles.copy}>
+        <small>{presentation.eyebrow}</small>
+        <strong>{presentation.title}</strong>
+        <span>{presentation.detail}</span>
+      </span>
+      <span className={styles.meta}>
+        {presentation.meta}
+        {onOpen && task.status !== "running" ? <ArrowRight size={13} aria-hidden="true" /> : null}
+      </span>
+    </>
+  );
 
   return (
     <article className={styles.card} data-kind={task.kind} data-status={task.status}>
-      <button className={styles.open} type="button" onClick={onOpen} aria-label={`${presentation.title}，${presentation.meta}`}>
-        <span className={styles.icon}><Icon size={15} aria-hidden="true" /></span>
-        <span className={styles.copy}>
-          <small>{presentation.eyebrow}</small>
-          <strong>{presentation.title}</strong>
-          <span>{presentation.detail}</span>
-        </span>
-        <span className={styles.meta}>
-          {presentation.meta}
-          {task.status !== "running" ? <ArrowRight size={13} aria-hidden="true" /> : null}
-        </span>
-      </button>
+      {onOpen ? (
+        <button className={`${styles.open} ${styles.openButton}`} type="button" onClick={onOpen} aria-label={`${presentation.title}，${presentation.meta}`}>
+          {content}
+        </button>
+      ) : (
+        <div className={styles.open}>{content}</div>
+      )}
       <button className={styles.dismiss} type="button" onClick={onDismiss} aria-label="关闭任务提醒">
         <X size={14} aria-hidden="true" />
       </button>
@@ -381,13 +409,13 @@ function taskPresentation(task: TrackedBackgroundTask, count: number, now: numbe
       eyebrow: "AGENT COMPLETED",
       title: count > 1 ? `${count} 个 Agent 回答已完成` : "Agent 回答已完成",
       detail: task.label,
-      meta: "查看回答",
+      meta: "已完成",
     };
     if (task.status === "error" || task.status === "cancelled") return {
       eyebrow: "AGENT NEEDS ATTENTION",
       title: task.status === "cancelled" ? "Agent 回答已取消" : "Agent 回答生成失败",
       detail: task.label,
-      meta: "查看详情",
+      meta: task.status === "cancelled" ? "已取消" : "生成失败",
     };
     return {
       eyebrow: "AGENT WORKING",
@@ -443,6 +471,7 @@ function trackedImportTask(task: IngestionTask): TrackedImportTask {
     progress: Math.round(Math.max(0, Math.min(itemProgress, 100))),
     currentStage: latestImportStage(task),
     startedAt: parseTaskTime(task.createdAt) ?? Date.now(),
+    updatedAt: Date.now(),
     finishedAt: parseTaskTime(task.finishedAt),
     dismissed: false,
   };
@@ -461,6 +490,7 @@ function applyAgentActivity(tasks: TrackedBackgroundTask[], id: string, activity
       turnId: activity.turnId ?? task.turnId,
       runId: activity.runId,
       status,
+      updatedAt: Date.now(),
       currentStage: latestStep?.taskStage ?? latestStep?.decision ?? latestStep?.type ?? activity.currentStep ?? task.currentStage,
       startedAt: activity.startedAt ?? task.startedAt,
       finishedAt: activity.finishedAt ?? (justFinished ? Date.now() : task.finishedAt),
@@ -479,6 +509,7 @@ function applyImportSnapshot(tasks: TrackedBackgroundTask[], id: string, snapsho
       ...next,
       id: task.id,
       startedAt: task.startedAt,
+      updatedAt: Date.now(),
       dismissed: justFinished ? false : task.dismissed,
     };
   });
@@ -500,6 +531,7 @@ function mergeRecoverableRuns(tasks: TrackedBackgroundTask[], runs: AgentRunSumm
         currentStage: run.currentStep ?? placeholder.currentStage,
         startedAt: run.startedAt || placeholder.startedAt,
         status: agentStatus(run.status),
+        updatedAt: Date.now(),
       } : task);
     }
     if (agentStatus(run.status) !== "running") return next;
@@ -513,6 +545,7 @@ function mergeRecoverableRuns(tasks: TrackedBackgroundTask[], runs: AgentRunSumm
       status: agentStatus(run.status),
       currentStage: run.currentStep ?? undefined,
       startedAt: run.startedAt || Date.now(),
+      updatedAt: Date.now(),
       dismissed: false,
     });
   }, tasks);
@@ -534,23 +567,40 @@ function trimStoredTasks(tasks: TrackedBackgroundTask[]) {
     .slice(0, MAX_STORED_TASKS);
 }
 
-function readStoredTasks(): TrackedBackgroundTask[] {
+function readStoredTasks(storageKey: string): TrackedBackgroundTask[] {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "[]") as unknown;
+    const parsed = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as unknown;
     if (!Array.isArray(parsed)) return [];
     return trimStoredTasks(parsed.filter(isTrackedTask).map((task) => {
-      if (task.kind !== "import" || task.status !== "running" || task.taskId) return task;
-      return {
+      const migratedTask = {
         ...task,
+        updatedAt: task.updatedAt ?? task.finishedAt ?? task.startedAt,
+      };
+      if (migratedTask.kind !== "import" || migratedTask.status !== "running" || migratedTask.taskId) {
+        return migratedTask;
+      }
+      return {
+        ...migratedTask,
         status: "error" as const,
         currentStage: "上传已因页面刷新中断",
         finishedAt: Date.now(),
+        updatedAt: Date.now(),
         dismissed: false,
       };
     }));
   } catch {
     return [];
   }
+}
+
+function mergeStoredTasks(current: TrackedBackgroundTask[], incoming: TrackedBackgroundTask[]) {
+  const byId = new Map(current.map((task) => [task.id, task]));
+  incoming.forEach((task) => {
+    const existing = byId.get(task.id);
+    if (!existing || task.updatedAt > existing.updatedAt) byId.set(task.id, task);
+  });
+  const merged = trimStoredTasks(Array.from(byId.values()));
+  return JSON.stringify(merged) === JSON.stringify(current) ? current : merged;
 }
 
 function isTrackedTask(value: unknown): value is TrackedBackgroundTask {

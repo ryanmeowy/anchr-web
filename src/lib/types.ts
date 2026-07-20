@@ -636,40 +636,13 @@ export type ConversationTurn = {
   turnId: string;
   sessionId: string;
   query?: string;
-  rewrittenQuery?: string;
   answer?: string;
-  kbScope?: string[];
   assetScope?: string[];
   answerMode?: string;
   answerStatus?: ConversationAnswerStatus;
   answerFallbackReason?: string | null;
   intent?: ConversationIntent;
   citations?: ConversationCitation[];
-  resultCards?: Array<{
-    assetId?: string;
-    assetType?: string;
-    fileName?: string;
-    title?: string;
-    score?: number;
-    hitCount?: number;
-    primaryHit?: {
-      segmentId?: string;
-      snippet?: string;
-      score?: number;
-      pageNo?: number;
-      anchor?: unknown;
-      hitType?: string;
-    };
-    additionalHits?: Array<{
-      segmentId?: string;
-      snippet?: string;
-      score?: number;
-      pageNo?: number;
-      anchor?: unknown;
-      hitType?: string;
-    }>;
-  }>;
-  createdAt?: number;
   executionMode?: ConversationExecutionMode;
   agentRunId?: string;
   workflowVersion?: string;
@@ -679,6 +652,8 @@ export type ConversationTurn = {
 export type ConversationMessageList = {
   sessionId: string;
   turns: ConversationTurn[];
+  hasMore: boolean;
+  nextBeforeTurnId?: string | null;
 };
 
 export type ConversationMessage = {
@@ -702,7 +677,7 @@ export type ConversationMessage = {
   agentTask?: AgentTask;
 };
 
-export type ConversationAnswerStatus = "ANSWERED" | "PROCESSING" | "CANCELLED" | "NO_EVIDENCE" | "MODEL_FALLBACK";
+export type ConversationAnswerStatus = "ANSWERED" | "PROCESSING" | "CANCELLED" | "NO_EVIDENCE" | "MODEL_FALLBACK" | "GENERATION_FAILED";
 export type ConversationExecutionMode = "TRADITIONAL" | "AGENT" | "AGENT_FALLBACK";
 export type AgentTaskStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 export type AgentTask = {
@@ -765,6 +740,17 @@ export type AgentRunActivity = {
   startedAt?: number | null;
   finishedAt?: number | null;
   steps: AgentActivityStep[];
+};
+export type AgentRuntimeSnapshot = {
+  runId: string;
+  sessionId?: string;
+  turnId?: string;
+  status: AgentActivityStatus;
+  version: number;
+  updatedAt: number;
+  activity: AgentRunActivity;
+  message?: ConversationMessage | null;
+  agentTask?: AgentTask | null;
 };
 export type AgentRunSummary = {
   runId: string;

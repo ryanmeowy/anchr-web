@@ -16,6 +16,7 @@ const SEARCH_SCOPE_KEY = "anchr.asset-scope.search";
 const ASK_SCOPE_PREFIX = "anchr.asset-scope.ask.";
 const ASSET_NAME_CACHE_KEY = "anchr.asset-scope.names";
 const HANDOFF_KEY = "anchr.asset-scope.handoff";
+const MAX_ASSET_NAME_CACHE_SIZE = 200;
 
 export function readSearchAssetScope() {
   return readStoredScope(SEARCH_SCOPE_KEY);
@@ -68,9 +69,23 @@ export function rememberAssetScopes(scopes: Array<Partial<AssetScope> | null | u
   });
 
   if (changed) {
+    const assetIds = Object.keys(cache);
+    assetIds.slice(0, Math.max(0, assetIds.length - MAX_ASSET_NAME_CACHE_SIZE)).forEach((assetId) => {
+      delete cache[assetId];
+    });
     window.localStorage.setItem(ASSET_NAME_CACHE_KEY, JSON.stringify(cache));
   }
   return cache;
+}
+
+export function clearAllAssetScopeState() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(SEARCH_SCOPE_KEY);
+  window.localStorage.removeItem(ASSET_NAME_CACHE_KEY);
+  Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
+    .filter((key): key is string => Boolean(key?.startsWith(ASK_SCOPE_PREFIX)))
+    .forEach((key) => window.localStorage.removeItem(key));
+  window.sessionStorage.removeItem(HANDOFF_KEY);
 }
 
 export function readAssetNameCache() {

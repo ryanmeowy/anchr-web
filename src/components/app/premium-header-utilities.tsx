@@ -10,10 +10,11 @@ import {
   Download,
   FileSearch,
   History,
+  Link2,
   Loader2,
+  MessageCircle,
   MessageSquare,
   Plus,
-  Quote,
   Search,
   type LucideIcon,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 import { apiClient } from "@/lib/api-client";
@@ -48,6 +50,10 @@ type PremiumHeaderUtilitiesProps = {
 
 const MENU_WIDTH = 304;
 
+function subscribeClientReady() {
+  return () => undefined;
+}
+
 export function PremiumHeaderUtilities({
   theme,
   onCreateKnowledgeBase,
@@ -63,11 +69,9 @@ export function PremiumHeaderUtilities({
     recent: null,
     status: null,
   });
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeClientReady, () => true, () => false);
   const [openMenu, setOpenMenu] = useState<UtilityMenu | null>(null);
   const [popoverPosition, setPopoverPosition] = useState({ top: 60, left: 12 });
-
-  useEffect(() => setMounted(true), []);
 
   const recentQuestionsQuery = useQuery({
     queryKey: ["header-utilities", "recent-questions"],
@@ -102,7 +106,7 @@ export function PremiumHeaderUtilities({
   });
 
   const knowledgeBasesQuery = useQuery({
-    queryKey: ["header-utilities", "knowledge-bases"],
+    queryKey: ["kbs"],
     queryFn: () => apiClient.listKnowledgeBases(1, 50),
     staleTime: 30_000,
     refetchInterval: 30_000,
@@ -113,7 +117,7 @@ export function PremiumHeaderUtilities({
     [knowledgeBasesQuery.data?.items],
   );
   const knowledgeBaseStatsQuery = useQuery({
-    queryKey: ["header-utilities", "knowledge-base-stats", knowledgeBaseIds.join("|")],
+    queryKey: ["kbs", "stats", knowledgeBaseIds.join("|")],
     queryFn: () => apiClient.getKnowledgeBaseStats(knowledgeBaseIds),
     enabled: knowledgeBaseIds.length > 0,
     staleTime: 30_000,
@@ -297,7 +301,8 @@ export function PremiumHeaderUtilities({
               work.kind === "question" ? (
                 <UtilityAction
                   key={work.id}
-                  icon={MessageSquare}
+                  icon={MessageCircle}
+                  iconStrokeWidth={2.4}
                   title={work.item.question?.trim() || "未命名问题"}
                   detail={`${work.item.knowledgeBaseNames?.join(" / ") || "Ask"} · ${formatRelativeTime(work.timestamp)}`}
                   meta="继续"
@@ -306,7 +311,8 @@ export function PremiumHeaderUtilities({
               ) : (
                 <UtilityAction
                   key={work.id}
-                  icon={Quote}
+                  icon={Link2}
+                  iconStrokeWidth={2.2}
                   title={work.item.fileName?.trim() || work.item.title?.trim() || "引用来源"}
                   detail={`${work.item.kbName || "Preview"} · ${formatRelativeTime(work.timestamp)}`}
                   meta="预览"
@@ -431,12 +437,14 @@ function UtilityPopoverHeader({ eyebrow, title }: { eyebrow: string; title: stri
 
 function UtilityAction({
   icon: Icon,
+  iconStrokeWidth = 1.8,
   title,
   detail,
   meta,
   onClick,
 }: {
   icon: UtilityIcon;
+  iconStrokeWidth?: number;
   title: string;
   detail: string;
   meta?: string;
@@ -444,7 +452,7 @@ function UtilityAction({
 }) {
   return (
     <button type="button" className="premium-header-utility-action" onClick={onClick}>
-      <span className="premium-header-utility-action-icon"><Icon size={15} strokeWidth={1.8} aria-hidden="true" /></span>
+      <span className="premium-header-utility-action-icon"><Icon size={15} strokeWidth={iconStrokeWidth} aria-hidden="true" /></span>
       <span className="premium-header-utility-action-copy">
         <strong>{title}</strong>
         <span>{detail}</span>

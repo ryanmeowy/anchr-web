@@ -7,7 +7,10 @@
     "dev": "next dev -H 127.0.0.1 -p 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:ask-recovery": "node --test src/features/ask/traditional-turn-recovery.test.mjs",
+    "test:ask-activity": "node --test src/features/ask/agent-activity-model.test.mjs",
+    "test:ask-preview-return": "node --test src/features/ask/preview-message-restore.test.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.13",

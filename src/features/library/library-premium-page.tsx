@@ -46,7 +46,7 @@ import { FileTypeIcon, fileTypeColor } from "@/components/shared/file-type-icon"
 import { apiClient, isAccessDeniedError } from "@/lib/api-client";
 import { saveAskAssetScope, saveAssetScopeHandoff, type AssetScope } from "@/lib/asset-scope";
 import { formatDateTime, formatFileSize, formatNumber, statusText } from "@/lib/format";
-import { applyPremiumTheme, getInitialPremiumTheme, type PremiumThemeMode } from "@/lib/premium-theme";
+import { PREMIUM_THEME, type PremiumThemeMode } from "@/lib/premium-theme";
 import { saveRecentCitationPreviewNavigation } from "@/lib/preview-context";
 import type { KnowledgeBase, KnowledgeBaseDocument, KnowledgeBaseHealth, KnowledgeBaseStats, RecentCitation, RecentQuestion } from "@/lib/types";
 
@@ -73,8 +73,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const [theme, setTheme] = useState<ThemeMode>("dark");
-  const [themeHydrated, setThemeHydrated] = useState(false);
+  const theme: ThemeMode = PREMIUM_THEME;
   const [keyword, setKeyword] = useState("");
   const [filterMode, setFilterMode] = useState<FilterMode>("answerable");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -92,31 +91,19 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
 
   useEffect(() => {
     if (searchParams.get("create") !== "1" || openedKnowledgeBaseId) return;
-    setEditingKbId(null);
-    setArchiveConfirmKbId(null);
-    setFilterMode("answerable");
-    setShowCreateForm(true);
-    router.replace("/library", { scroll: false });
+    const frame = window.requestAnimationFrame(() => {
+      setEditingKbId(null);
+      setArchiveConfirmKbId(null);
+      setFilterMode("answerable");
+      setShowCreateForm(true);
+      router.replace("/library", { scroll: false });
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [openedKnowledgeBaseId, router, searchParams]);
   const [archivingKbId, setArchivingKbId] = useState<string | null>(null);
   const deferredKeyword = useDeferredValue(keyword);
   const trimmedKeyword = deferredKeyword.trim();
   const pageSize = viewMode === "list" ? KB_LIST_PAGE_SIZE : KB_GRID_PAGE_SIZE;
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setTheme(getInitialPremiumTheme());
-      setThemeHydrated(true);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    if (!themeHydrated) return;
-
-    applyPremiumTheme(theme);
-  }, [theme, themeHydrated]);
 
   const queryBody = useMemo(() => {
     const body: {

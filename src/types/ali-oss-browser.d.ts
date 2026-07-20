@@ -16,5 +16,7 @@ declare module "ali-oss/dist/aliyun-oss-sdk.min.js" {
       file: File,
       options: { headers: Record<string, string> },
     ): Promise<unknown>;
+
+    delete(objectKey: string): Promise<unknown>;
   }
 }

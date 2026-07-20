@@ -13,12 +13,14 @@ import type {
   ConversationIntentType,
   ConversationMessageList,
   AgentRunActivity,
+  AgentRuntimeSnapshot,
   AgentRunSummary,
   AgentTask,
   ConversationCapabilities,
   ConversationExecutionMode,
   ConversationSession,
   ConversationSessionList,
+  ConversationTurn,
   ElasticsearchHealth,
   IngestionCapability,
   IngestionTaskList,
@@ -65,7 +67,7 @@ type RequestOptions = {
 };
 
 type StreamMessageCallbacks = {
-  onTrace?: (event: { stage?: string; message?: string; runId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown> }) => void;
+  onTrace?: (event: { stage?: string; message?: string; runId?: string; turnId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown> }) => void;
   onDelta?: (text: string) => void;
   onAnswerReset?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
@@ -115,6 +117,12 @@ export function isAccessDeniedError(error: unknown) {
   );
 }
 
+export function isAuthenticationError(error: unknown) {
+  if (!(error instanceof ApiError)) return false;
+  const code = error.code?.toUpperCase();
+  return error.status === 401 || code === "AUTH_TOKEN_INVALID";
+}
+
 function isBuiltinGuestAccessToken(token: string) {
   return token.trim() === DEFAULT_GUEST_ACCESS_TOKEN;
 }
@@ -140,6 +148,19 @@ export function getConfiguredAccessTokenRole(): AccessTokenRole {
   if (typeof window === "undefined") return "GUEST";
   const role = window.localStorage.getItem(TOKEN_ROLE_KEY)?.trim().toUpperCase();
   return role === "ADMIN" || role === "USER" ? role : "GUEST";
+}
+
+export function getAccessTokenIdentityKey(token: string | null | undefined) {
+  const identity = token?.trim() || "guest";
+  let primaryHash = 2166136261;
+  let secondaryHash = 5381;
+  for (let index = 0; index < identity.length; index += 1) {
+    const character = identity.charCodeAt(index);
+    primaryHash ^= character;
+    primaryHash = Math.imul(primaryHash, 16777619);
+    secondaryHash = Math.imul(secondaryHash, 33) ^ character;
+  }
+  return `${(primaryHash >>> 0).toString(36)}-${(secondaryHash >>> 0).toString(36)}`;
 }
 
 export function saveAccessToken(token: string, role: AccessTokenRole) {
@@ -248,7 +269,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
 
   if (eventName === "trace") {
     callbacks.onTrace?.(parseSseJson<{
-      stage?: string; message?: string; runId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string;
+      stage?: string; message?: string; runId?: string; turnId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string;
       intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown>;
     }>(data) ?? {});
     return;
@@ -288,8 +309,19 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 }
 
-function consumeSseChunk(chunk: string, callbacks: StreamMessageCallbacks) {
+function consumeSseChunk(
+  chunk: string,
+  callbacks: StreamMessageCallbacks,
+) {
   const { eventName, data } = parseSseChunk(chunk);
+  if (eventName === "delta") {
+    callbacks.onDelta?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+    return eventName;
+  }
+  if (eventName === "answer_reset") {
+    callbacks.onAnswerReset?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+    return eventName;
+  }
   dispatchSseEvent(eventName, data, callbacks);
   return eventName;
 }
@@ -313,34 +345,26 @@ function parseSseChunk(chunk: string) {
   return { eventName, data: dataLines.join("\n") };
 }
 
-function consumeAgentTaskSseChunk(chunk: string, callbacks: AgentTaskStreamCallbacks) {
+function consumeAgentTaskSseChunk(
+  chunk: string,
+  callbacks: AgentTaskStreamCallbacks,
+) {
   const { eventName, data } = parseSseChunk(chunk);
   if (!data) return eventName;
   if (eventName === "task") {
     const task = parseSseJson<AgentTask>(data);
-    if (task) callbacks.onTask?.(task);
+    if (task) {
+      callbacks.onTask?.(task);
+    }
   }
-  if (eventName === "delta") callbacks.onDelta?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
-  if (eventName === "answer_reset") callbacks.onAnswerReset?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+  if (eventName === "delta") {
+    callbacks.onDelta?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+  }
+  if (eventName === "answer_reset") {
+    callbacks.onAnswerReset?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+  }
   if (eventName === "done") callbacks.onDone?.();
   return eventName;
-}
-
-async function yieldAgentActivityFrame() {
-  if (typeof window === "undefined") return;
-  await new Promise<void>((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-    const timer = window.setTimeout(finish, 32);
-    window.requestAnimationFrame(() => {
-      window.clearTimeout(timer);
-      finish();
-    });
-  });
 }
 
 export const apiClient = {
@@ -474,7 +498,6 @@ export const apiClient = {
       buffer = chunks.pop() ?? "";
       for (let index = 0; index < chunks.length; index += 1) {
         consumeAgentTaskSseChunk(chunks[index], callbacks);
-        if (index < chunks.length - 1) await yieldAgentActivityFrame();
       }
       if (done) break;
     }
@@ -486,6 +509,11 @@ export const apiClient = {
     request<boolean>(`/api/v1/agent/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }),
   getAgentRunActivity: (runId: string, signal?: AbortSignal) =>
     request<AgentRunActivity>(`/api/v1/agent/runs/${encodeURIComponent(runId)}/activity`, { signal }),
+  getAgentRuntimeSnapshot: (runId: string, afterVersion = 0, signal?: AbortSignal) =>
+    request<AgentRuntimeSnapshot | null>(
+      `/api/v1/agent/runs/${encodeURIComponent(runId)}/runtime-snapshot?afterVersion=${Math.max(0, afterVersion)}`,
+      { signal },
+    ),
   listRecoverableAgentRuns: (limit = 10) =>
     request<AgentRunSummary[]>(`/api/v1/agent/runs/recoverable?limit=${limit}`),
   createConversation: (body: { title?: string | null; kbIds?: string[]; assetIdList?: string[] }) =>
@@ -502,6 +530,11 @@ export const apiClient = {
     request<null>(`/api/v1/conversations/${encodeURIComponent(sessionId)}`, {
       method: "DELETE",
     }),
+  getConversationMessage: (sessionId: string, turnId: string, signal?: AbortSignal) =>
+    request<ConversationTurn>(
+      `/api/v1/conversations/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(turnId)}`,
+      { signal },
+    ),
   sendMessageStream: async (
     sessionId: string,
     body: ConversationMessageRequest,
@@ -534,7 +567,6 @@ export const apiClient = {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-
     while (true) {
       const { done, value } = await reader.read();
       buffer += decoder.decode(value, { stream: !done });
@@ -542,12 +574,7 @@ export const apiClient = {
       buffer = chunks.pop() ?? "";
 
       for (let index = 0; index < chunks.length; index += 1) {
-        const eventName = consumeSseChunk(chunks[index], callbacks);
-        // React batches callbacks handled in one network read. Yield between visual updates so
-        // activity and answer text remain progressive when a proxy coalesces SSE events.
-        if (["trace", "delta", "answer_reset"].includes(eventName) && index < chunks.length - 1) {
-          await yieldAgentActivityFrame();
-        }
+        consumeSseChunk(chunks[index], callbacks);
       }
 
       if (done) {
@@ -559,9 +586,15 @@ export const apiClient = {
       consumeSseChunk(buffer, callbacks);
     }
   },
-  listConversationMessages: (sessionId: string, limit = 100, beforeTurnId?: string | null) =>
+  listConversationMessages: (
+    sessionId: string,
+    limit = 100,
+    beforeTurnId?: string | null,
+    signal?: AbortSignal,
+  ) =>
     request<ConversationMessageList>(
       `/api/v1/conversations/${encodeURIComponent(sessionId)}/messages?${conversationMessagesQuery(limit, beforeTurnId)}`,
+      { signal },
     ),
   previewSegment: (segmentId: string, body: PreviewRequest = {}) =>
     request<PreviewSegment>(`/api/v1/preview/segments/${normalizePreviewSegmentId(segmentId)}`, {
@@ -583,8 +616,8 @@ export const apiClient = {
     request<CapabilityConfig>(`/api/v1/settings/${encodeURIComponent(capability)}`, { method: "POST", body }),
   updateCapabilityConfig: (capability: string, id: number, body: CapabilityConfigUpdateRequest) =>
     request<CapabilityConfig>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}`, { method: "PATCH", body }),
- selectCapabilityConfig: (capability: string, id: number) =>
-   request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}/select`, { method: "PUT" }),
+  selectCapabilityConfig: (capability: string, id: number) =>
+    request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}/select`, { method: "PUT" }),
   getIndexStatus: () =>
     request<SegmentIndexStatus>("/api/v1/index/status"),
   retryIndexCreate: () =>
