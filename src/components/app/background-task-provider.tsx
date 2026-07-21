@@ -15,11 +15,16 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { apiClient } from "@/lib/api-client";
 import type { AgentRunActivity, AgentRunSummary, IngestionTask } from "@/lib/types";
+import {
+  recoverableAgentTaskKey,
+  shouldDiscoverRecoverableAgentRuns,
+} from "./background-task-recovery";
 import styles from "./background-task-provider.module.css";
 
 const STORAGE_KEY_PREFIX = "anchr.background-tasks.v2";
@@ -95,6 +100,8 @@ export function BackgroundTaskProvider({
   const [tasks, setTasks] = useState<TrackedBackgroundTask[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const initialRecoveryCompleteRef = useRef(false);
+  const initialRecoveryAttemptsRef = useRef(0);
 
   useEffect(() => {
     if (!storageKey) return;
@@ -205,30 +212,66 @@ export function BackgroundTaskProvider({
       : task));
   }, []);
 
+  const unresolvedAgentTaskKey = useMemo(() => recoverableAgentTaskKey(tasks), [tasks]);
+
   useEffect(() => {
     if (!hydrated) return;
+    // Discovery repairs refresh/disconnect gaps before an Agent placeholder has a
+    // runId. Once a run is known, its dedicated activity/runtime channels own
+    // liveness and this global endpoint must not remain a second polling loop.
     let cancelled = false;
+    let timer: number | undefined;
+    let inFlight: Promise<boolean> | null = null;
 
-    const recover = async () => {
-      try {
-        const runs = await apiClient.listRecoverableAgentRuns(20);
-        if (!cancelled) setTasks((previous) => mergeRecoverableRuns(previous, runs));
-      } catch {
-        // Local registrations continue polling even when recovery discovery is temporarily unavailable.
-      }
+    const recover = () => {
+      if (inFlight) return inFlight;
+      if (!initialRecoveryCompleteRef.current) initialRecoveryAttemptsRef.current += 1;
+      inFlight = apiClient.listRecoverableAgentRuns(20)
+        .then((runs) => {
+          if (cancelled) return false;
+          setTasks((previous) => mergeRecoverableRuns(previous, runs));
+          initialRecoveryCompleteRef.current = true;
+          return true;
+        })
+        .catch(() => false)
+        .finally(() => {
+          inFlight = null;
+        });
+      return inFlight;
     };
 
-    let timer: number | undefined;
     const scheduleRecover = async () => {
       await recover();
-      if (!cancelled) timer = window.setTimeout(scheduleRecover, 10_000);
+      if (cancelled || !shouldDiscoverRecoverableAgentRuns(
+        initialRecoveryCompleteRef.current,
+        initialRecoveryAttemptsRef.current,
+        unresolvedAgentTaskKey,
+      )) return;
+      timer = window.setTimeout(scheduleRecover, 10_000);
     };
-    void scheduleRecover();
+    const recoverOnWake = () => {
+      if (document.visibilityState === "hidden") return;
+      void recover();
+    };
+
+    if (shouldDiscoverRecoverableAgentRuns(
+      initialRecoveryCompleteRef.current,
+      initialRecoveryAttemptsRef.current,
+      unresolvedAgentTaskKey,
+    )) {
+      void scheduleRecover();
+    }
+    window.addEventListener("focus", recoverOnWake);
+    window.addEventListener("online", recoverOnWake);
+    document.addEventListener("visibilitychange", recoverOnWake);
     return () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
+      window.removeEventListener("focus", recoverOnWake);
+      window.removeEventListener("online", recoverOnWake);
+      document.removeEventListener("visibilitychange", recoverOnWake);
     };
-  }, [hydrated]);
+  }, [hydrated, unresolvedAgentTaskKey]);
 
   const activeTaskKey = useMemo(() => JSON.stringify(tasks
     .filter((task) => task.status === "running" && !isSourceRoute(pathname, task.kind))
