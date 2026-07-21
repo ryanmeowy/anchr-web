@@ -177,7 +177,7 @@ export function PremiumHeaderUtilities({
       } as const;
     }
     if (warning) return { tone: "warning", label: "需要处理" } as const;
-    return { tone: "ready", label: "系统就绪" } as const;
+    return { tone: "ready", label: "系统状态" } as const;
   }, [elasticsearchQuery.data, elasticsearchQuery.isError, elasticsearchQuery.isPending, indexStatusQuery.data, indexStatusQuery.isError, indexStatusQuery.isPending, ingestionSummary.running]);
 
   const updatePopoverPosition = useCallback((menu: UtilityMenu) => {

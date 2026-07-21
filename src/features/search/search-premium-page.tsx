@@ -16,7 +16,6 @@ import {
   RefreshCcw,
   ScanSearch,
   Search,
-  Sparkles,
   SlidersHorizontal,
   TextCursorInput,
   X,
@@ -940,7 +939,7 @@ const AnswerPanel = function AnswerPanel({
   ref: React.Ref<HTMLDivElement>;
 }) {
   if (!answer?.trim()) {
-    return <InlineState title="暂无可生成的回答" description="可以切换到来源模式查看已召回的文档片段。" />;
+    return <SearchPrompt>暂无可生成的回答</SearchPrompt>;
   }
 
   const visibleCitations = citations.slice(0, 3);
@@ -997,7 +996,10 @@ const ResultsPanel = function ResultsPanel({
   ref: React.Ref<HTMLDivElement>;
 }) {
   return (
-    <div ref={ref} className="search-premium-results-scroll">
+    <div
+      ref={ref}
+      className={`search-premium-results-scroll${results.length ? "" : " is-empty"}`}
+    >
       {results.length ? (
         <div className="search-premium-result-groups">
           <div className="search-premium-result-group">
@@ -1025,7 +1027,7 @@ const ResultsPanel = function ResultsPanel({
           ) : null}
         </div>
       ) : (
-        <InlineState title="没有找到相关来源" description="尝试调整关键词或减少筛选条件。" />
+        <SearchPrompt>没有找到相关来源</SearchPrompt>
       )}
     </div>
   );
@@ -1988,53 +1990,30 @@ function SearchErrorState({ message }: { message: string }) {
 
 function SearchBlankState({ activeTab }: { activeTab: SearchTab }) {
   return (
-    <div className="grid min-h-0 place-items-center px-6 text-center">
-      <p className="max-w-[460px] text-sm font-medium leading-7 text-[var(--premium-muted)]">
-        {activeTab === "answer" ? (
-          <>
-            在已选择的知识范围内搜索。回答将基于命中证据生成
-            <br />
-            并保留可追溯引用。
-          </>
-        ) : (
-          <>
-            在已选择的知识范围内搜索。命中来源将按相关性展示
-            <br />
-            并保留可定位的文档片段。
-          </>
-        )}
-      </p>
-    </div>
+    <SearchPrompt>
+      {activeTab === "answer" ? (
+        <>
+          在已选择的知识范围内搜索。回答将基于命中证据生成
+          <br />
+          并保留可追溯引用。
+        </>
+      ) : (
+        <>
+          在已选择的知识范围内搜索。命中来源将按相关性展示
+          <br />
+          并保留可定位的文档片段。
+        </>
+      )}
+    </SearchPrompt>
   );
 }
 
-function InlineState({
-  title,
-  description,
-  loading = false,
-  tone = "neutral",
-}: {
-  title: string;
-  description: string;
-  loading?: boolean;
-  tone?: "neutral" | "error";
-}) {
+function SearchPrompt({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-h-0 place-items-center rounded-[8px] border border-dashed border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-4 text-center">
-      <div>
-        <span
-          className={[
-            "mx-auto mb-2 grid size-8 place-items-center rounded-[8px]",
-            tone === "error"
-              ? "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200"
-              : "bg-[var(--premium-blue-soft)] text-[var(--premium-blue)]",
-          ].join(" ")}
-        >
-          {loading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-        </span>
-        <strong className="block text-xs text-[var(--premium-ink)]">{title}</strong>
-        <span className="mt-1 block text-[9px] text-[var(--premium-muted)]">{description}</span>
-      </div>
+    <div className="grid min-h-0 place-items-center px-6 text-center">
+      <p className="max-w-[460px] text-sm font-medium leading-7 text-[var(--premium-muted)]">
+        {children}
+      </p>
     </div>
   );
 }

@@ -2,6 +2,8 @@ export type TypewriterController = {
   append: (text: string) => void;
   replace: (text: string) => void;
   finish: () => Promise<void>;
+  pause: () => void;
+  resume: () => void;
   cancel: () => void;
   hasContent: () => boolean;
 };
@@ -32,6 +34,7 @@ export function createTypewriterController({
   let frame: number | null = null;
   let fallbackTimer: number | null = null;
   let scheduled = false;
+  let paused = false;
   let cancelled = false;
   let lastTickAt: number | null = null;
   let characterBudget = 0;
@@ -51,7 +54,7 @@ export function createTypewriterController({
   };
 
   const schedule = () => {
-    if (cancelled || scheduled || rendered.length >= target.length) {
+    if (cancelled || paused || scheduled || rendered.length >= target.length) {
       settleIfIdle();
       return;
     }
@@ -139,6 +142,19 @@ export function createTypewriterController({
         drainWaiters.add(resolve);
         schedule();
       });
+    },
+    pause() {
+      if (cancelled || paused) return;
+      paused = true;
+      scheduled = false;
+      clearScheduledCallbacks();
+      lastTickAt = null;
+    },
+    resume() {
+      if (cancelled || !paused) return;
+      paused = false;
+      lastTickAt = null;
+      schedule();
     },
     cancel() {
       if (cancelled) return;

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import "katex/dist/katex.min.css";
 import { PremiumSystemConfigurationBoundary } from "@/components/app/premium-configuration-gate";
 import { AskPremiumPage } from "@/features/ask/ask-premium-page";
 
