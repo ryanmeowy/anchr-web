@@ -11,6 +11,7 @@
     "test:ask-recovery": "node --test src/features/ask/traditional-turn-recovery.test.mjs",
     "test:ask-activity": "node --test src/features/ask/agent-activity-model.test.mjs",
     "test:ask-markdown": "node --test src/features/ask/ask-markdown.test.mjs",
+    "test:ask-question-nav": "node --test src/features/ask/question-navigator.test.mjs",
     "test:ask-preview-return": "node --test src/features/ask/preview-message-restore.test.mjs",
     "test:background-recovery": "node --test src/components/app/background-task-recovery.test.mjs"
   },

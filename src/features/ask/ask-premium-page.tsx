@@ -57,6 +57,10 @@ import {
   askMarkdownRemarkPlugins,
 } from "@/features/ask/ask-markdown";
 import {
+  QuestionNavigator,
+  type QuestionNavigationItem,
+} from "@/features/ask/question-navigator";
+import {
   calculateMessageEdgeScrollbarMetrics,
   scrollTopFromMessageEdgeThumb,
   type MessageEdgeScrollbarMetrics,
@@ -686,6 +690,13 @@ export function AskPremiumPage() {
     () => (activeSessionId ? (messagesBySession[activeSessionId] ?? []) : []),
     [activeSessionId, messagesBySession],
   );
+  const activeQuestions: QuestionNavigationItem[] = activeMessages
+    .filter((message) => message.role === "user")
+    .map((message) => ({
+      id: message.turnId ?? message.id,
+      messageId: message.id,
+      content: message.content.replace(/\s+/g, " ").trim(),
+    }));
   const activeConversationGeneration = useMemo(() => (
     activeSessionId
       ? conversationGenerations.find((generation) => generation.sessionId === activeSessionId)
@@ -2394,6 +2405,43 @@ export function AskPremiumPage() {
     normalizeCompletedMessageScroll,
   ]);
 
+  const handleNavigateToQuestion = useCallback((messageId: string) => {
+    const scroller = messageScrollRef.current;
+    const content = messageContentRef.current;
+    if (!scroller || !content) return;
+    const question = content.querySelector<HTMLElement>(
+      `[data-message-id="${CSS.escape(messageId)}"]`,
+    );
+    if (!question) return;
+
+    const targetsLiveQuestion = pinnedQuestionMessageIdRef.current === messageId;
+    cancelPinnedQuestionAnimation();
+    if (targetsLiveQuestion) {
+      pinnedQuestionFollowPausedRef.current = false;
+      const layout = syncPinnedQuestionLayout();
+      if (layout) animateMessageScrollTo(layout.liveTop);
+      return;
+    }
+
+    if (pinnedQuestionMessageIdRef.current) {
+      pinnedQuestionFollowPausedRef.current = true;
+    } else if (messageTopGapVisible) {
+      cancelCompletedScrollTransition();
+    }
+
+    const targetTop = Math.min(
+      Math.max(0, scroller.scrollHeight - scroller.clientHeight),
+      Math.max(0, content.offsetTop + question.offsetTop - 16),
+    );
+    animateMessageScrollTo(targetTop);
+  }, [
+    animateMessageScrollTo,
+    cancelCompletedScrollTransition,
+    cancelPinnedQuestionAnimation,
+    messageTopGapVisible,
+    syncPinnedQuestionLayout,
+  ]);
+
   useEffect(() => {
     if (!initialTurnId || !initialSessionId || activeSessionId !== initialSessionId || isLoadingMessages) return;
     if (liveQuestionMessageId) return;
@@ -3615,6 +3663,16 @@ export function AskPremiumPage() {
                   ) : null}
                 </form>
               </div>
+              <QuestionNavigator
+                key={activeSessionId || "empty-conversation"}
+                questions={activeQuestions}
+                scrollerRef={messageScrollRef}
+                contentRef={messageContentRef}
+                hasEarlierQuestions={Boolean(activeHistoryPage?.hasMore)}
+                loadingEarlierQuestions={isLoadingOlderMessages}
+                onLoadEarlierQuestions={loadOlderMessages}
+                onNavigate={handleNavigateToQuestion}
+              />
               <MessageEdgeScrollbar
                 scrollerRef={messageScrollRef}
                 onInteractionStart={cancelPinnedQuestionAnimation}
