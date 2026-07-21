@@ -11,6 +11,7 @@ import {
 import { clearAllAssetScopeState } from "@/lib/asset-scope";
 import { clearAllPreviewNavigation } from "@/lib/preview-context";
 import { BackgroundTaskProvider } from "./background-task-provider";
+import { ConversationGenerationProvider } from "./conversation-generation-provider";
 
 function subscribeAccessToken(callback: () => void) {
   window.addEventListener(ACCESS_TOKEN_CHANGED_EVENT, callback);
@@ -75,7 +76,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         key={`${authEpoch}:${authIdentityKey ?? "pending"}`}
         authIdentityKey={authIdentityKey}
       >
-        {children}
+        <ConversationGenerationProvider>
+          {children}
+        </ConversationGenerationProvider>
       </BackgroundTaskProvider>
     </QueryClientProvider>
   );

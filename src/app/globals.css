@@ -1363,20 +1363,94 @@ a {
   background: color-mix(in srgb, var(--premium-ink) 20%, transparent);
 }
 
+/* The edge scrollbar is visual-only; the message viewport keeps its own layout width. */
+.ask-premium-message-edge-scrollbar {
+  display: none;
+}
+
+@supports selector(::-webkit-scrollbar) {
+  .ask-premium-message-scroll,
+  .ask-premium-message-scroll:hover {
+    scrollbar-color: auto;
+    scrollbar-width: auto;
+  }
+
+  .ask-premium-message-scroll::-webkit-scrollbar {
+    width: 0;
+    height: 4px;
+  }
+
+  .ask-premium-message-edge-scrollbar {
+    position: absolute;
+    z-index: 35;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: block;
+    width: 12px;
+    cursor: default;
+    opacity: 0;
+    outline: none;
+    pointer-events: none;
+    touch-action: none;
+    transition: opacity 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .ask-premium-message-edge-scrollbar[data-scrollable="true"] {
+    pointer-events: auto;
+  }
+
+  .ask-premium-message-edge-scrollbar[data-scrollable="true"][data-active="true"],
+  .ask-premium-message-edge-scrollbar[data-scrollable="true"]:hover,
+  .ask-premium-message-edge-scrollbar[data-scrollable="true"]:focus-visible,
+  .ask-premium-message-edge-scrollbar[data-scrollable="true"][data-dragging="true"] {
+    opacity: 1;
+  }
+
+  .ask-premium-message-edge-scrollbar-thumb {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: var(--ask-scrollbar-thumb-width);
+    min-height: 28px;
+    border-radius: var(--ask-scrollbar-thumb-radius);
+    background: var(--ask-scrollbar-thumb-color);
+    transition: background-color 160ms ease;
+    will-change: height, transform;
+  }
+
+  .ask-premium-message-edge-scrollbar-runway {
+    position: absolute;
+    top: var(--ask-message-scrollbar-track-inset);
+    right: 0;
+    bottom: var(--ask-message-scrollbar-track-inset);
+    width: var(--ask-scrollbar-thumb-width);
+  }
+
+  .ask-premium-message-edge-scrollbar:hover .ask-premium-message-edge-scrollbar-thumb,
+  .ask-premium-message-edge-scrollbar:focus-visible .ask-premium-message-edge-scrollbar-thumb {
+    background: var(--ask-scrollbar-thumb-hover-color);
+  }
+
+  .ask-premium-message-edge-scrollbar[data-dragging="true"] .ask-premium-message-edge-scrollbar-thumb {
+    background: var(--ask-scrollbar-thumb-active-color);
+  }
+}
+
 .ask-premium-activity-scroll {
   overflow-anchor: none;
   scrollbar-gutter: stable;
-  scrollbar-color: color-mix(in srgb, var(--premium-ink) 8%, transparent) transparent;
+  scrollbar-color: var(--ask-scrollbar-thumb-color) transparent;
   scrollbar-width: thin;
 }
 
 .ask-premium-activity-scroll:hover {
-  scrollbar-color: color-mix(in srgb, var(--premium-ink) 16%, transparent) transparent;
+  scrollbar-color: var(--ask-scrollbar-thumb-hover-color) transparent;
 }
 
 .ask-premium-activity-scroll::-webkit-scrollbar {
-  width: 3px;
-  height: 3px;
+  width: var(--ask-scrollbar-thumb-width);
+  height: var(--ask-scrollbar-thumb-width);
 }
 
 .ask-premium-activity-scroll::-webkit-scrollbar-track,
@@ -1385,16 +1459,16 @@ a {
 }
 
 .ask-premium-activity-scroll::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--premium-ink) 8%, transparent);
+  border-radius: var(--ask-scrollbar-thumb-radius);
+  background: var(--ask-scrollbar-thumb-color);
 }
 
 .ask-premium-activity-scroll:hover::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--premium-ink) 16%, transparent);
+  background: var(--ask-scrollbar-thumb-hover-color);
 }
 
 .ask-premium-activity-scroll::-webkit-scrollbar-thumb:active {
-  background: color-mix(in srgb, var(--premium-ink) 24%, transparent);
+  background: var(--ask-scrollbar-thumb-active-color);
 }
 
 .ask-premium-trace-content {
@@ -1752,6 +1826,12 @@ a {
   --ask-accent-softest: rgba(187, 255, 102, 0.06);
   --ask-accent-soft: rgba(187, 255, 102, 0.15);
   --ask-accent-dot: #68a313;
+  --ask-scrollbar-thumb-width: 6px;
+  --ask-scrollbar-thumb-radius: 9999px;
+  --ask-scrollbar-thumb-color: color-mix(in srgb, var(--premium-ink) 8%, transparent);
+  --ask-scrollbar-thumb-hover-color: color-mix(in srgb, var(--premium-ink) 16%, transparent);
+  --ask-scrollbar-thumb-active-color: color-mix(in srgb, var(--premium-ink) 24%, transparent);
+  --ask-message-scrollbar-track-inset: 8px;
 }
 
 .ask-premium-ask-page[data-premium-theme="light"] {
@@ -7297,4 +7377,17 @@ a {
 .ask-premium-markdown hr {
   border: 0;
   border-top: 1px solid rgba(15, 23, 42, 0.14);
+}
+
+.ask-premium-markdown .katex-display {
+  max-width: 100%;
+  margin: 0.85rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15rem 0;
+  scrollbar-width: thin;
+}
+
+.ask-premium-markdown .katex-display > .katex {
+  min-width: max-content;
 }

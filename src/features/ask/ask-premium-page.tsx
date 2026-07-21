@@ -24,14 +24,19 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type TouchEvent as ReactTouchEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { useBackgroundTasks, type TrackedAgentTask } from "@/components/app/background-task-provider";
+import {
+  useConversationGenerations,
+  type ConversationGenerationSnapshot,
+} from "@/components/app/conversation-generation-provider";
 import { ActionErrorNotice } from "@/components/shared/action-error-notice";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
@@ -47,6 +52,15 @@ import {
   mergeAgentTaskProgressStep,
   resolveAgentActivityHandoff,
 } from "@/features/ask/agent-activity-model";
+import {
+  askMarkdownRehypePlugins,
+  askMarkdownRemarkPlugins,
+} from "@/features/ask/ask-markdown";
+import {
+  calculateMessageEdgeScrollbarMetrics,
+  scrollTopFromMessageEdgeThumb,
+  type MessageEdgeScrollbarMetrics,
+} from "@/features/ask/message-edge-scrollbar";
 import {
   clampPreviewMessageScrollTop,
   resolvePreviewMessageScrollTop,
@@ -358,6 +372,16 @@ export function AskPremiumPage() {
     dismissTask: dismissBackgroundTask,
   } = useBackgroundTasks();
   const {
+    generations: conversationGenerations,
+    acquirePresentation,
+    beginGeneration,
+    updateGeneration,
+    findGeneration,
+    getGenerationHandle,
+    finishGeneration,
+    cancelGeneration,
+  } = useConversationGenerations();
+  const {
     hydrated: answerStatusHydrated,
     unreadSessionIds,
     recordAnswerCompleted,
@@ -479,11 +503,20 @@ export function AskPremiumPage() {
   }, [messagesBySession]);
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setMessagesBySession((previous) => mergeConversationGenerations(previous, conversationGenerations));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [conversationGenerations, isLoadingMessages]);
+
+  useEffect(() => {
     askPageMountedRef.current = true;
+    const releasePresentation = acquirePresentation();
     return () => {
       askPageMountedRef.current = false;
+      releasePresentation();
     };
-  }, []);
+  }, [acquirePresentation]);
 
   const isConversationVisible = useCallback((sessionId: string) => (
     askPageMountedRef.current
@@ -653,9 +686,20 @@ export function AskPremiumPage() {
     () => (activeSessionId ? (messagesBySession[activeSessionId] ?? []) : []),
     [activeSessionId, messagesBySession],
   );
+  const activeConversationGeneration = useMemo(() => (
+    activeSessionId
+      ? conversationGenerations.find((generation) => generation.sessionId === activeSessionId)
+      : undefined
+  ), [activeSessionId, conversationGenerations]);
+  const runningConversationGeneration = useMemo(() => (
+    conversationGenerations.find(isConversationGenerationInProgress)
+  ), [conversationGenerations]);
   const generatingSessionIds = useMemo(() => {
     const sessionIds = new Set<string>();
     if (streamingSessionId) sessionIds.add(streamingSessionId);
+    conversationGenerations.forEach((generation) => {
+      if (isConversationGenerationInProgress(generation)) sessionIds.add(generation.sessionId);
+    });
     backgroundTasks.forEach((task) => {
       if (task.kind === "agent" && task.status === "running") sessionIds.add(task.sessionId);
     });
@@ -669,7 +713,7 @@ export function AskPremiumPage() {
       ))) sessionIds.add(sessionId);
     });
     return sessionIds;
-  }, [backgroundTasks, messagesBySession, streamingSessionId]);
+  }, [backgroundTasks, conversationGenerations, messagesBySession, streamingSessionId]);
   const activeHistoryPage = activeSessionId ? historyPagesBySession[activeSessionId] : undefined;
   const isLoadingOlderMessages = Boolean(activeSessionId && loadingOlderSessionId === activeSessionId);
   const latestUserMessageId = useMemo(
@@ -679,7 +723,10 @@ export function AskPremiumPage() {
   const hasLoadedActiveMessages = activeSessionId
     ? Object.prototype.hasOwnProperty.call(messagesBySession, activeSessionId)
     : false;
-  const isStreamingActiveSession = Boolean(activeSessionId && streamingSessionId === activeSessionId);
+  const isStreamingActiveSession = Boolean(activeSessionId && (
+    streamingSessionId === activeSessionId
+    || (activeConversationGeneration && isConversationGenerationInProgress(activeConversationGeneration))
+  ));
   const activeTrackedAgentTask = useMemo(() => backgroundTasks
     .filter((task): task is TrackedAgentTask => task.kind === "agent" && task.sessionId === activeSessionId)
     .sort((a, b) => {
@@ -688,7 +735,11 @@ export function AskPremiumPage() {
       return b.startedAt - a.startedAt;
     })[0], [activeSessionId, backgroundTasks]);
   const trackedAgentInProgress = activeTrackedAgentTask?.status === "running";
-  const canCancelActiveQuery = isStreamingActiveSession && streamingUsesAgent;
+  const canCancelActiveQuery = isStreamingActiveSession && (
+    streamingUsesAgent
+    || activeConversationGeneration?.executionMode === "AGENT"
+    || activeConversationGeneration?.executionMode === "AGENT_FALLBACK"
+  );
   const latestAssistantMessage = useMemo(
     () => activeMessages.slice().reverse().find((message) => message.role === "assistant"),
     [activeMessages],
@@ -817,6 +868,7 @@ export function AskPremiumPage() {
   const canSubmit = Boolean(query.trim())
     && !isMessageSubmitting
     && !streamingSessionId
+    && !runningConversationGeneration
     && !(agentEnabled && agentCapabilitiesQuery.isPending)
     && !latestAgentTaskInProgress
     && !latestAnswerInProgress
@@ -842,8 +894,9 @@ export function AskPremiumPage() {
   const ensureTaskAnswerWriter = useCallback((taskId: string) => {
     const existing = taskAnswerWritersRef.current.get(taskId);
     if (existing) return existing;
+    const persistentGeneration = getGenerationHandle({ taskId });
     const state: { writer: TypewriterController; finalizing?: Promise<void>; terminalTask?: AgentTask } = {
-      writer: createTypewriterController({
+      writer: persistentGeneration?.writer ?? createTypewriterController({
         onRender: (content) => {
           if (settledTaskIdsRef.current.has(taskId)) return;
           setMessagesBySession((previous) => Object.fromEntries(Object.entries(previous).map(([sessionId, messages]) => [
@@ -863,10 +916,22 @@ export function AskPremiumPage() {
     };
     taskAnswerWritersRef.current.set(taskId, state);
     return state;
-  }, []);
+  }, [getGenerationHandle]);
 
   const finalizeAgentTaskAnswer = useCallback((task: AgentTask) => {
     if (settledTaskIdsRef.current.has(task.taskId)) return Promise.resolve();
+    const persistentGeneration = findGeneration({ taskId: task.taskId });
+    if (persistentGeneration) {
+      updateGeneration(persistentGeneration.id, {
+        phase: task.status === "SUCCEEDED" ? "presenting" : task.status === "CANCELLED" ? "cancelled" : "error",
+        agentTask: task,
+        citations: task.citations ?? persistentGeneration.citations,
+        answerStatus: task.status === "SUCCEEDED"
+          ? "ANSWERED"
+          : task.status === "CANCELLED" ? "CANCELLED" : "MODEL_FALLBACK",
+        answerFallbackReason: task.errorCode,
+      });
+    }
     const state = ensureTaskAnswerWriter(task.taskId);
     state.terminalTask = task;
     if (task.answer !== null && task.answer !== undefined) {
@@ -885,9 +950,14 @@ export function AskPremiumPage() {
       ])) as MessageCache);
       state.writer.cancel();
       taskAnswerWritersRef.current.delete(task.taskId);
+      if (persistentGeneration) {
+        updateGeneration(persistentGeneration.id, {
+          phase: task.status === "SUCCEEDED" ? "completed" : task.status === "CANCELLED" ? "cancelled" : "error",
+        });
+      }
     });
     return state.finalizing;
-  }, [ensureTaskAnswerWriter]);
+  }, [ensureTaskAnswerWriter, findGeneration, updateGeneration]);
 
   const presentRuntimeSnapshotAnswer = useCallback((snapshot: AgentRuntimeSnapshot) => {
     const terminal = snapshot.message;
@@ -901,6 +971,31 @@ export function AskPremiumPage() {
       || activeStreamOwnsAnswer
       || settledRuntimeRunsRef.current.has(snapshot.runId)) return Promise.resolve();
 
+    const persistentGeneration = findGeneration({
+      runId: snapshot.runId,
+      turnId: snapshot.turnId,
+      sessionId: snapshotSessionId,
+    });
+    const persistentHandle = persistentGeneration
+      ? getGenerationHandle({ id: persistentGeneration.id })
+      : undefined;
+    if (persistentGeneration) {
+      updateGeneration(persistentGeneration.id, {
+        phase: "presenting",
+        turnId: terminal.turnId ?? snapshot.turnId ?? persistentGeneration.turnId,
+        assetScope: terminal.assetScope ?? persistentGeneration.assetScope,
+        answerMode: terminal.answerMode ?? persistentGeneration.answerMode,
+        answerStatus: terminal.answerStatus,
+        answerFallbackReason: terminal.answerFallbackReason,
+        citations: terminal.citations ?? persistentGeneration.citations,
+        intent: terminal.intent ?? persistentGeneration.intent,
+        executionMode: terminal.executionMode ?? persistentGeneration.executionMode,
+        agentRunId: terminal.agentRunId ?? snapshot.runId,
+        workflowVersion: terminal.workflowVersion ?? persistentGeneration.workflowVersion,
+        agentTask: terminal.agentTask ?? persistentGeneration.agentTask,
+      });
+    }
+
     let state = runtimeAnswerWritersRef.current.get(snapshot.runId);
     if (!state) {
       const currentMessage = (messagesBySessionRef.current[snapshotSessionId] ?? [])
@@ -909,7 +1004,7 @@ export function AskPremiumPage() {
       const initialText = finalAnswer.startsWith(currentContent)
         ? currentContent
         : currentContent ? finalAnswer : "";
-      const writer = createTypewriterController({
+      const writer = persistentHandle?.writer ?? createTypewriterController({
         initialText,
         onRender: (content) => {
           if (settledRuntimeRunsRef.current.has(snapshot.runId)) return;
@@ -948,9 +1043,12 @@ export function AskPremiumPage() {
       }));
       current.writer.cancel();
       runtimeAnswerWritersRef.current.delete(snapshot.runId);
+      if (persistentGeneration) {
+        updateGeneration(persistentGeneration.id, { phase: "completed" });
+      }
     });
     return current.finalizing;
-  }, [activeSessionId]);
+  }, [activeSessionId, findGeneration, getGenerationHandle, updateGeneration]);
 
   useEffect(() => {
     const snapshot = agentRuntimeSnapshotQuery.data;
@@ -1028,14 +1126,18 @@ export function AskPremiumPage() {
     const runtimeAnswerWriters = runtimeAnswerWritersRef.current;
     const settledRuntimeRuns = settledRuntimeRunsRef.current;
     return () => {
-      taskAnswerWriters.forEach(({ writer }) => writer.cancel());
+      taskAnswerWriters.forEach(({ writer }, taskId) => {
+        if (getGenerationHandle({ taskId })?.writer !== writer) writer.cancel();
+      });
       taskAnswerWriters.clear();
       settledTaskIds.clear();
-      runtimeAnswerWriters.forEach(({ writer }) => writer.cancel());
+      runtimeAnswerWriters.forEach(({ writer }, runId) => {
+        if (getGenerationHandle({ runId })?.writer !== writer) writer.cancel();
+      });
       runtimeAnswerWriters.clear();
       settledRuntimeRuns.clear();
     };
-  }, []);
+  }, [getGenerationHandle]);
 
   const pendingTaskIds = useMemo(() => Array.from(new Set(
     Object.values(messagesBySession).flat()
@@ -1101,6 +1203,16 @@ export function AskPremiumPage() {
         if (settledTaskIdsRef.current.has(task.taskId)) return;
         lastStreamTask = task;
         const terminal = task.status === "SUCCEEDED" || task.status === "FAILED" || task.status === "CANCELLED";
+        const persistentGeneration = findGeneration({ taskId: task.taskId });
+        if (persistentGeneration) {
+          updateGeneration(persistentGeneration.id, {
+            phase: terminal ? "presenting" : "processing",
+            agentTask: {
+              ...task,
+              answer: persistentGeneration.renderedAnswer || null,
+            },
+          });
+        }
         if (terminal) {
           if (streamState.fallbackTimer) window.clearTimeout(streamState.fallbackTimer);
           setTaskPollingFallback(task.taskId, false);
@@ -1175,8 +1287,10 @@ export function AskPremiumPage() {
     latestAgentTask?.taskId,
     activeSessionId,
     ensureTaskAnswerWriter,
+    findGeneration,
     finalizeAgentTaskAnswer,
     setTaskPollingFallback,
+    updateGeneration,
   ]);
 
   useEffect(() => {
@@ -1202,6 +1316,19 @@ export function AskPremiumPage() {
         ])) as MessageCache);
         updates.forEach((task) => {
           if (settledTaskIdsRef.current.has(task.taskId)) return;
+          const persistentGeneration = findGeneration({ taskId: task.taskId });
+          if (persistentGeneration) {
+            const terminal = task.status === "SUCCEEDED"
+              || task.status === "FAILED"
+              || task.status === "CANCELLED";
+            updateGeneration(persistentGeneration.id, {
+              phase: terminal ? "presenting" : "processing",
+              agentTask: {
+                ...task,
+                answer: persistentGeneration.renderedAnswer || null,
+              },
+            });
+          }
           if (task.answer !== null && task.answer !== undefined) {
             ensureTaskAnswerWriter(task.taskId).writer.replace(task.answer);
           }
@@ -1233,8 +1360,10 @@ export function AskPremiumPage() {
     latestAgentTask?.taskId,
     activeSessionId,
     ensureTaskAnswerWriter,
+    findGeneration,
     finalizeAgentTaskAnswer,
     setTaskPollingFallback,
+    updateGeneration,
   ]);
 
   const cancelAgentTask = useCallback(async (taskId: string) => {
@@ -1245,6 +1374,16 @@ export function AskPremiumPage() {
       answerState?.writer.cancel();
       taskAnswerWritersRef.current.delete(taskId);
       settledTaskIdsRef.current.add(taskId);
+      const persistentGeneration = findGeneration({ taskId });
+      if (persistentGeneration) {
+        updateGeneration(persistentGeneration.id, {
+          renderedAnswer: task.answer || "任务已取消。",
+          agentTask: task,
+          answerStatus: "CANCELLED",
+          answerFallbackReason: task.errorCode,
+        });
+        cancelGeneration(persistentGeneration.id);
+      }
       setMessagesBySession((previous) => Object.fromEntries(Object.entries(previous).map(([sessionId, messages]) => [
         sessionId,
         messages.map((message) => message.agentTask?.taskId === taskId
@@ -1261,10 +1400,25 @@ export function AskPremiumPage() {
         return next;
       });
     }
-  }, []);
+  }, [cancelGeneration, findGeneration, updateGeneration]);
 
   const cancelActiveQuery = useCallback(async () => {
-    const active = streamRef.current;
+    const localStream = streamRef.current;
+    const persistentGeneration = activeConversationGeneration
+      && isConversationGenerationInProgress(activeConversationGeneration)
+      ? activeConversationGeneration
+      : undefined;
+    const persistentHandle = persistentGeneration
+      ? getGenerationHandle({ id: persistentGeneration.id })
+      : undefined;
+    const active = localStream ?? (persistentGeneration && persistentHandle ? {
+      requestId: persistentGeneration.id,
+      sessionId: persistentGeneration.sessionId,
+      controller: persistentHandle.controller,
+      agentEnabled: true,
+      runId: persistentGeneration.agentRunId,
+      turnId: persistentGeneration.turnId,
+    } : null);
     if (!active) return;
     if (!active.runId) {
       setStreamError("Agent 运行尚未建立，请稍后重试取消");
@@ -1276,8 +1430,16 @@ export function AskPremiumPage() {
         setStreamError("后端未确认取消，正在继续同步任务状态");
         return;
       }
-      if (streamRef.current?.requestId !== active.requestId) return;
-      streamRef.current = null;
+      if (localStream && streamRef.current?.requestId !== active.requestId) return;
+      if (streamRef.current?.requestId === active.requestId) streamRef.current = null;
+      if (persistentGeneration) {
+        updateGeneration(persistentGeneration.id, (current) => ({
+          renderedAnswer: current.renderedAnswer || "查询已取消。",
+          answerStatus: "CANCELLED",
+          answerFallbackReason: "agent_run_cancelled",
+        }));
+        cancelGeneration(persistentGeneration.id);
+      }
       setStreamingSessionId(null);
       setStreamingUsesAgent(false);
       setMessagesBySession((previous) => ({
@@ -1307,7 +1469,13 @@ export function AskPremiumPage() {
     } catch (error) {
       setStreamError(error instanceof Error ? error.message : "后端查询取消失败");
     }
-  }, [queryClient]);
+  }, [
+    activeConversationGeneration,
+    cancelGeneration,
+    getGenerationHandle,
+    queryClient,
+    updateGeneration,
+  ]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -2355,6 +2523,7 @@ export function AskPremiumPage() {
       || messageSubmissionLockRef.current
       || isMessageSubmitting
       || streamingSessionId
+      || runningConversationGeneration
       || latestAgentTaskInProgress
       || latestAnswerInProgress
       || trackedAgentInProgress
@@ -2375,6 +2544,7 @@ export function AskPremiumPage() {
 
     let targetSessionId = activeSessionId;
     let backgroundTaskId: string | null = null;
+    let generationId: string | null = null;
     let answerWriter: TypewriterController | null = null;
     let acceptedTurnId: string | undefined;
     let traditionalRecoveryController: AbortController | null = null;
@@ -2419,22 +2589,23 @@ export function AskPremiumPage() {
         executionMode: requestUsesAgent ? "AGENT" : "TRADITIONAL",
         pending: true,
       };
-      const controller = new AbortController();
+      const generation = beginGeneration({
+        id: requestId,
+        sessionId: targetSessionId,
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
+        query: text,
+        assetScope: assistantMessage.assetScope ?? [],
+        answerMode: selectedAnswerMode,
+        executionMode: assistantMessage.executionMode ?? "TRADITIONAL",
+      });
+      generationId = generation.id;
+      const controller = generation.controller;
       const isCurrentStream = () => (
         streamRef.current?.requestId === requestId &&
         streamRef.current.sessionId === targetSessionId
       );
-      answerWriter = createTypewriterController({
-        onRender: (content) => {
-          if (!isCurrentStream()) return;
-          updateAssistantMessage(targetSessionId, assistantMessage.id, (message) => ({
-            ...message,
-            pending: true,
-            presenting: true,
-            content,
-          }));
-        },
-      });
+      answerWriter = generation.writer;
 
       if (requestUsesAgent) {
         backgroundTaskId = requestId;
@@ -2503,6 +2674,19 @@ export function AskPremiumPage() {
             const traceDetails = event.details ?? {};
             const traceTurnId = event.turnId
               ?? (typeof traceDetails.turnId === "string" ? traceDetails.turnId : undefined);
+            if (generationId) {
+              updateGeneration(generationId, (current) => ({
+                turnId: traceTurnId ?? current.turnId,
+                agentRunId: event.runId ?? current.agentRunId,
+                answerMode: event.answerMode ?? current.answerMode,
+                intent: event.intentType ? {
+                  ...current.intent,
+                  type: event.intentType,
+                  confidence: event.confidence,
+                  retrievalRequired: event.intentType === "KB_QUERY",
+                } : current.intent,
+              }));
+            }
             if (traceTurnId) {
               acceptedTurnId = traceTurnId;
               if (streamRef.current) streamRef.current.turnId = traceTurnId;
@@ -2605,6 +2789,7 @@ export function AskPremiumPage() {
           },
           onCitations: (citations) => {
             if (!isCurrentStream()) return;
+            if (generationId) updateGeneration(generationId, { citations });
             const nextNameCache = rememberAssetScopes(citations.map((citation) => ({
               assetId: citation.assetId,
               fileName: citation.fileName,
@@ -2618,6 +2803,25 @@ export function AskPremiumPage() {
           onDone: (event) => {
             if (!isCurrentStream()) return;
             streamCompletion.event = event;
+            if (generationId) {
+              updateGeneration(generationId, (current) => ({
+                phase: event.answerStatus === "PROCESSING" ? "processing" : current.phase,
+                turnId: event.turnId ?? current.turnId,
+                assetScope: event.assetScope ?? current.assetScope,
+                answerMode: event.answerMode ?? current.answerMode,
+                answerStatus: event.answerStatus ?? current.answerStatus ?? "ANSWERED",
+                answerFallbackReason: event.fallbackReason ?? current.answerFallbackReason,
+                intent: event.intentType ? {
+                  ...current.intent,
+                  type: event.intentType,
+                  retrievalRequired: event.retrievalExecuted ?? event.intentType === "KB_QUERY",
+                } : current.intent,
+                executionMode: event.executionMode ?? current.executionMode,
+                agentRunId: event.runId ?? current.agentRunId,
+                workflowVersion: event.workflowVersion ?? current.workflowVersion,
+                agentTask: event.agentTask ?? current.agentTask,
+              }));
+            }
             if (event.runId && streamRef.current) streamRef.current.runId = event.runId;
             if (event.turnId) {
               acceptedTurnId = event.turnId;
@@ -2727,8 +2931,42 @@ export function AskPremiumPage() {
       }
 
       if (recoveredTurn) {
-        answerWriter.cancel();
         traditionalRecoveryController.abort();
+        const recoveredPhase = recoveredTurn.answerStatus === "CANCELLED"
+          ? "cancelled"
+          : recoveredTurn.answerStatus === "GENERATION_FAILED"
+              || recoveredTurn.answerStatus === "MODEL_FALLBACK"
+            ? "error"
+            : "completed";
+        if (generationId && recoveredTurn.answer) {
+          updateGeneration(generationId, {
+            phase: "presenting",
+            turnId: recoveredTurn.turnId,
+            assetScope: recoveredTurn.assetScope ?? [],
+            answerMode: recoveredTurn.answerMode,
+            answerStatus: recoveredTurn.answerStatus,
+            answerFallbackReason: recoveredTurn.answerFallbackReason,
+            citations: recoveredTurn.citations ?? [],
+            intent: recoveredTurn.intent,
+            executionMode: recoveredTurn.executionMode ?? "TRADITIONAL",
+            agentRunId: recoveredTurn.agentRunId,
+            workflowVersion: recoveredTurn.workflowVersion,
+            agentTask: recoveredTurn.agentTask,
+          });
+          answerWriter.replace(recoveredTurn.answer);
+          await finishGeneration(generationId);
+          updateGeneration(generationId, { phase: recoveredPhase });
+        } else {
+          answerWriter.cancel();
+          if (generationId) {
+            updateGeneration(generationId, {
+              phase: recoveredPhase,
+              turnId: recoveredTurn.turnId,
+              answerStatus: recoveredTurn.answerStatus,
+              answerFallbackReason: recoveredTurn.answerFallbackReason,
+            });
+          }
+        }
         const recoveredMessages = turnsToMessages([recoveredTurn]);
         setAssetNameCache(rememberAssetScopes(
           (recoveredTurn.citations ?? []).map((citation) => ({
@@ -2759,6 +2997,11 @@ export function AskPremiumPage() {
       await answerWriter.finish();
       const completedEvent = streamCompletion.event;
       if (!completedEvent) throw new Error("流式响应未正常结束，请重试。");
+      if (generationId) {
+        updateGeneration(generationId, {
+          phase: completedEvent.answerStatus === "PROCESSING" ? "processing" : "completed",
+        });
+      }
       if (completedEvent.runId && completedEvent.answerStatus !== "PROCESSING") {
         settledRuntimeRunsRef.current.add(completedEvent.runId);
       }
@@ -2774,7 +3017,6 @@ export function AskPremiumPage() {
         recordAnswerCompleted(targetSessionId, currentTimestamp(), isConversationVisible(targetSessionId));
       }
     } catch (error) {
-      answerWriter?.cancel();
       if (error instanceof Error && error.name === "AbortError") return;
       const accessDenied = isAccessDeniedError(error);
       if (accessDenied) {
@@ -2786,6 +3028,10 @@ export function AskPremiumPage() {
       const message = accessDenied
         ? "当前角色没有发送消息的权限"
         : error instanceof Error ? error.message : "消息发送失败";
+      if (generationId) {
+        updateGeneration(generationId, { error: message });
+        cancelGeneration(generationId, "error");
+      }
       setStreamError(accessDenied ? null : message);
       if (requestUsesAgent) {
         if (backgroundTaskId) updateBackgroundAgentTask(backgroundTaskId, { status: "error" });
@@ -2811,7 +3057,6 @@ export function AskPremiumPage() {
       }
     } finally {
       traditionalRecoveryController?.abort();
-      answerWriter?.cancel();
       if (streamRef.current?.sessionId === targetSessionId) {
         streamRef.current.controller.abort();
         streamRef.current = null;
@@ -3141,13 +3386,14 @@ export function AskPremiumPage() {
               </div>
             </header>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 sm:px-5 lg:px-5">
+            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 sm:px-5 lg:px-5">
               <div
                 className="ask-premium-conversation-frame mx-auto flex min-h-0 w-full flex-1 flex-col gap-0 lg:w-[calc(100vw-780px)] lg:max-w-full"
                 data-trace-collapsed={traceCollapsed}
               >
-                <div className="ask-premium-message-scroll-shell relative min-h-0 flex-1">
+                <div className="relative min-h-0 min-w-0 w-full flex-1" data-message-scroll-shell>
                   <section
+                    id="ask-premium-message-scroll"
                     ref={messageScrollRef}
                     onScroll={handleMessageScroll}
                     onWheel={handleMessageWheel}
@@ -3160,7 +3406,7 @@ export function AskPremiumPage() {
                   >
                     <div
                       ref={messageContentRef}
-                      className="relative grid min-h-full content-start gap-4 pt-4"
+                      className="relative grid min-h-full grid-cols-[minmax(0,1fr)] content-start gap-4 pt-4"
                     >
                       {messageError ? (
                         <ErrorBlock message={messageError} />
@@ -3369,6 +3615,10 @@ export function AskPremiumPage() {
                   ) : null}
                 </form>
               </div>
+              <MessageEdgeScrollbar
+                scrollerRef={messageScrollRef}
+                onInteractionStart={cancelPinnedQuestionAnimation}
+              />
             </div>
           </main>
 
@@ -3384,6 +3634,189 @@ export function AskPremiumPage() {
             collapsed={traceCollapsed}
           />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MessageEdgeScrollbar({
+  scrollerRef,
+  onInteractionStart,
+}: {
+  scrollerRef: { current: HTMLElement | null };
+  onInteractionStart: () => void;
+}) {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const runwayRef = useRef<HTMLDivElement | null>(null);
+  const thumbRef = useRef<HTMLDivElement | null>(null);
+  const metricsRef = useRef<MessageEdgeScrollbarMetrics>({
+    scrollable: false,
+    maxScrollTop: 0,
+    thumbHeight: 0,
+    thumbTop: 0,
+    maxThumbTop: 0,
+  });
+  const dragRef = useRef<{ pointerId: number; offsetY: number } | null>(null);
+  const activityTimerRef = useRef<number | null>(null);
+
+  const showScrollActivity = useCallback((hideDelay = 700) => {
+    const track = trackRef.current;
+    if (!track) return;
+    track.dataset.active = "true";
+    if (activityTimerRef.current !== null) {
+      window.clearTimeout(activityTimerRef.current);
+    }
+    activityTimerRef.current = window.setTimeout(() => {
+      activityTimerRef.current = null;
+      if (track.dataset.dragging !== "true") {
+        track.dataset.active = "false";
+      }
+    }, hideDelay);
+  }, []);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const track = trackRef.current;
+    const runway = runwayRef.current;
+    const thumb = thumbRef.current;
+    if (!scroller || !track || !runway || !thumb) return;
+
+    let frame: number | null = null;
+    const sync = () => {
+      frame = null;
+      const metrics = calculateMessageEdgeScrollbarMetrics({
+        scrollHeight: scroller.scrollHeight,
+        clientHeight: scroller.clientHeight,
+        scrollTop: scroller.scrollTop,
+        trackHeight: runway.clientHeight,
+      });
+      metricsRef.current = metrics;
+      track.dataset.scrollable = metrics.scrollable ? "true" : "false";
+      if (!metrics.scrollable) track.dataset.active = "false";
+      track.tabIndex = metrics.scrollable ? 0 : -1;
+      track.setAttribute("aria-valuemax", String(Math.round(metrics.maxScrollTop)));
+      track.setAttribute("aria-valuenow", String(Math.round(scroller.scrollTop)));
+      thumb.style.height = `${metrics.thumbHeight}px`;
+      thumb.style.transform = `translateY(${metrics.thumbTop}px)`;
+    };
+    const scheduleSync = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(sync);
+    };
+    const handleScroll = () => {
+      scheduleSync();
+      showScrollActivity();
+    };
+
+    scroller.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", scheduleSync);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleSync);
+    observer?.observe(scroller);
+    if (scroller.firstElementChild instanceof HTMLElement) {
+      observer?.observe(scroller.firstElementChild);
+    }
+    observer?.observe(runway);
+    scheduleSync();
+
+    return () => {
+      scroller.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", scheduleSync);
+      observer?.disconnect();
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      if (activityTimerRef.current !== null) {
+        window.clearTimeout(activityTimerRef.current);
+        activityTimerRef.current = null;
+      }
+    };
+  }, [scrollerRef, showScrollActivity]);
+
+  const updateScrollFromPointer = useCallback((clientY: number, offsetY: number) => {
+    const scroller = scrollerRef.current;
+    const runway = runwayRef.current;
+    if (!scroller || !runway) return;
+    const metrics = metricsRef.current;
+    const runwayRect = runway.getBoundingClientRect();
+    const thumbTop = Math.min(
+      metrics.maxThumbTop,
+      Math.max(0, clientY - runwayRect.top - offsetY),
+    );
+    scroller.scrollTop = scrollTopFromMessageEdgeThumb({
+      thumbTop,
+      maxThumbTop: metrics.maxThumbTop,
+      maxScrollTop: metrics.maxScrollTop,
+    });
+  }, [scrollerRef]);
+
+  const finishPointerInteraction = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    event.currentTarget.dataset.dragging = "false";
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    showScrollActivity(500);
+  }, [showScrollActivity]);
+
+  const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    let nextTop: number | null = null;
+    if (event.key === "ArrowUp") nextTop = scroller.scrollTop - 40;
+    if (event.key === "ArrowDown") nextTop = scroller.scrollTop + 40;
+    if (event.key === "PageUp") nextTop = scroller.scrollTop - scroller.clientHeight * 0.9;
+    if (event.key === "PageDown") nextTop = scroller.scrollTop + scroller.clientHeight * 0.9;
+    if (event.key === "Home") nextTop = 0;
+    if (event.key === "End") nextTop = metricsRef.current.maxScrollTop;
+    if (nextTop === null) return;
+    event.preventDefault();
+    onInteractionStart();
+    showScrollActivity();
+    scroller.scrollTop = Math.min(metricsRef.current.maxScrollTop, Math.max(0, nextTop));
+  }, [onInteractionStart, scrollerRef, showScrollActivity]);
+
+  return (
+    <div
+      ref={trackRef}
+      className="ask-premium-message-edge-scrollbar"
+      role="scrollbar"
+      aria-label="对话滚动条"
+      aria-controls="ask-premium-message-scroll"
+      aria-orientation="vertical"
+      aria-valuemin={0}
+      aria-valuemax={0}
+      aria-valuenow={0}
+      data-active="false"
+      data-dragging="false"
+      data-scrollable="false"
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+      onPointerDown={(event) => {
+        const metrics = metricsRef.current;
+        const thumb = thumbRef.current;
+        if (!metrics.scrollable || !thumb) return;
+        event.preventDefault();
+        onInteractionStart();
+        showScrollActivity();
+        const thumbRect = thumb.getBoundingClientRect();
+        const offsetY = event.target === thumb
+          ? event.clientY - thumbRect.top
+          : metrics.thumbHeight / 2;
+        dragRef.current = { pointerId: event.pointerId, offsetY };
+        event.currentTarget.dataset.dragging = "true";
+        event.currentTarget.setPointerCapture(event.pointerId);
+        updateScrollFromPointer(event.clientY, offsetY);
+      }}
+      onPointerMove={(event) => {
+        const drag = dragRef.current;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        updateScrollFromPointer(event.clientY, drag.offsetY);
+      }}
+      onPointerUp={finishPointerInteraction}
+      onPointerCancel={finishPointerInteraction}
+    >
+      <div ref={runwayRef} className="ask-premium-message-edge-scrollbar-runway">
+        <div ref={thumbRef} className="ask-premium-message-edge-scrollbar-thumb" />
       </div>
     </div>
   );
@@ -4565,6 +4998,102 @@ function EmptyPremiumChat() {
   );
 }
 
+function isConversationGenerationInProgress(generation: ConversationGenerationSnapshot) {
+  return generation.phase === "receiving"
+    || generation.phase === "processing"
+    || generation.phase === "presenting";
+}
+
+function mergeConversationGenerations(
+  cache: MessageCache,
+  generations: ConversationGenerationSnapshot[],
+) {
+  let nextCache = cache;
+  generations.forEach((generation) => {
+    const existing = nextCache[generation.sessionId];
+    if (!existing) return;
+    const nextMessages = mergeConversationGenerationMessages(existing, generation);
+    if (nextMessages === existing) return;
+    if (nextCache === cache) nextCache = { ...cache };
+    nextCache[generation.sessionId] = nextMessages;
+  });
+  return nextCache;
+}
+
+function mergeConversationGenerationMessages(
+  messages: ChatMessage[],
+  generation: ConversationGenerationSnapshot,
+) {
+  const assistantIndex = messages.findIndex((message) => message.role === "assistant" && (
+    message.id === generation.assistantMessageId
+    || Boolean(generation.agentRunId && message.agentRunId === generation.agentRunId)
+    || Boolean(generation.turnId && message.turnId === generation.turnId)
+    || Boolean(generation.agentTask?.taskId
+      && message.agentTask?.taskId === generation.agentTask.taskId)
+  ));
+  const exactAssistant = assistantIndex >= 0
+    && messages[assistantIndex].id === generation.assistantMessageId;
+  const existingAssistant = assistantIndex >= 0 ? messages[assistantIndex] : undefined;
+  const inProgress = isConversationGenerationInProgress(generation);
+  const renderedContent = generation.renderedAnswer
+    || (exactAssistant ? existingAssistant?.content ?? "" : "")
+    || (!inProgress ? existingAssistant?.content ?? "" : "");
+  const nextAssistant: ChatMessage = {
+    ...existingAssistant,
+    id: existingAssistant?.id ?? generation.assistantMessageId,
+    role: "assistant",
+    sessionId: generation.sessionId,
+    turnId: generation.turnId ?? existingAssistant?.turnId,
+    content: renderedContent,
+    assetScope: generation.assetScope.length ? generation.assetScope : existingAssistant?.assetScope,
+    answerMode: generation.answerMode ?? existingAssistant?.answerMode,
+    answerStatus: generation.answerStatus ?? existingAssistant?.answerStatus,
+    answerFallbackReason: generation.answerFallbackReason ?? existingAssistant?.answerFallbackReason,
+    citations: generation.citations.length ? generation.citations : existingAssistant?.citations,
+    intent: generation.intent ?? existingAssistant?.intent,
+    executionMode: generation.executionMode,
+    agentRunId: generation.agentRunId ?? existingAssistant?.agentRunId,
+    workflowVersion: generation.workflowVersion ?? existingAssistant?.workflowVersion,
+    agentTask: generation.agentTask ?? existingAssistant?.agentTask,
+    pending: inProgress,
+    presenting: generation.phase === "presenting",
+    persistedTerminal: inProgress ? false : existingAssistant?.persistedTerminal,
+    error: generation.error ?? existingAssistant?.error,
+  };
+
+  if (assistantIndex >= 0) {
+    if (shallowEqualChatMessage(existingAssistant!, nextAssistant)) return messages;
+    const next = [...messages];
+    next[assistantIndex] = nextAssistant;
+    return next;
+  }
+
+  const hasMatchingUser = messages.some((message) => message.role === "user" && (
+    message.id === generation.userMessageId
+    || Boolean(generation.turnId && message.turnId === generation.turnId)
+  ));
+  const next = [...messages];
+  if (!hasMatchingUser) {
+    next.push({
+      id: generation.userMessageId,
+      role: "user",
+      content: generation.query,
+      sessionId: generation.sessionId,
+      turnId: generation.turnId,
+    });
+  }
+  next.push(nextAssistant);
+  return next;
+}
+
+function shallowEqualChatMessage(left: ChatMessage, right: ChatMessage) {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]) as Set<keyof ChatMessage>;
+  for (const key of keys) {
+    if (!Object.is(left[key], right[key])) return false;
+  }
+  return true;
+}
+
 function mergeChatMessages(base: ChatMessage[], updates: ChatMessage[]) {
   const merged = new Map(base.map((message) => [message.id, message]));
   updates.forEach((message) => merged.set(message.id, message));
@@ -4702,13 +5231,6 @@ function normalizeMarkdownAnswer(content: string, unwrapPlainFence: boolean) {
   return match ? match[1].trim() : content;
 }
 
-type MarkdownAstNode = {
-  type: string;
-  value?: string;
-  url?: string;
-  children?: MarkdownAstNode[];
-};
-
 function MarkdownAnswer({
   content,
   citationLabels,
@@ -4722,7 +5244,8 @@ function MarkdownAnswer({
   return (
     <div className="ask-premium-markdown">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkInlineCitations]}
+        remarkPlugins={askMarkdownRemarkPlugins}
+        rehypePlugins={askMarkdownRehypePlugins}
         components={{
           a: ({ children, href, ...props }) => {
             const citationMatch = href?.match(/^#anchr-citation-(\d+(?:-\d+)?)$/);
@@ -4754,55 +5277,6 @@ function MarkdownAnswer({
       </ReactMarkdown>
     </div>
   );
-}
-
-function remarkInlineCitations() {
-  return (tree: unknown) => {
-    if (isMarkdownNode(tree) && tree.children) transformCitationTextNodes(tree);
-  };
-}
-
-function transformCitationTextNodes(parent: MarkdownAstNode) {
-  if (!parent.children) return;
-  const transformed: MarkdownAstNode[] = [];
-
-  parent.children.forEach((node) => {
-    if (node.type === "text" && node.value) {
-      transformed.push(...splitCitationText(node.value));
-      return;
-    }
-    if (node.children && node.type !== "link" && node.type !== "linkReference") {
-      transformCitationTextNodes(node);
-    }
-    transformed.push(node);
-  });
-
-  parent.children = transformed;
-}
-
-function splitCitationText(value: string) {
-  const nodes: MarkdownAstNode[] = [];
-  const citationPattern = /\[(\d+(?:-\d+)?)]/g;
-  let cursor = 0;
-  let match = citationPattern.exec(value);
-
-  while (match) {
-    if (match.index > cursor) nodes.push({ type: "text", value: value.slice(cursor, match.index) });
-    nodes.push({
-      type: "link",
-      url: `#anchr-citation-${match[1]}`,
-      children: [{ type: "text", value: match[0] }],
-    });
-    cursor = match.index + match[0].length;
-    match = citationPattern.exec(value);
-  }
-
-  if (cursor < value.length) nodes.push({ type: "text", value: value.slice(cursor) });
-  return nodes.length ? nodes : [{ type: "text", value }];
-}
-
-function isMarkdownNode(value: unknown): value is MarkdownAstNode {
-  return typeof value === "object" && value !== null && "type" in value;
 }
 
 function stripTraceText(value: string) {

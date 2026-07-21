@@ -10,6 +10,7 @@
     "lint": "eslint",
     "test:ask-recovery": "node --test src/features/ask/traditional-turn-recovery.test.mjs",
     "test:ask-activity": "node --test src/features/ask/agent-activity-model.test.mjs",
+    "test:ask-markdown": "node --test src/features/ask/ask-markdown.test.mjs",
     "test:ask-preview-return": "node --test src/features/ask/preview-message-restore.test.mjs",
     "test:background-recovery": "node --test src/components/app/background-task-recovery.test.mjs"
   },
@@ -17,13 +18,16 @@
     "@tanstack/react-query": "^5.100.13",
     "@vercel/analytics": "^2.0.1",
     "ali-oss": "^6.23.0",
+    "katex": "^0.16.47",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "pdfjs-dist": "^6.0.227",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
