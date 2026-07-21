@@ -52,6 +52,7 @@ import {
   resolvePreviewMessageScrollTop,
 } from "@/features/ask/preview-message-restore";
 import { recoverTraditionalTurn } from "@/features/ask/traditional-turn-recovery";
+import { useConversationAnswerStatus } from "@/features/ask/use-conversation-answer-status";
 import { ApiError, apiClient, isAccessDeniedError } from "@/lib/api-client";
 import { createTypewriterController, type TypewriterController } from "@/lib/typewriter-controller";
 import {
@@ -356,6 +357,12 @@ export function AskPremiumPage() {
     updateAgentTask: updateBackgroundAgentTask,
     dismissTask: dismissBackgroundTask,
   } = useBackgroundTasks();
+  const {
+    hydrated: answerStatusHydrated,
+    unreadSessionIds,
+    recordAnswerCompleted,
+    markAnswerViewed,
+  } = useConversationAnswerStatus();
   const initialKbId = searchParams.get("kbId") ?? "";
   const initialKbName = searchParams.get("kbName") ?? "";
   const initialSessionId = searchParams.get("session") ?? "";
@@ -401,6 +408,7 @@ export function AskPremiumPage() {
   const [taskPollingFallbackIds, setTaskPollingFallbackIds] = useState<Set<string>>(new Set());
   const [messageTopGapVisible, setMessageTopGapVisible] = useState(false);
   const [historyBottomScrollRequest, setHistoryBottomScrollRequest] = useState(0);
+  const askPageMountedRef = useRef(false);
   const messageSubmissionLockRef = useRef(false);
   const activeSessionIdRef = useRef(activeSessionId);
   const messagesBySessionRef = useRef(messagesBySession);
@@ -469,6 +477,64 @@ export function AskPremiumPage() {
   useEffect(() => {
     messagesBySessionRef.current = messagesBySession;
   }, [messagesBySession]);
+
+  useEffect(() => {
+    askPageMountedRef.current = true;
+    return () => {
+      askPageMountedRef.current = false;
+    };
+  }, []);
+
+  const isConversationVisible = useCallback((sessionId: string) => (
+    askPageMountedRef.current
+    && activeSessionIdRef.current === sessionId
+    && document.visibilityState === "visible"
+    && document.hasFocus()
+  ), []);
+
+  const completedAgentAnswerKey = useMemo(() => JSON.stringify(backgroundTasks
+    .filter((task): task is TrackedAgentTask => (
+      task.kind === "agent" && task.status === "success" && task.finishedAt !== undefined
+    ))
+    .map((task) => ({ sessionId: task.sessionId, answeredAt: task.finishedAt! }))
+    .sort((left, right) => left.sessionId.localeCompare(right.sessionId)
+      || left.answeredAt - right.answeredAt)), [backgroundTasks]);
+
+  useEffect(() => {
+    if (!answerStatusHydrated) return;
+    const completedAnswers = JSON.parse(completedAgentAnswerKey) as Array<{
+      sessionId: string;
+      answeredAt: number;
+    }>;
+    completedAnswers.forEach(({ sessionId, answeredAt }) => {
+      recordAnswerCompleted(sessionId, answeredAt, isConversationVisible(sessionId));
+    });
+  }, [
+    answerStatusHydrated,
+    completedAgentAnswerKey,
+    isConversationVisible,
+    recordAnswerCompleted,
+  ]);
+
+  const activeSessionUnread = Boolean(
+    activeSessionId && unreadSessionIds.has(activeSessionId),
+  );
+
+  useEffect(() => {
+    if (!answerStatusHydrated || !activeSessionId || !activeSessionUnread) return;
+    const markActiveConversationViewed = () => {
+      if (document.visibilityState === "visible" && document.hasFocus()) {
+        markAnswerViewed(activeSessionId);
+      }
+    };
+    markActiveConversationViewed();
+    document.addEventListener("visibilitychange", markActiveConversationViewed);
+    window.addEventListener("focus", markActiveConversationViewed);
+    return () => {
+      document.removeEventListener("visibilitychange", markActiveConversationViewed);
+      window.removeEventListener("focus", markActiveConversationViewed);
+    };
+  }, [activeSessionId, activeSessionUnread, answerStatusHydrated, markAnswerViewed]);
 
   const releasePinnedQuestionLock = useCallback(() => {
     if (pinnedQuestionAnimationFrameRef.current !== null) {
@@ -587,6 +653,23 @@ export function AskPremiumPage() {
     () => (activeSessionId ? (messagesBySession[activeSessionId] ?? []) : []),
     [activeSessionId, messagesBySession],
   );
+  const generatingSessionIds = useMemo(() => {
+    const sessionIds = new Set<string>();
+    if (streamingSessionId) sessionIds.add(streamingSessionId);
+    backgroundTasks.forEach((task) => {
+      if (task.kind === "agent" && task.status === "running") sessionIds.add(task.sessionId);
+    });
+    Object.entries(messagesBySession).forEach(([sessionId, messages]) => {
+      if (messages.some((message) => message.role === "assistant" && (
+        message.pending
+        || message.presenting
+        || message.answerStatus === "PROCESSING"
+        || message.agentTask?.status === "PENDING"
+        || message.agentTask?.status === "RUNNING"
+      ))) sessionIds.add(sessionId);
+    });
+    return sessionIds;
+  }, [backgroundTasks, messagesBySession, streamingSessionId]);
   const activeHistoryPage = activeSessionId ? historyPagesBySession[activeSessionId] : undefined;
   const isLoadingOlderMessages = Boolean(activeSessionId && loadingOlderSessionId === activeSessionId);
   const latestUserMessageId = useMemo(
@@ -2192,6 +2275,7 @@ export function AskPremiumPage() {
     setStreamError(null);
     setOpenMenuSessionId(null);
     setRenamingSessionId(null);
+    markAnswerViewed(sessionId);
   }
 
   const handlePreviewCitation = useCallback((
@@ -2662,6 +2746,9 @@ export function AskPremiumPage() {
         await queryClient.invalidateQueries({
           queryKey: ["conversation-messages", targetSessionId],
         });
+        if (hasViewableAnswer(recoveredTurn.answerStatus, recoveredTurn.answer)) {
+          recordAnswerCompleted(targetSessionId, currentTimestamp(), isConversationVisible(targetSessionId));
+        }
         return;
       }
 
@@ -2682,6 +2769,9 @@ export function AskPremiumPage() {
           presenting: false,
           content: stripTraceText(message.content) || "未生成回答。",
         }));
+      }
+      if (hasViewableAnswer(completedEvent.answerStatus, answerWriter.hasContent() ? "answer" : "")) {
+        recordAnswerCompleted(targetSessionId, currentTimestamp(), isConversationVisible(targetSessionId));
       }
     } catch (error) {
       answerWriter?.cancel();
@@ -2960,6 +3050,9 @@ export function AskPremiumPage() {
                       key={conversation.sessionId}
                       conversation={conversation}
                       active={conversation.sessionId === activeSessionId}
+                      status={generatingSessionIds.has(conversation.sessionId)
+                        ? "generating"
+                        : unreadSessionIds.has(conversation.sessionId) ? "unread" : null}
                       menuOpen={openMenuSessionId === conversation.sessionId}
                       renaming={renamingSessionId === conversation.sessionId}
                       renameValue={renameValue}
@@ -3067,7 +3160,7 @@ export function AskPremiumPage() {
                   >
                     <div
                       ref={messageContentRef}
-                      className="relative grid min-h-full content-start gap-4"
+                      className="relative grid min-h-full content-start gap-4 pt-4"
                     >
                       {messageError ? (
                         <ErrorBlock message={messageError} />
@@ -3999,6 +4092,7 @@ function MenuOption({
 function PremiumConversationItem({
   conversation,
   active,
+  status,
   menuOpen,
   renaming,
   renameValue,
@@ -4012,6 +4106,7 @@ function PremiumConversationItem({
 }: {
   conversation: ConversationSession;
   active: boolean;
+  status: "generating" | "unread" | null;
   menuOpen: boolean;
   renaming: boolean;
   renameValue: string;
@@ -4060,9 +4155,26 @@ function PremiumConversationItem({
         ].join(" ")}
       >
         <span className="flex min-w-0 flex-1 items-center">
-          <strong className="min-w-0 flex-1 truncate pr-7 text-sm leading-5" title={conversation.title || "新对话"}>
+          <strong className={[
+            "min-w-0 flex-1 truncate text-sm leading-5",
+            status ? "" : "pr-7",
+          ].join(" ")} title={conversation.title || "新对话"}>
             {conversation.title || "新对话"}
           </strong>
+          {status ? (
+            <span
+              className="ml-2 inline-flex size-5 shrink-0 items-center justify-center transition-opacity group-hover:opacity-0 group-focus-within:opacity-0"
+              role="status"
+              aria-label={status === "generating" ? "回答生成中" : "有未查看的回答"}
+              title={status === "generating" ? "回答生成中" : "有未查看的回答"}
+            >
+              {status === "generating" ? (
+                <Loader2 className="motion-safe:animate-spin text-slate-500" size={15} aria-hidden="true" />
+              ) : (
+                <span className="size-2 rounded-full bg-[#8FFCD7] shadow-[0_0_0_1px_rgba(17,19,21,0.08)]" aria-hidden="true" />
+              )}
+            </span>
+          ) : null}
         </span>
       </button>
       <button
@@ -4521,6 +4633,14 @@ function turnsToMessages(turns: ConversationTurn[]) {
 
     return messages;
   });
+}
+
+function hasViewableAnswer(answerStatus: ConversationAnswerStatus | undefined, answer: string | undefined) {
+  return Boolean(answer?.trim())
+    && answerStatus !== "PROCESSING"
+    && answerStatus !== "CANCELLED"
+    && answerStatus !== "GENERATION_FAILED"
+    && answerStatus !== "MODEL_FALLBACK";
 }
 
 function answerModeDisplayName(answerMode: string) {

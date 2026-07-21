@@ -4697,6 +4697,11 @@ a {
   padding-right: 4px;
 }
 
+.search-premium-results-scroll.is-empty {
+  align-content: center;
+  justify-content: center;
+}
+
 .search-premium-result-groups {
   display: grid;
   gap: 8px;
