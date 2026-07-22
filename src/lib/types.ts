@@ -5,6 +5,9 @@ export type ApiResult<T> = {
   data: T;
   traceId?: string;
   errorId?: string;
+  retryable?: boolean;
+  requestAccepted?: boolean;
+  uploadCleanupAllowed?: boolean;
 };
 
 export type PagedList<T> = {

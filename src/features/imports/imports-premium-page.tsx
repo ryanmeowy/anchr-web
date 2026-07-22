@@ -26,7 +26,7 @@ import { useBackgroundTasks } from "@/components/app/background-task-provider";
 import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
 import { ActionErrorNotice } from "@/components/shared/action-error-notice";
 import { FileTypeIcon, normalizeExtension } from "@/components/shared/file-type-icon";
-import { ApiError, apiClient, isAccessDeniedError } from "@/lib/api-client";
+import { apiClient, isAccessDeniedError, isUploadCleanupAllowed } from "@/lib/api-client";
 import { formatFileSize, formatNumber, statusText } from "@/lib/format";
 import {
   buildDisplayNameFromUrl,
@@ -195,7 +195,7 @@ export function ImportsPremiumPage({
           items,
         });
       } catch (error) {
-        if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        if (isUploadCleanupAllowed(error)) {
           await deleteUploadedFilesFromOss(stsToken, items);
         }
         throw error;

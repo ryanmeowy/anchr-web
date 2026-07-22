@@ -13,7 +13,8 @@
     "test:ask-markdown": "node --test src/features/ask/ask-markdown.test.mjs",
     "test:ask-question-nav": "node --test src/features/ask/question-navigator.test.mjs",
     "test:ask-preview-return": "node --test src/features/ask/preview-message-restore.test.mjs",
-    "test:background-recovery": "node --test src/components/app/background-task-recovery.test.mjs"
+    "test:background-recovery": "node --test src/components/app/background-task-recovery.test.mjs",
+    "test:upload-cleanup": "node --test src/lib/api-error.test.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.13",

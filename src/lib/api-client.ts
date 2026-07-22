@@ -59,6 +59,14 @@ export const ACCESS_TOKEN_CHANGED_EVENT = "anchr:access-token-changed";
 export type AccessTokenRole = "ADMIN" | "USER" | "GUEST";
 export type TokenValidationResult = { valid: boolean; role: AccessTokenRole };
 
+type ApiErrorMetadata = {
+  traceId?: string;
+  errorId?: string;
+  retryable?: boolean;
+  requestAccepted?: boolean;
+  uploadCleanupAllowed?: boolean;
+};
+
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
@@ -96,13 +104,27 @@ type ConversationMessageRequest = {
 export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
+  readonly traceId?: string;
+  readonly errorId?: string;
+  readonly retryable?: boolean;
+  readonly requestAccepted?: boolean;
+  readonly uploadCleanupAllowed?: boolean;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, metadata: ApiErrorMetadata = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.traceId = metadata.traceId;
+    this.errorId = metadata.errorId;
+    this.retryable = metadata.retryable;
+    this.requestAccepted = metadata.requestAccepted;
+    this.uploadCleanupAllowed = metadata.uploadCleanupAllowed;
   }
+}
+
+export function isUploadCleanupAllowed(error: unknown) {
+  return error instanceof ApiError && error.uploadCleanupAllowed === true;
 }
 
 export function isAccessDeniedError(error: unknown) {
@@ -206,14 +228,29 @@ async function request<T>(path: string, options: RequestOptions = {}) {
   const payload = (await response.json().catch(() => null)) as ApiResult<T> | null;
 
   if (!response.ok || !payload || payload.code < 200 || payload.code >= 300) {
-    throw new ApiError(
-      payload?.message ?? `请求失败：${response.status}`,
-      response.status,
-      payload?.errorCode,
-    );
+    throw apiErrorFromPayload(payload, response.status, `请求失败：${response.status}`);
   }
 
   return payload.data;
+}
+
+function apiErrorFromPayload(
+  payload: ApiResult<unknown> | null,
+  status: number,
+  fallbackMessage: string,
+) {
+  return new ApiError(
+    payload?.message ?? fallbackMessage,
+    status,
+    payload?.errorCode,
+    {
+      traceId: payload?.traceId,
+      errorId: payload?.errorId,
+      retryable: payload?.retryable,
+      requestAccepted: payload?.requestAccepted,
+      uploadCleanupAllowed: payload?.uploadCleanupAllowed,
+    },
+  );
 }
 
 function normalizePreviewSegmentId(segmentId: string) {
@@ -486,7 +523,8 @@ export const apiClient = {
       cache: "no-store",
     });
     if (!response.ok || !response.body) {
-      throw new ApiError(`任务流连接失败：${response.status}`, response.status);
+      const payload = (await response.json().catch(() => null)) as ApiResult<null> | null;
+      throw apiErrorFromPayload(payload, response.status, `任务流连接失败：${response.status}`);
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -557,11 +595,7 @@ export const apiClient = {
 
     if (!response.ok || !response.body) {
       const payload = (await response.json().catch(() => null)) as ApiResult<null> | null;
-      throw new ApiError(
-        payload?.message ?? `请求失败：${response.status}`,
-        response.status,
-        payload?.errorCode,
-      );
+      throw apiErrorFromPayload(payload, response.status, `请求失败：${response.status}`);
     }
 
     const reader = response.body.getReader();
