@@ -967,11 +967,7 @@ function EvidenceExcerptPanel({ item }: { item: PreviewSegment }) {
   const evidenceText = (item.content || item.ocrSummary || item.title || "").trim();
   const plainEvidenceText = stripEmTags(evidenceText);
   const pageNo = item.anchor?.pageNo;
-  const chunkOrder = item.anchor?.chunkOrder;
-  const location = [
-    pageNo ? `第 ${pageNo} 页` : null,
-    chunkOrder != null ? `Chunk ${chunkOrder}` : null,
-  ].filter(Boolean).join(" · ") || "片段证据";
+  const location = pageNo ? `第 ${pageNo} 页` : "片段证据";
   const canExpand = plainEvidenceText.length > 180;
 
   useEffect(() => {

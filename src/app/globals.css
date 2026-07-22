@@ -2770,11 +2770,11 @@ a {
 }
 
 .ask-premium-page[data-premium-theme="dark"] .ask-premium-answer-text {
-  color: var(--premium-ink-soft);
+  color: rgb(255, 255, 255);
 }
 
 .ask-premium-page[data-premium-theme="dark"] .ask-premium-user-text {
-  color: var(--premium-ink);
+  color: rgb(255, 255, 255);
 }
 
 .ask-premium-page[data-premium-theme="dark"] .ask-premium-user-action-button {
