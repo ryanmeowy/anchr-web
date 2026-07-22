@@ -79,7 +79,7 @@ type StreamMessageCallbacks = {
   onDelta?: (text: string) => void;
   onAnswerReset?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string; workflowVersion?: string; agentTask?: AgentTask }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; sessionUpdatedAt?: number; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string; workflowVersion?: string; agentTask?: AgentTask }) => void;
 };
 
 type AgentTaskStreamCallbacks = {
@@ -332,6 +332,7 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   if (eventName === "done") {
     callbacks.onDone?.(parseSseJson<{
       turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null;
+      sessionUpdatedAt?: number;
       answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus;
       fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType;
       retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string;

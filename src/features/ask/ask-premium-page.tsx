@@ -66,6 +66,10 @@ import {
   type MessageEdgeScrollbarMetrics,
 } from "@/features/ask/message-edge-scrollbar";
 import {
+  mergeConversationMessageMetadata,
+  shouldRecoverConversationCursor,
+} from "@/features/ask/conversation-list-state";
+import {
   clampPreviewMessageScrollTop,
   resolvePreviewMessageScrollTop,
 } from "@/features/ask/preview-message-restore";
@@ -403,6 +407,9 @@ export function AskPremiumPage() {
   const [activeSessionId, setActiveSessionId] = useState(initialSessionId);
   const [conversations, setConversations] = useState<ConversationSession[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const conversationAppendInFlightRef = useRef<string | null>(null);
+  const conversationListGenerationRef = useRef(0);
+  const conversationListReplacingRef = useRef(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
@@ -1558,19 +1565,64 @@ export function AskPremiumPage() {
   }, [initialTurnId]);
 
   const loadConversations = useCallback(async (cursor?: string | null, append = false) => {
+    const requestedCursor = cursor?.trim() || null;
+    if (append) {
+      if (!requestedCursor
+        || conversationListReplacingRef.current
+        || conversationAppendInFlightRef.current !== null) return;
+      conversationAppendInFlightRef.current = requestedCursor;
+    } else {
+      conversationListGenerationRef.current += 1;
+      conversationListReplacingRef.current = true;
+    }
+    const generation = conversationListGenerationRef.current;
+    let fallbackGeneration: number | null = null;
     if (append) setIsLoadingMoreConversations(true);
     else setIsLoadingConversations(true);
     setConversationError(null);
 
     try {
-      const data = await apiClient.listConversations(CONVERSATION_PAGE_SIZE, cursor);
+      const data = await apiClient.listConversations(CONVERSATION_PAGE_SIZE, requestedCursor);
+      if (generation !== conversationListGenerationRef.current) return;
       setConversations((previous) => mergeConversations(append ? previous : [], data.items ?? []));
       setNextCursor(data.nextCursor ?? null);
     } catch (error) {
+      if (generation !== conversationListGenerationRef.current) return;
+      if (shouldRecoverConversationCursor(
+        error,
+        append,
+        generation,
+        conversationListGenerationRef.current,
+      )) {
+        const resetGeneration = ++conversationListGenerationRef.current;
+        try {
+          fallbackGeneration = resetGeneration;
+          conversationListReplacingRef.current = true;
+          const firstPage = await apiClient.listConversations(CONVERSATION_PAGE_SIZE, null);
+          if (resetGeneration !== conversationListGenerationRef.current) return;
+          setConversations(firstPage.items ?? []);
+          setNextCursor(firstPage.nextCursor ?? null);
+          return;
+        } catch (reloadError) {
+          if (resetGeneration !== conversationListGenerationRef.current) return;
+          setConversationError(reloadError instanceof Error ? reloadError.message : "会话列表加载失败");
+          return;
+        }
+      }
       setConversationError(error instanceof Error ? error.message : "会话列表加载失败");
     } finally {
-      setIsLoadingConversations(false);
-      setIsLoadingMoreConversations(false);
+      if (!append && generation === conversationListGenerationRef.current) {
+        conversationListReplacingRef.current = false;
+        setIsLoadingConversations(false);
+      }
+      if (append && conversationAppendInFlightRef.current === requestedCursor) {
+        conversationAppendInFlightRef.current = null;
+        setIsLoadingMoreConversations(false);
+      }
+      if (fallbackGeneration != null && fallbackGeneration === conversationListGenerationRef.current) {
+        conversationListReplacingRef.current = false;
+        setIsLoadingConversations(false);
+      }
     }
   }, []);
 
@@ -2929,13 +2981,7 @@ export function AskPremiumPage() {
             }));
             setConversations((previous) => previous.map((item) => (
               item.sessionId === targetSessionId
-                ? {
-                    ...item,
-                    title: event.title || item.title || "新对话",
-                    lastMessagePreview: text,
-                    kbScope: event.kbScope ?? item.kbScope,
-                    updatedAt: Date.now(),
-                  }
+                ? mergeConversationMessageMetadata(item, event, text)
                 : item
             )));
           },
