@@ -62,7 +62,11 @@ test("copies the backend error disposition into ApiError", async () => {
 
   try {
     await assert.rejects(
-      apiClient.createUploadIngestionTask("kb-1", { dedupeStrategy: "SKIP", items: [] }),
+      apiClient.createUploadIngestionTask("kb-1", {
+        clientRequestId: "request-102",
+        dedupeStrategy: "SKIP",
+        items: [],
+      }),
       (error) => {
         assert.equal(error instanceof ApiError, true);
         assert.equal(error.status, 400);
@@ -87,7 +91,11 @@ test("malformed and missing error envelopes remain cleanup-conservative", async 
 
   try {
     await assert.rejects(
-      apiClient.createUploadIngestionTask("kb-1", { dedupeStrategy: "SKIP", items: [] }),
+      apiClient.createUploadIngestionTask("kb-1", {
+        clientRequestId: "request-102",
+        dedupeStrategy: "SKIP",
+        items: [],
+      }),
       (error) => {
         assert.equal(error instanceof ApiError, true);
         assert.equal(error.status, 502);

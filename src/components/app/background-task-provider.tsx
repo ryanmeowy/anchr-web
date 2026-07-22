@@ -20,16 +20,38 @@ import {
   type ReactNode,
 } from "react";
 import { apiClient } from "@/lib/api-client";
-import type { AgentRunActivity, AgentRunSummary, IngestionTask } from "@/lib/types";
+import {
+  normalizePersistedIngestionCreateRequest,
+  recoverIngestionCreate,
+  shouldCleanupRejectedIngestionCreate,
+} from "@/lib/ingestion-create-recovery";
+import { deleteUploadedFilesFromOss } from "@/lib/ingestion-files";
+import type {
+  AgentRunActivity,
+  AgentRunSummary,
+  IngestionCreateRequest,
+  IngestionTask,
+  UploadIngestionItem,
+} from "@/lib/types";
 import {
   recoverableAgentTaskKey,
   shouldDiscoverRecoverableAgentRuns,
 } from "./background-task-recovery";
+import {
+  mergeStoredTaskSnapshots,
+  preparedImportCreateTask,
+  rejectedImportCreateTask,
+  restoredImportStage,
+  retainStoredBackgroundTasks,
+  shouldInterruptImportUpload,
+  type PendingImportTaskSnapshot,
+} from "./background-import-state";
 import styles from "./background-task-provider.module.css";
 
 const STORAGE_KEY_PREFIX = "anchr.background-tasks.v2";
 const MAX_STORED_TASKS = 20;
 const COMPLETED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const IMPORT_CONFIRMATION_POLL_MS = 2_500;
 
 export type BackgroundTaskStatus = "running" | "success" | "error" | "cancelled";
 
@@ -54,6 +76,8 @@ export type TrackedImportTask = {
   kind: "import";
   kbId: string;
   taskId?: string;
+  clientRequestId?: string;
+  createRequest?: IngestionCreateRequest;
   label: string;
   status: BackgroundTaskStatus;
   totalCount: number;
@@ -63,6 +87,10 @@ export type TrackedImportTask = {
   progress: number;
   uploadedCount?: number;
   currentStage?: string;
+  confirmationNotBefore?: number;
+  ownerLeaseExpiresAt?: number;
+  navigationPending?: boolean;
+  failureMessage?: string;
   startedAt: number;
   updatedAt: number;
   finishedAt?: number;
@@ -79,7 +107,13 @@ type BackgroundTaskContextValue = {
   registerAgentTask: (task: Pick<TrackedAgentTask, "id" | "sessionId" | "label" | "startedAt">) => void;
   updateAgentTask: (id: string, patch: AgentTaskPatch) => void;
   registerImportTask: (task: IngestionTask) => void;
-  registerPendingImportTask: (task: Pick<TrackedImportTask, "id" | "kbId" | "label" | "totalCount" | "startedAt">) => void;
+  registerPendingImportTask: (task: PendingImportTaskSnapshot) => void;
+  prepareImportCreate: (
+    task: PendingImportTaskSnapshot,
+    request: IngestionCreateRequest,
+    ownerLeaseExpiresAt: number,
+  ) => boolean;
+  rejectImportCreate: (task: PendingImportTaskSnapshot, failureMessage: string) => boolean;
   updateImportTask: (id: string, patch: ImportTaskPatch) => void;
   resolveImportTask: (id: string, task: IngestionTask) => void;
   dismissTask: (id: string) => void;
@@ -99,9 +133,16 @@ export function BackgroundTaskProvider({
   const storageKey = authIdentityKey === null ? null : `${STORAGE_KEY_PREFIX}.${authIdentityKey}`;
   const [tasks, setTasks] = useState<TrackedBackgroundTask[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [storageRepairRevision, setStorageRepairRevision] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  const activeStorageKeyRef = useRef(storageKey);
+  const importRecoveryInFlightRef = useRef(new Set<string>());
   const initialRecoveryCompleteRef = useRef(false);
   const initialRecoveryAttemptsRef = useRef(0);
+
+  useEffect(() => {
+    activeStorageKeyRef.current = storageKey;
+  }, [storageKey]);
 
   useEffect(() => {
     if (!storageKey) return;
@@ -115,17 +156,23 @@ export function BackgroundTaskProvider({
   useEffect(() => {
     if (!hydrated || !storageKey) return;
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify(trimStoredTasks(tasks)));
+      const merged = mergeStoredTasks(readStoredTasks(storageKey), tasks);
+      const serialized = JSON.stringify(trimStoredTasks(merged));
+      if (window.localStorage.getItem(storageKey) !== serialized) {
+        window.localStorage.setItem(storageKey, serialized);
+      }
     } catch {
       // Task tracking remains available for the current tab when storage is unavailable.
     }
-  }, [hydrated, storageKey, tasks]);
+  }, [hydrated, storageKey, storageRepairRevision, tasks]);
 
   useEffect(() => {
     if (!storageKey) return;
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== storageKey) return;
-      setTasks((previous) => mergeStoredTasks(previous, readStoredTasks(storageKey)));
+      const incoming = parseStoredTasks(event.newValue);
+      setTasks((previous) => mergeStoredTasks(previous, incoming));
+      setStorageRepairRevision((revision) => revision + 1);
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
@@ -168,7 +215,7 @@ export function BackgroundTaskProvider({
   }, []);
 
   const registerPendingImportTask = useCallback<BackgroundTaskContextValue["registerPendingImportTask"]>((task) => {
-    setTasks((previous) => upsertTask(previous, {
+    const pending: TrackedImportTask = {
       ...task,
       kind: "import",
       status: "running",
@@ -180,8 +227,56 @@ export function BackgroundTaskProvider({
       currentStage: "UPLOADING",
       updatedAt: Date.now(),
       dismissed: false,
-    }));
-  }, []);
+    };
+    setTasks((previous) => upsertTask(previous, pending));
+    persistTaskUpdate(storageKey, (stored) => upsertTask(stored, pending));
+  }, [storageKey]);
+
+  const prepareImportCreate = useCallback<BackgroundTaskContextValue["prepareImportCreate"]>((
+    pending,
+    request,
+    ownerLeaseExpiresAt,
+  ) => {
+    const preparedAt = Date.now();
+    const snapshot = {
+      ...pending,
+      ownerLeaseExpiresAt,
+    };
+    const applyRequest = (previous: TrackedBackgroundTask[]) => {
+      const existing = previous.find((task): task is TrackedImportTask => (
+        task.kind === "import" && task.id === pending.id
+      ));
+      return upsertTask(previous, preparedImportCreateTask(
+        existing,
+        snapshot,
+        request,
+        ownerLeaseExpiresAt,
+        preparedAt,
+      ));
+    };
+    setTasks(applyRequest);
+    return persistTaskUpdate(storageKey, applyRequest);
+  }, [storageKey]);
+
+  const rejectImportCreate = useCallback<BackgroundTaskContextValue["rejectImportCreate"]>((
+    pending,
+    failureMessage,
+  ) => {
+    const rejectedAt = Date.now();
+    const applyRejected = (previous: TrackedBackgroundTask[]) => {
+      const existing = previous.find((task): task is TrackedImportTask => (
+        task.kind === "import" && task.id === pending.id
+      ));
+      return upsertTask(previous, rejectedImportCreateTask(
+        existing,
+        pending,
+        failureMessage,
+        rejectedAt,
+      ));
+    };
+    setTasks(applyRejected);
+    return persistTaskUpdate(storageKey, applyRejected);
+  }, [storageKey]);
 
   const updateImportTask = useCallback<BackgroundTaskContextValue["updateImportTask"]>((id, patch) => {
     setTasks((previous) => previous.map((task) => {
@@ -200,11 +295,16 @@ export function BackgroundTaskProvider({
   }, []);
 
   const resolveImportTask = useCallback<BackgroundTaskContextValue["resolveImportTask"]>((id, snapshot) => {
-    const resolved = trackedImportTask(snapshot);
-    setTasks((previous) => previous.map((task) => task.kind === "import" && task.id === id
-      ? { ...resolved, id, startedAt: task.startedAt, updatedAt: Date.now(), dismissed: task.dismissed }
-      : task));
-  }, []);
+    const resolvedAt = Date.now();
+    const applyResolved = (previous: TrackedBackgroundTask[]) => resolveImportCreateSnapshot(
+      previous,
+      id,
+      snapshot,
+      resolvedAt,
+    );
+    setTasks(applyResolved);
+    persistTaskUpdate(storageKey, applyResolved);
+  }, [storageKey]);
 
   const dismissTask = useCallback((id: string) => {
     setTasks((previous) => previous.map((task) => task.id === id
@@ -272,6 +372,152 @@ export function BackgroundTaskProvider({
       document.removeEventListener("visibilitychange", recoverOnWake);
     };
   }, [hydrated, unresolvedAgentTaskKey]);
+
+  const unresolvedImportCreateKey = useMemo(() => JSON.stringify(tasks
+    .filter((task): task is TrackedImportTask => task.kind === "import"
+      && task.status === "running"
+      && !task.taskId
+      && Boolean(task.createRequest)
+      && (task.currentStage === "SUBMITTING" || task.currentStage === "CONFIRMING"))
+    .map((task) => ({
+      id: task.id,
+      kbId: task.kbId,
+      request: task.createRequest as IngestionCreateRequest,
+      confirmationNotBefore: Math.max(task.confirmationNotBefore ?? 0, task.ownerLeaseExpiresAt ?? 0),
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id))), [tasks]);
+
+  useEffect(() => {
+    if (!hydrated || unresolvedImportCreateKey === "[]") return;
+    let timer: number | undefined;
+    const pending = JSON.parse(unresolvedImportCreateKey) as Array<{
+      id: string;
+      kbId: string;
+      request: IngestionCreateRequest;
+      confirmationNotBefore: number;
+    }>;
+
+    const confirm = async () => {
+      const currentTime = Date.now();
+      const due = pending.filter((task) => task.confirmationNotBefore <= currentTime);
+      if (due.length === 0) {
+        const nextAttemptAt = Math.min(...pending.map((task) => task.confirmationNotBefore));
+        timer = window.setTimeout(confirm, Math.max(0, nextAttemptAt - currentTime));
+        return;
+      }
+
+      const dueIds = new Set(due.map((task) => task.id));
+      setTasks((previous) => previous.map((task) => task.kind === "import"
+        && dueIds.has(task.id)
+        && task.status === "running"
+        && !task.taskId
+        ? { ...task, currentStage: "CONFIRMING", updatedAt: Date.now() }
+        : task));
+
+      await Promise.allSettled(due.map(async (recovered) => {
+        if (importRecoveryInFlightRef.current.has(recovered.id)) return;
+        importRecoveryInFlightRef.current.add(recovered.id);
+        try {
+          const result = await recoverIngestionCreate({
+            findByClientRequestId: apiClient.getIngestionTaskByClientRequestId,
+            create: apiClient.createIngestionTask,
+          }, recovered.kbId, recovered.request);
+          if (activeStorageKeyRef.current !== storageKey) return;
+
+          const recoveredAt = Date.now();
+          const applyRecoveryResult = (previous: TrackedBackgroundTask[]): TrackedBackgroundTask[] => {
+            const current = previous.find((task) => task.kind === "import" && task.id === recovered.id);
+            if (result.state === "resolved") {
+              if (current && (current.kind !== "import" || current.status !== "running" || current.taskId)) {
+                return previous;
+              }
+              return resolveImportCreateSnapshot(
+                previous,
+                recovered.id,
+                result.task,
+                recoveredAt,
+              );
+            }
+            if (!current || current.kind !== "import" || current.status !== "running" || current.taskId) {
+              return previous;
+            }
+            if (result.state === "failed") {
+              return previous.map((task) => task.kind === "import" && task.id === recovered.id
+                ? {
+                    ...task,
+                    createRequest: undefined,
+                    status: "error" as const,
+                    runningCount: 0,
+                    currentStage: "CREATE_REJECTED",
+                    confirmationNotBefore: undefined,
+                    ownerLeaseExpiresAt: 0,
+                    navigationPending: false,
+                    failureMessage: errorMessage(result.error),
+                    finishedAt: recoveredAt,
+                    updatedAt: recoveredAt,
+                    dismissed: false,
+                  }
+                : task);
+            }
+            return previous.map((task) => task.kind === "import" && task.id === recovered.id
+              ? {
+                  ...task,
+                  currentStage: "CONFIRMING",
+                  confirmationNotBefore: recoveredAt + IMPORT_CONFIRMATION_POLL_MS,
+                  failureMessage: undefined,
+                  updatedAt: recoveredAt,
+                }
+              : task);
+          };
+          setTasks(applyRecoveryResult);
+          const persisted = persistTaskUpdate(storageKey, applyRecoveryResult);
+          if (persisted
+            && result.state === "failed"
+            && shouldCleanupRejectedIngestionCreate(result.error)) {
+            await cleanupRejectedUpload(recovered.request).catch(() => undefined);
+          }
+        } finally {
+          importRecoveryInFlightRef.current.delete(recovered.id);
+        }
+      }));
+    };
+
+    void confirm();
+    return () => {
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [hydrated, storageKey, unresolvedImportCreateKey]);
+
+  const unresolvedUploadKey = useMemo(() => JSON.stringify(tasks
+    .filter((task): task is TrackedImportTask => task.kind === "import"
+      && task.status === "running"
+      && !task.taskId
+      && task.currentStage === "UPLOADING")
+    .map((task) => ({ id: task.id, ownerLeaseExpiresAt: task.ownerLeaseExpiresAt ?? 0 }))
+    .sort((left, right) => left.id.localeCompare(right.id))), [tasks]);
+
+  useEffect(() => {
+    if (!hydrated || unresolvedUploadKey === "[]") return;
+    const pending = JSON.parse(unresolvedUploadKey) as Array<{ id: string; ownerLeaseExpiresAt: number }>;
+    const expireAt = Math.min(...pending.map((task) => task.ownerLeaseExpiresAt));
+    const markInterrupted = () => {
+      const currentTime = Date.now();
+      setTasks((previous) => previous.map((task) => task.kind === "import"
+        && shouldInterruptImportUpload(task, currentTime)
+        ? {
+            ...task,
+            status: "error",
+            currentStage: "UPLOAD_INTERRUPTED",
+            failureMessage: "文件上传已中断，请重新选择文件后上传。",
+            finishedAt: currentTime,
+            updatedAt: currentTime,
+            dismissed: false,
+          }
+        : task));
+    };
+    const timer = window.setTimeout(markInterrupted, Math.max(0, expireAt - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [hydrated, unresolvedUploadKey]);
 
   const activeTaskKey = useMemo(() => JSON.stringify(tasks
     .filter((task) => task.status === "running" && !isSourceRoute(pathname, task.kind))
@@ -352,6 +598,8 @@ export function BackgroundTaskProvider({
     updateAgentTask,
     registerImportTask,
     registerPendingImportTask,
+    prepareImportCreate,
+    rejectImportCreate,
     updateImportTask,
     resolveImportTask,
     dismissTask,
@@ -360,6 +608,8 @@ export function BackgroundTaskProvider({
     registerAgentTask,
     registerImportTask,
     registerPendingImportTask,
+    prepareImportCreate,
+    rejectImportCreate,
     resolveImportTask,
     tasks,
     updateAgentTask,
@@ -437,7 +687,9 @@ function BackgroundTaskCard({
       <button className={styles.dismiss} type="button" onClick={onDismiss} aria-label="关闭任务提醒">
         <X size={14} aria-hidden="true" />
       </button>
-      {task.kind === "import" && task.status === "running" ? (
+      {task.kind === "import"
+        && task.status === "running"
+        && !(task.currentStage === "SUBMITTING" || task.currentStage === "CONFIRMING") ? (
         <span className={styles.progress} aria-label={`任务进度 ${task.progress}%`}>
           <span className={styles.progressValue} style={{ width: `${task.progress}%` }} />
         </span>
@@ -477,18 +729,23 @@ function taskPresentation(task: TrackedBackgroundTask, count: number, now: numbe
   if (task.status === "error" || task.status === "cancelled") return {
     eyebrow: "IMPORT NEEDS ATTENTION",
     title: task.failureCount > 0 ? `${task.failureCount} 个文件导入失败` : "导入任务未完成",
-    detail: task.label,
+    detail: task.failureMessage ?? task.label,
     meta: "查看原因",
   };
   const processed = Math.min(task.totalCount, task.successCount + task.failureCount);
   const uploading = task.currentStage === "UPLOADING" && !task.taskId;
+  const confirming = (task.currentStage === "SUBMITTING" || task.currentStage === "CONFIRMING") && !task.taskId;
   return {
     eyebrow: "IMPORT RUNNING",
     title: count > 1 ? `${count} 个导入任务运行中` : `正在导入 ${task.label}`,
-    detail: uploading
+    detail: confirming
+      ? "正在确认后端是否已受理，请勿重复上传"
+      : uploading
       ? `${task.uploadedCount ?? 0} / ${task.totalCount || 1} 个文件已上传`
       : `${processed} / ${task.totalCount || 1} 个文件已处理`,
-    meta: uploading
+    meta: confirming
+      ? "确认中"
+      : uploading
       ? `${task.uploadedCount ?? 0} / ${task.totalCount || 1}`
       : `${processed} / ${task.totalCount || 1}`,
   };
@@ -505,6 +762,7 @@ function trackedImportTask(task: IngestionTask): TrackedImportTask {
     kind: "import",
     kbId: task.kbId,
     taskId: task.taskId,
+    ...(task.clientRequestId ? { clientRequestId: task.clientRequestId } : {}),
     label: importTaskLabel(task),
     status: importStatus(task.status),
     totalCount,
@@ -518,6 +776,32 @@ function trackedImportTask(task: IngestionTask): TrackedImportTask {
     finishedAt: parseTaskTime(task.finishedAt),
     dismissed: false,
   };
+}
+
+function resolveImportCreateSnapshot(
+  tasks: TrackedBackgroundTask[],
+  id: string,
+  snapshot: IngestionTask,
+  resolvedAt: number,
+) {
+  const existing = tasks.find((task): task is TrackedImportTask => (
+    task.kind === "import" && task.id === id
+  ));
+  const resolved = trackedImportTask(snapshot);
+  const next: TrackedImportTask = {
+    ...(existing ?? resolved),
+    ...resolved,
+    id,
+    clientRequestId: snapshot.clientRequestId ?? existing?.clientRequestId,
+    createRequest: undefined,
+    confirmationNotBefore: undefined,
+    ownerLeaseExpiresAt: undefined,
+    startedAt: existing?.startedAt ?? resolved.startedAt,
+    updatedAt: resolvedAt,
+    navigationPending: true,
+    dismissed: existing?.dismissed ?? resolved.dismissed,
+  };
+  return upsertTask(tasks, next);
 }
 
 function applyAgentActivity(tasks: TrackedBackgroundTask[], id: string, activity: AgentRunActivity) {
@@ -603,32 +887,68 @@ function upsertTask(tasks: TrackedBackgroundTask[], nextTask: TrackedBackgroundT
 }
 
 function trimStoredTasks(tasks: TrackedBackgroundTask[]) {
-  const cutoff = Date.now() - COMPLETED_RETENTION_MS;
-  return tasks
-    .filter((task) => task.status === "running" || !task.dismissed || (task.finishedAt ?? task.startedAt) >= cutoff)
-    .sort((a, b) => b.startedAt - a.startedAt)
-    .slice(0, MAX_STORED_TASKS);
+  return retainStoredBackgroundTasks(
+    tasks,
+    MAX_STORED_TASKS,
+    COMPLETED_RETENTION_MS,
+  );
+}
+
+function persistTaskUpdate(
+  storageKey: string | null,
+  update: (tasks: TrackedBackgroundTask[]) => TrackedBackgroundTask[],
+) {
+  if (!storageKey || typeof window === "undefined") return false;
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(trimStoredTasks(update(readStoredTasks(storageKey)))));
+    return true;
+  } catch {
+    // React state remains the in-tab source of truth when persistence is unavailable.
+    return false;
+  }
 }
 
 function readStoredTasks(storageKey: string): TrackedBackgroundTask[] {
+  return parseStoredTasks(window.localStorage.getItem(storageKey));
+}
+
+function parseStoredTasks(rawValue: string | null): TrackedBackgroundTask[] {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as unknown;
+    const parsed = JSON.parse(rawValue ?? "[]") as unknown;
     if (!Array.isArray(parsed)) return [];
     return trimStoredTasks(parsed.filter(isTrackedTask).map((task) => {
       const migratedTask = {
         ...task,
         updatedAt: task.updatedAt ?? task.finishedAt ?? task.startedAt,
       };
-      if (migratedTask.kind !== "import" || migratedTask.status !== "running" || migratedTask.taskId) {
-        return migratedTask;
+      if (migratedTask.kind !== "import") return migratedTask;
+
+      const createRequest = normalizePersistedIngestionCreateRequest(migratedTask.createRequest);
+      if (!createRequest) {
+        const unrecoverableSubmit = migratedTask.status === "running"
+          && !migratedTask.taskId
+          && (migratedTask.currentStage === "SUBMITTING" || migratedTask.currentStage === "CONFIRMING");
+        return unrecoverableSubmit
+          ? {
+              ...migratedTask,
+              status: "error" as const,
+              currentStage: "CREATE_RECOVERY_UNAVAILABLE",
+              failureMessage: "缺少可恢复的任务创建参数，请重新提交。",
+              finishedAt: Date.now(),
+              updatedAt: Date.now(),
+              dismissed: false,
+            }
+          : { ...migratedTask, createRequest: undefined };
       }
+
+      const restoredStage = restoredImportStage(migratedTask);
       return {
         ...migratedTask,
-        status: "error" as const,
-        currentStage: "上传已因页面刷新中断",
-        finishedAt: Date.now(),
-        updatedAt: Date.now(),
-        dismissed: false,
+        clientRequestId: createRequest.clientRequestId,
+        createRequest,
+        ...(restoredStage !== migratedTask.currentStage
+          ? { currentStage: restoredStage, confirmationNotBefore: 0 }
+          : {}),
       };
     }));
   } catch {
@@ -637,12 +957,7 @@ function readStoredTasks(storageKey: string): TrackedBackgroundTask[] {
 }
 
 function mergeStoredTasks(current: TrackedBackgroundTask[], incoming: TrackedBackgroundTask[]) {
-  const byId = new Map(current.map((task) => [task.id, task]));
-  incoming.forEach((task) => {
-    const existing = byId.get(task.id);
-    if (!existing || task.updatedAt > existing.updatedAt) byId.set(task.id, task);
-  });
-  const merged = trimStoredTasks(Array.from(byId.values()));
+  const merged = trimStoredTasks(mergeStoredTaskSnapshots(current, incoming));
   return JSON.stringify(merged) === JSON.stringify(current) ? current : merged;
 }
 
@@ -667,6 +982,21 @@ function importStatus(status: string): BackgroundTaskStatus {
   if (status === "CANCELLED") return "cancelled";
   if (status === "FAILED") return "error";
   return "running";
+}
+
+async function cleanupRejectedUpload(request: IngestionCreateRequest) {
+  if (request.sourceType !== "UPLOAD") return;
+  const items = request.items.filter((item): item is UploadIngestionItem => (
+    typeof item.fileName === "string"
+    && typeof item.objectKey === "string"
+  ));
+  if (items.length !== request.items.length) return;
+  const token = await apiClient.getStsToken();
+  await deleteUploadedFilesFromOss(token, items);
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "任务创建失败，请重新提交。";
 }
 
 function agentStageLabel(stage?: string) {

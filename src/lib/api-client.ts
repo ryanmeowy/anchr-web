@@ -23,6 +23,7 @@ import type {
   ConversationTurn,
   ElasticsearchHealth,
   IngestionCapability,
+  IngestionCreateRequest,
   IngestionTaskList,
   IngestionTask,
   KnowledgeBase,
@@ -72,6 +73,7 @@ type RequestOptions = {
   body?: unknown;
   token?: string | null;
   signal?: AbortSignal;
+  cache?: RequestCache;
 };
 
 type StreamMessageCallbacks = {
@@ -223,6 +225,7 @@ async function request<T>(path: string, options: RequestOptions = {}) {
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.signal,
+    cache: options.cache,
   });
 
   const payload = (await response.json().catch(() => null)) as ApiResult<T> | null;
@@ -251,6 +254,31 @@ function apiErrorFromPayload(
       uploadCleanupAllowed: payload?.uploadCleanupAllowed,
     },
   );
+}
+
+function requireIngestionTaskResponse(value: unknown): IngestionTask {
+  if (!value || typeof value !== "object") throw invalidIngestionTaskResponse();
+  const task = value as Partial<IngestionTask>;
+  if (typeof task.taskId !== "string" || !task.taskId.trim()
+    || typeof task.kbId !== "string" || !task.kbId.trim()
+    || typeof task.sourceType !== "string" || !task.sourceType.trim()
+    || typeof task.status !== "string" || !task.status.trim()
+    || !isNonNegativeFiniteNumber(task.totalCount)
+    || !isNonNegativeFiniteNumber(task.successCount)
+    || !isNonNegativeFiniteNumber(task.failureCount)
+    || !isNonNegativeFiniteNumber(task.runningCount)
+    || (task.items !== undefined && !Array.isArray(task.items))) {
+    throw invalidIngestionTaskResponse();
+  }
+  return task as IngestionTask;
+}
+
+function invalidIngestionTaskResponse() {
+  return new Error("ingestion task response is incomplete.");
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function normalizePreviewSegmentId(segmentId: string) {
@@ -465,10 +493,21 @@ export const apiClient = {
     request<IngestionTask>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks/${encodeURIComponent(taskId)}`,
     ),
-  createUrlIngestionTask: (kbId: string, body: { sourceUrl: string; fileName: string; fileType: string; dedupeStrategy: string }) =>
+  getIngestionTaskByClientRequestId: (kbId: string, clientRequestId: string) =>
+    request<IngestionTask>(
+      `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks/by-client-request/${encodeURIComponent(clientRequestId)}`,
+      { cache: "no-store" },
+    ).then(requireIngestionTaskResponse),
+  createIngestionTask: (kbId: string, body: IngestionCreateRequest) =>
+    request<IngestionTask>(`/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks`, {
+      method: "POST",
+      body,
+    }).then(requireIngestionTaskResponse),
+  createUrlIngestionTask: (kbId: string, body: { clientRequestId: string; sourceUrl: string; fileName: string; fileType: string; dedupeStrategy: string }) =>
     request<IngestionTask>(`/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks`, {
       method: "POST",
       body: {
+        clientRequestId: body.clientRequestId,
         sourceType: "URL",
         dedupeStrategy: body.dedupeStrategy,
         items: [
@@ -479,16 +518,17 @@ export const apiClient = {
           },
         ],
       },
-    }),
-  createUploadIngestionTask: (kbId: string, body: { dedupeStrategy: string; items: UploadIngestionItem[] }) =>
+    }).then(requireIngestionTaskResponse),
+  createUploadIngestionTask: (kbId: string, body: { clientRequestId: string; dedupeStrategy: string; items: UploadIngestionItem[] }) =>
     request<IngestionTask>(`/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks`, {
       method: "POST",
       body: {
+        clientRequestId: body.clientRequestId,
         sourceType: "UPLOAD",
         dedupeStrategy: body.dedupeStrategy,
         items: body.items,
       },
-    }),
+    }).then(requireIngestionTaskResponse),
   retryFailedIngestionTask: (kbId: string, taskId: string) =>
     request<IngestionTask>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks/${encodeURIComponent(taskId)}/retry-failed`,

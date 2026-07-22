@@ -19,15 +19,29 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   PremiumConfigurationShell,
 } from "@/components/app/premium-configuration-gate";
-import { useBackgroundTasks } from "@/components/app/background-task-provider";
+import {
+  useBackgroundTasks,
+  type TrackedImportTask,
+} from "@/components/app/background-task-provider";
+import {
+  selectRecoverableImportCreate,
+  type PendingImportTaskSnapshot,
+} from "@/components/app/background-import-state";
 import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
 import { ActionErrorNotice } from "@/components/shared/action-error-notice";
 import { FileTypeIcon, normalizeExtension } from "@/components/shared/file-type-icon";
-import { apiClient, isAccessDeniedError, isUploadCleanupAllowed } from "@/lib/api-client";
+import { apiClient, isAccessDeniedError } from "@/lib/api-client";
 import { formatFileSize, formatNumber, statusText } from "@/lib/format";
+import {
+  isIngestionCreatePersistenceError,
+  isUncertainIngestionCreateError,
+  shouldCleanupRejectedIngestionCreate,
+  submitPersistedIngestionCreate,
+} from "@/lib/ingestion-create-recovery";
 import {
   buildDisplayNameFromUrl,
   deleteUploadedFilesFromOss,
@@ -37,6 +51,7 @@ import {
 import { PREMIUM_THEME, type PremiumThemeMode } from "@/lib/premium-theme";
 import type {
   IngestionTask,
+  IngestionCreateRequest,
   IngestionTaskItem,
   IngestionTaskSummary,
   KnowledgeBase,
@@ -45,6 +60,8 @@ import type {
 
 const MAX_TASK_LIST_SIZE = 100;
 const RECENT_IMPORT_REFRESH_INTERVAL_MS = 10_000;
+const IMPORT_OWNER_LEASE_MS = 15_000;
+const IMPORT_OWNER_HEARTBEAT_MS = 5_000;
 
 const FLOW_STEPS = [
   { key: "UPLOAD", label: "上传", helper: "文件接收与入队" },
@@ -63,9 +80,13 @@ export function ImportsPremiumPage({
   initialTaskId?: string;
 }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const {
+    tasks: backgroundTasks,
     registerImportTask,
     registerPendingImportTask,
+    prepareImportCreate,
+    rejectImportCreate,
     resolveImportTask,
     updateImportTask,
   } = useBackgroundTasks();
@@ -79,7 +100,13 @@ export function ImportsPremiumPage({
   const [dedupeStrategy, setDedupeStrategy] = useState("SKIP");
   const [currentTaskId, setCurrentTaskId] = useState(initialTaskId);
   const [files, setFiles] = useState<File[]>([]);
+  const [activeCreateTrackingId, setActiveCreateTrackingId] = useState<string | null>(null);
   const [permissionNotice, setPermissionNotice] = useState<{ title: string; message: string } | null>(null);
+
+  const recoverableTrackedCreate = useMemo(() => selectRecoverableImportCreate(
+    backgroundTasks.filter((task): task is TrackedImportTask => task.kind === "import"),
+    kbId || undefined,
+  ), [backgroundTasks, kbId]);
 
   const kbsQuery = useQuery({
     queryKey: ["kbs"],
@@ -93,7 +120,7 @@ export function ImportsPremiumPage({
     refetchOnWindowFocus: false,
   });
 
-  const selectedKbId = kbId || kbsQuery.data?.items?.[0]?.id || "";
+  const selectedKbId = kbId || recoverableTrackedCreate?.kbId || kbsQuery.data?.items?.[0]?.id || "";
   const selectedKb = useMemo(
     () => (kbsQuery.data?.items ?? []).find((item) => item.id === selectedKbId) ?? null,
     [kbsQuery.data?.items, selectedKbId],
@@ -149,7 +176,7 @@ export function ImportsPremiumPage({
   const selectedFilesSize = files.reduce((total, file) => total + file.size, 0);
 
   const createUrlMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async ({ pending }: { pending: PendingImportTaskSnapshot }) => {
       const trimmedUrl = sourceUrl.trim();
       const displayName = urlTitle.trim() || buildDisplayNameFromUrl(trimmedUrl);
 
@@ -158,61 +185,136 @@ export function ImportsPremiumPage({
         throw new Error("URL 指向的文件格式不支持，请确认链接指向支持的文件类型。");
       }
 
-      return apiClient.createUrlIngestionTask(selectedKbId, {
-        sourceUrl: trimmedUrl,
-        fileName: displayName,
-        fileType: urlFileType,
+      const request: IngestionCreateRequest = {
+        clientRequestId: pending.clientRequestId,
+        sourceType: "URL",
         dedupeStrategy: effectiveDedupeStrategy,
-      });
+        items: [{
+          sourceUrl: trimmedUrl,
+          fileName: displayName,
+          fileType: urlFileType,
+        }],
+      };
+      try {
+        const task = await submitPersistedIngestionCreate(
+          () => prepareImportCreate(pending, request, Date.now() + IMPORT_OWNER_LEASE_MS),
+          () => apiClient.createIngestionTask(pending.kbId, request),
+        );
+        return { task, confirming: false as const };
+      } catch (error) {
+        if (isIngestionCreatePersistenceError(error)) throw error;
+        if (!isUncertainIngestionCreateError(error)) {
+          rejectImportCreate(pending, ingestionCreateErrorMessage(error, "URL 导入任务创建失败。"));
+          throw error;
+        }
+        updateImportTask(pending.id, {
+          currentStage: "CONFIRMING",
+          confirmationNotBefore: 0,
+          ownerLeaseExpiresAt: 0,
+        });
+        return { task: null, confirming: true as const };
+      }
     },
-    onSuccess: async (task) => {
-      registerImportTask(task);
-      queryClient.setQueryData(["ingestion-task", selectedKbId, task.taskId], task);
-      setCurrentTaskId(task.taskId);
+    onSuccess: async (result, { pending }) => {
       setSourceUrl("");
       setUrlTitle("");
       setShowUrlForm(false);
       setFiles([]);
-      await invalidateIngestionQueries(queryClient, selectedKbId);
+      if (result.confirming) {
+        void invalidateIngestionQueries(queryClient, pending.kbId);
+        return;
+      }
+      const task = result.task;
+      resolveImportTask(pending.id, task);
+      queryClient.setQueryData(["ingestion-task", pending.kbId, task.taskId], task);
+      setKbId(pending.kbId);
+      setCurrentTaskId(task.taskId);
+      await invalidateIngestionQueries(queryClient, pending.kbId);
+    },
+    onError: (error, { pending }) => {
+      rejectImportCreate(pending, ingestionCreateErrorMessage(error, "URL 导入任务创建失败。"));
     },
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async ({ trackingId, uploadFiles }: { trackingId: string; uploadFiles: File[] }) => {
+    mutationFn: async ({
+      pending,
+      uploadFiles,
+    }: {
+      pending: PendingImportTaskSnapshot;
+      uploadFiles: File[];
+    }) => {
       validateUploadInput(uploadFiles, capabilitiesQuery.data?.maxFileSizeBytes, capabilitiesQuery.data?.maxFilesPerBatch);
 
       const stsToken = await apiClient.getStsToken();
       const items = await uploadFilesToOss(uploadFiles, stsToken, supportedFormats, (completedCount, totalCount) => {
-        updateImportTask(trackingId, {
+        updateImportTask(pending.id, {
           uploadedCount: completedCount,
           progress: Math.round((completedCount / Math.max(totalCount, 1)) * 100),
         });
+      }, (preparedItems) => {
+        updateImportTask(pending.id, {
+          clientRequestId: pending.clientRequestId,
+          createRequest: {
+            clientRequestId: pending.clientRequestId,
+            sourceType: "UPLOAD",
+            dedupeStrategy: effectiveDedupeStrategy,
+            items: preparedItems,
+          },
+        });
       });
 
+      const request: IngestionCreateRequest = {
+        clientRequestId: pending.clientRequestId,
+        sourceType: "UPLOAD",
+        dedupeStrategy: effectiveDedupeStrategy,
+        items,
+      };
       try {
-        return await apiClient.createUploadIngestionTask(selectedKbId, {
-          dedupeStrategy: effectiveDedupeStrategy,
-          items,
-        });
+        const task = await submitPersistedIngestionCreate(
+          () => prepareImportCreate(pending, request, Date.now() + IMPORT_OWNER_LEASE_MS),
+          () => apiClient.createIngestionTask(pending.kbId, request),
+          () => deleteUploadedFilesFromOss(stsToken, items),
+        );
+        return { task, confirming: false as const };
       } catch (error) {
-        if (isUploadCleanupAllowed(error)) {
-          await deleteUploadedFilesFromOss(stsToken, items);
+        if (isIngestionCreatePersistenceError(error)) throw error;
+        if (isUncertainIngestionCreateError(error)) {
+          updateImportTask(pending.id, {
+            currentStage: "CONFIRMING",
+            confirmationNotBefore: 0,
+            ownerLeaseExpiresAt: 0,
+          });
+          return { task: null, confirming: true as const };
+        }
+        const rejectionPersisted = rejectImportCreate(
+          pending,
+          ingestionCreateErrorMessage(error, "文件导入任务创建失败。"),
+        );
+        if (rejectionPersisted && shouldCleanupRejectedIngestionCreate(error)) {
+          await deleteUploadedFilesFromOss(stsToken, items).catch(() => undefined);
         }
         throw error;
       }
     },
-    onSuccess: async (task, { trackingId }) => {
-      resolveImportTask(trackingId, task);
-      queryClient.setQueryData(["ingestion-task", selectedKbId, task.taskId], task);
-      setCurrentTaskId(task.taskId);
+    onSuccess: async (result, { pending }) => {
       setFiles([]);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-      await invalidateIngestionQueries(queryClient, selectedKbId);
+      if (result.confirming) {
+        void invalidateIngestionQueries(queryClient, pending.kbId);
+        return;
+      }
+      const task = result.task;
+      resolveImportTask(pending.id, task);
+      queryClient.setQueryData(["ingestion-task", pending.kbId, task.taskId], task);
+      setKbId(pending.kbId);
+      setCurrentTaskId(task.taskId);
+      await invalidateIngestionQueries(queryClient, pending.kbId);
     },
-    onError: (error, { trackingId }) => {
-      updateImportTask(trackingId, { status: "error" });
+    onError: (error, { pending }) => {
+      rejectImportCreate(pending, ingestionCreateErrorMessage(error, "文件导入任务创建失败。"));
       if (isAccessDeniedError(error)) {
         setPermissionNotice({
           title: "权限不足，无法上传文件",
@@ -253,15 +355,86 @@ export function ImportsPremiumPage({
     },
   });
 
-  const isSubmitting = uploadMutation.isPending || createUrlMutation.isPending;
+  const ownedTrackingId = uploadMutation.isPending
+    ? uploadMutation.variables?.pending.id
+    : createUrlMutation.isPending ? createUrlMutation.variables?.pending.id : undefined;
+
+  useEffect(() => {
+    if (!ownedTrackingId) return;
+    const renewLease = () => updateImportTask(ownedTrackingId, {
+      ownerLeaseExpiresAt: Date.now() + IMPORT_OWNER_LEASE_MS,
+    });
+    renewLease();
+    const timer = window.setInterval(renewLease, IMPORT_OWNER_HEARTBEAT_MS);
+    return () => window.clearInterval(timer);
+  }, [ownedTrackingId, updateImportTask]);
+
+  const activeTrackedCreate = useMemo(() => {
+    const locallyActive = activeCreateTrackingId
+      ? backgroundTasks.find((task): task is TrackedImportTask => (
+          task.kind === "import" && task.id === activeCreateTrackingId
+        ))
+      : undefined;
+    if (locallyActive && (!kbId || locallyActive.kbId === kbId)) return locallyActive;
+    return recoverableTrackedCreate ?? null;
+  }, [activeCreateTrackingId, backgroundTasks, kbId, recoverableTrackedCreate]);
+
+  const createConfirmationPending = Boolean(activeTrackedCreate
+    && activeTrackedCreate.kind === "import"
+    && activeTrackedCreate.status === "running"
+    && !activeTrackedCreate.taskId);
+  const createLifecyclePending = Boolean(activeTrackedCreate?.kind === "import"
+    && activeTrackedCreate.status === "running"
+    && !activeTrackedCreate.taskId
+    && (activeTrackedCreate.currentStage === "SUBMITTING" || activeTrackedCreate.currentStage === "CONFIRMING"));
+  const createLifecycleNotice = createLifecyclePending
+    ? activeTrackedCreate.currentStage === "SUBMITTING"
+      ? "正在提交导入任务，请勿重复上传。"
+      : "创建响应尚未确认，正在按请求编号查询任务状态，请勿重复上传。"
+    : null;
+  const recoveredCreateFailure = activeTrackedCreate?.kind === "import"
+    && activeTrackedCreate.status === "error"
+    ? activeTrackedCreate.failureMessage ?? "导入任务创建未完成，请重新提交。"
+    : null;
+
+  const recoveredTaskIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeTrackedCreate
+      || activeTrackedCreate.kind !== "import"
+      || !activeTrackedCreate.taskId
+      || recoveredTaskIdRef.current === activeTrackedCreate.taskId) return;
+    recoveredTaskIdRef.current = activeTrackedCreate.taskId;
+    setKbId(activeTrackedCreate.kbId);
+    setCurrentTaskId(activeTrackedCreate.taskId);
+    const params = new URLSearchParams({
+      kbId: activeTrackedCreate.kbId,
+      taskId: activeTrackedCreate.taskId,
+    });
+    router.replace(`/imports?${params.toString()}`, { scroll: false });
+    void invalidateIngestionQueries(queryClient, activeTrackedCreate.kbId);
+  }, [activeTrackedCreate, queryClient, router]);
+
+  useEffect(() => {
+    if (!activeTrackedCreate
+      || activeTrackedCreate.kind !== "import"
+      || !activeTrackedCreate.navigationPending
+      || !activeTrackedCreate.taskId
+      || initialTaskId !== activeTrackedCreate.taskId) return;
+    updateImportTask(activeTrackedCreate.id, { navigationPending: false });
+  }, [activeTrackedCreate, initialTaskId, updateImportTask]);
+
+  const isSubmitting = uploadMutation.isPending || createUrlMutation.isPending || createConfirmationPending;
   const pendingFileCount = files.length;
   const displayedCurrentTask = pendingFileCount > 0 ? undefined : currentTask;
-  const progress = summarizeTaskProgress(displayedCurrentTask, isSubmitting);
+  const progress = createLifecyclePending
+    ? { currentStep: "", progress: 0, completedSteps: new Set<string>() }
+    : summarizeTaskProgress(displayedCurrentTask, isSubmitting);
   const queueIsTaskItems = pendingFileCount === 0 && Boolean(displayedCurrentTask?.items?.length);
   const showQueueEmpty = pendingFileCount === 0 && !displayedCurrentTask?.items?.length;
   const hasFailedCurrentTask = queueIsTaskItems && (displayedCurrentTask?.items?.some((item) => item.status === "FAILED") ?? false);
 
   function handleFilesSelected(nextFiles: File[]) {
+    if (isSubmitting) return;
     setFiles(nextFiles);
     setPermissionNotice(null);
     uploadMutation.reset();
@@ -270,6 +443,7 @@ export function ImportsPremiumPage({
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
+    if (isSubmitting) return;
     const droppedFiles = Array.from(event.dataTransfer.files ?? []);
     if (droppedFiles.length > 0) {
       handleFilesSelected(droppedFiles);
@@ -277,20 +451,38 @@ export function ImportsPremiumPage({
   }
 
   function handleUploadClick() {
+    if (createConfirmationPending) return;
     setPermissionNotice(null);
-    const trackingId = makeImportTrackingId();
-    registerPendingImportTask({
+    const { trackingId, clientRequestId } = makeImportRequestIdentity();
+    setActiveCreateTrackingId(trackingId);
+    const pending: PendingImportTaskSnapshot = {
       id: trackingId,
+      clientRequestId,
       kbId: selectedKbId,
       label: files.length > 1 ? `${files[0]?.name ?? "文件"} 等 ${files.length} 个文件` : files[0]?.name ?? "知识库文件",
       totalCount: Math.max(files.length, 1),
       startedAt: currentTimestamp(),
-    });
-    uploadMutation.mutate({ trackingId, uploadFiles: files });
+      ownerLeaseExpiresAt: Date.now() + IMPORT_OWNER_LEASE_MS,
+    };
+    registerPendingImportTask(pending);
+    uploadMutation.mutate({ pending, uploadFiles: files });
   }
 
   function handleUrlSubmit() {
-    createUrlMutation.mutate();
+    if (createConfirmationPending) return;
+    const { trackingId, clientRequestId } = makeImportRequestIdentity();
+    setActiveCreateTrackingId(trackingId);
+    const pending: PendingImportTaskSnapshot = {
+      id: trackingId,
+      clientRequestId,
+      kbId: selectedKbId,
+      label: urlTitle.trim() || buildDisplayNameFromUrl(sourceUrl.trim()) || "URL 资料",
+      totalCount: 1,
+      startedAt: currentTimestamp(),
+      ownerLeaseExpiresAt: Date.now() + IMPORT_OWNER_LEASE_MS,
+    };
+    registerPendingImportTask(pending);
+    createUrlMutation.mutate({ pending });
   }
 
   return (
@@ -336,6 +528,7 @@ export function ImportsPremiumPage({
                 type="file"
                 multiple
                 accept={accept}
+                disabled={isSubmitting}
                 className="sr-only"
                 onChange={(event) => handleFilesSelected(Array.from(event.target.files ?? []))}
               />
@@ -411,7 +604,7 @@ export function ImportsPremiumPage({
                   <button
                     type="button"
                     onClick={handleUploadClick}
-                    disabled={!selectedKbId || !capabilitiesReady || files.length === 0 || uploadMutation.isPending}
+                    disabled={!selectedKbId || !capabilitiesReady || files.length === 0 || uploadMutation.isPending || createConfirmationPending}
                     className={BUTTON_PRIMARY_CLASS}
                   >
                     上传并入库
@@ -443,7 +636,7 @@ export function ImportsPremiumPage({
                   <button
                     type="button"
                     onClick={handleUrlSubmit}
-                    disabled={!selectedKbId || !capabilitiesReady || !sourceUrl.trim() || createUrlMutation.isPending}
+                    disabled={!selectedKbId || !capabilitiesReady || !sourceUrl.trim() || createUrlMutation.isPending || createConfirmationPending}
                     className={BUTTON_PRIMARY_CLASS}
                   >
                     {createUrlMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />}
@@ -483,8 +676,17 @@ export function ImportsPremiumPage({
                   createUrlMutation.error,
                   retryTaskMutation.error,
                   retryItemMutation.error,
+                  uploadMutation.error || createUrlMutation.error || !recoveredCreateFailure
+                    ? null
+                    : new Error(recoveredCreateFailure),
                 ]}
               />
+              {createLifecycleNotice ? (
+                <div className="mt-3 flex shrink-0 items-center gap-2 rounded-[8px] border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-800 dark:text-amber-200" role="status">
+                  <Loader2 size={15} className="animate-spin" />
+                  <span className="min-w-0">{createLifecycleNotice}</span>
+                </div>
+              ) : null}
             </section>
 
             <section className="imports-panel premium-surface flex h-[230px] min-h-0 min-w-0 flex-col overflow-hidden rounded-[8px] p-3 backdrop-blur-xl lg:h-full lg:max-h-full" aria-label="最近导入">
@@ -566,9 +768,17 @@ export function ImportsPremiumPage({
               </div>
             </section>
 
-            <TaskSummaryPanel currentTask={displayedCurrentTask} pendingFileCount={pendingFileCount} />
+            <TaskSummaryPanel
+              currentTask={displayedCurrentTask}
+              pendingFileCount={pendingFileCount}
+              isCreateConfirming={createLifecyclePending}
+            />
 
-            <PipelinePanel progress={progress} pendingFileCount={pendingFileCount} />
+            <PipelinePanel
+              progress={progress}
+              pendingFileCount={pendingFileCount}
+              isCreateConfirming={createLifecyclePending}
+            />
           </aside>
         </main>
       </div>
@@ -821,7 +1031,15 @@ function FormatBadge({ format }: { format: SupportedFormat }) {
   );
 }
 
-function TaskSummaryPanel({ currentTask, pendingFileCount }: { currentTask?: IngestionTask; pendingFileCount: number }) {
+function TaskSummaryPanel({
+  currentTask,
+  pendingFileCount,
+  isCreateConfirming,
+}: {
+  currentTask?: IngestionTask;
+  pendingFileCount: number;
+  isCreateConfirming: boolean;
+}) {
   const total = currentTask?.totalCount ?? pendingFileCount;
   const success = currentTask?.successCount ?? 0;
   const failed = currentTask?.failureCount ?? 0;
@@ -831,32 +1049,57 @@ function TaskSummaryPanel({ currentTask, pendingFileCount }: { currentTask?: Ing
     <section className="imports-task-glow premium-surface relative flex min-h-0 flex-col overflow-hidden rounded-[8px] px-4 pb-4 backdrop-blur-xl lg:min-h-0">
       <ImportsSidePanelHeader
         label="CURRENT TASK"
-        value={running > 0 ? `${formatNumber(running)} 处理中` : statusText(currentTask?.status)}
+        value={isCreateConfirming
+          ? "确认中"
+          : running > 0 ? `${formatNumber(running)} 处理中` : statusText(currentTask?.status)}
         icon={<ListChecks size={17} strokeWidth={1.9} />}
         iconColor="#A7DCA4"
       />
-      <div className="mt-3 grid gap-3 rounded-[8px] border border-[rgba(49,88,255,0.14)] bg-white/50 px-2.5 py-3 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)]">
-        <div className="flex items-baseline gap-2">
-          <strong className="text-[22px] font-black leading-none text-[var(--premium-ink)]">{formatNumber(total)}</strong>
-          <span className="text-[11px] text-[var(--premium-muted)]">当前导入文件总数</span>
+      {isCreateConfirming ? (
+        <div className="mt-3 rounded-[8px] border border-amber-400/30 bg-amber-500/10 px-3 py-3">
+          <strong className="block text-xs text-[var(--premium-ink)]">正在确认任务是否已受理</strong>
+          <span className="mt-1 block text-[11px] leading-[1.4] text-[var(--premium-muted)]">
+            确认完成前不会重复提交，也不会显示尚未确定的处理数量。
+          </span>
         </div>
-        <TaskBar success={success} failed={failed} running={running} total={total} />
-      </div>
-      <div className="mt-5 grid grid-cols-3 gap-2">
-        <TaskStat label="成功" value={success} tone="success" />
-        <TaskStat label="失败" value={failed} tone="failed" />
-        <TaskStat label="处理中" value={running} tone="running" />
-      </div>
+      ) : (
+        <>
+          <div className="mt-3 grid gap-3 rounded-[8px] border border-[rgba(49,88,255,0.14)] bg-white/50 px-2.5 py-3 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-strong)]">
+            <div className="flex items-baseline gap-2">
+              <strong className="text-[22px] font-black leading-none text-[var(--premium-ink)]">{formatNumber(total)}</strong>
+              <span className="text-[11px] text-[var(--premium-muted)]">当前导入文件总数</span>
+            </div>
+            <TaskBar success={success} failed={failed} running={running} total={total} />
+          </div>
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            <TaskStat label="成功" value={success} tone="success" />
+            <TaskStat label="失败" value={failed} tone="failed" />
+            <TaskStat label="处理中" value={running} tone="running" />
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
-function PipelinePanel({ progress, pendingFileCount }: { progress: ReturnType<typeof summarizeTaskProgress>; pendingFileCount: number }) {
+function PipelinePanel({
+  progress,
+  pendingFileCount,
+  isCreateConfirming,
+}: {
+  progress: ReturnType<typeof summarizeTaskProgress>;
+  pendingFileCount: number;
+  isCreateConfirming: boolean;
+}) {
   const activeStep = FLOW_STEPS.find((step) => step.key === progress.currentStep);
   const percent = progress.currentStep ? progress.progress : 0;
   const hasPendingFiles = pendingFileCount > 0 && !activeStep;
-  const statusTitle = activeStep ? `${activeStep.label}进行中` : hasPendingFiles ? "等待上传" : "等待导入任务";
-  const statusHelper = activeStep
+  const statusTitle = isCreateConfirming
+    ? "确认任务受理状态"
+    : activeStep ? `${activeStep.label}进行中` : hasPendingFiles ? "等待上传" : "等待导入任务";
+  const statusHelper = isCreateConfirming
+    ? "正在按请求编号核对后端任务；确认完成前不会重复创建。"
+    : activeStep
     ? activeStep.helper
     : hasPendingFiles
       ? `已选择 ${formatNumber(pendingFileCount)} 个文件，点击上传并入库后进入流水线。`
@@ -866,7 +1109,7 @@ function PipelinePanel({ progress, pendingFileCount }: { progress: ReturnType<ty
     <section className="imports-pipeline-glow premium-surface relative flex min-h-[240px] flex-col overflow-hidden rounded-[8px] px-4 pb-4 backdrop-blur-xl lg:min-h-0">
       <ImportsSidePanelHeader
         label="PIPELINE FLOW"
-        value={`${percent}%`}
+        value={isCreateConfirming ? "确认中" : `${percent}%`}
         icon={<Waypoints size={17} strokeWidth={1.9} />}
         iconColor="#52D9B5"
       />
@@ -877,17 +1120,19 @@ function PipelinePanel({ progress, pendingFileCount }: { progress: ReturnType<ty
             {statusHelper}
           </span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-[#343a36]" aria-hidden="true">
-          <span
-            className="block h-full rounded-full bg-[linear-gradient(90deg,#4b8de6,#89c777)] shadow-[0_0_18px_rgba(75,141,230,0.28)]"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
+        {!isCreateConfirming ? (
+          <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-[#343a36]" aria-hidden="true">
+            <span
+              className="block h-full rounded-full bg-[linear-gradient(90deg,#4b8de6,#89c777)] shadow-[0_0_18px_rgba(75,141,230,0.28)]"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        ) : null}
       </div>
       <div className="mt-3 grid flex-1 gap-2 sm:grid-cols-2">
         {FLOW_STEPS.map((step, index) => {
-          const done = progress.completedSteps.has(step.key);
-          const active = progress.currentStep === step.key;
+          const done = !isCreateConfirming && progress.completedSteps.has(step.key);
+          const active = !isCreateConfirming && progress.currentStep === step.key;
 
           return (
             <div
@@ -930,7 +1175,7 @@ function PipelinePanel({ progress, pendingFileCount }: { progress: ReturnType<ty
                       : "bg-black/5 text-[var(--premium-muted)] dark:bg-[var(--premium-panel-muted)]",
                 ].join(" ")}
               >
-                {done ? "完成" : active ? `${progress.progress}%` : "等待"}
+                {isCreateConfirming ? "待确认" : done ? "完成" : active ? `${progress.progress}%` : "等待"}
               </span>
             </div>
           );
@@ -1125,8 +1370,16 @@ function isFinishedTaskStatus(status: string) {
   return status === "SUCCESS" || status === "COMPLETED" || status === "FAILED" || status === "PARTIAL_SUCCESS" || status === "SKIPPED";
 }
 
-function makeImportTrackingId() {
-  return `import-upload:${crypto.randomUUID()}`;
+function makeImportRequestIdentity() {
+  const clientRequestId = crypto.randomUUID();
+  return {
+    clientRequestId,
+    trackingId: `import-create:${clientRequestId}`,
+  };
+}
+
+function ingestionCreateErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
 function currentTimestamp() {

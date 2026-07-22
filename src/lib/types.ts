@@ -235,6 +235,7 @@ export type IngestionCapability = {
 
 export type IngestionTaskSummary = {
   taskId: string;
+  clientRequestId?: string;
   kbId: string;
   sourceType: string;
   status: string;
@@ -284,14 +285,27 @@ export type StsToken = {
   expiration: string;
 };
 
-export type UploadIngestionItem = {
-  fileName: string;
+export type IngestionCreateItem = {
+  fileName?: string;
   title?: string;
   fileType: string;
   mimeType?: string;
   sizeBytes?: number;
-  objectKey: string;
+  objectKey?: string;
   fileHash?: string;
+  sourceUrl?: string;
+};
+
+export type IngestionCreateRequest = {
+  clientRequestId: string;
+  sourceType: "UPLOAD" | "URL";
+  dedupeStrategy: string;
+  items: IngestionCreateItem[];
+};
+
+export type UploadIngestionItem = IngestionCreateItem & {
+  fileName: string;
+  objectKey: string;
 };
 
 export type SearchAssetType = string;

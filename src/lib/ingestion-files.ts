@@ -40,6 +40,7 @@ export async function uploadFilesToOss(
   token: StsToken,
   formats: SupportedFormat[],
   onFileUploaded?: (completedCount: number, totalCount: number, fileName: string) => void,
+  onPrepared?: (items: UploadIngestionItem[]) => void,
 ): Promise<UploadIngestionItem[]> {
   const batchId = createUploadBatchId();
   const prepared: Array<{ file: File; item: UploadIngestionItem }> = [];
@@ -61,6 +62,8 @@ export async function uploadFilesToOss(
       },
     });
   }
+
+  onPrepared?.(prepared.map((entry) => ({ ...entry.item })));
 
   const client = await createOssClient(token);
   const uploadedObjectKeys: string[] = [];
