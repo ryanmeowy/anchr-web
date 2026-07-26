@@ -711,6 +711,8 @@ export const apiClient = {
     request<string | null>("/api/v1/index/rebuild/prepare", { method: "POST" }),
   confirmIndexRebuild: (taskId: string) =>
     request<boolean>("/api/v1/index/rebuild/confirm", { method: "POST", body: { taskId } }),
+  rollbackIndex: (physicalIndex: string) =>
+    request<boolean>("/api/v1/index/rollback", { method: "POST", body: { physicalIndex } }),
  deleteCapabilityConfig: (capability: string, id: number) =>
     request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}`, { method: "DELETE" }),
   getCapabilityParams: (capability: string) =>

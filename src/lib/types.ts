@@ -807,6 +807,23 @@ export type SegmentIndexStatus = {
   expectedDim?: number | null;
   expectedModel?: string | null;
   expectedProfileFingerprint?: string | null;
+  deploymentStatus?: "ACTIVE" | "DESIRED" | "PREPARED" | "BACKFILLING" | "VALIDATING" | "CUTTING_OVER" | "FAILED" | null;
+  physicalIndex?: string | null;
+  servingProfileFingerprint?: string | null;
+  desiredProfileFingerprint?: string | null;
+  targetProfileFingerprint?: string | null;
+  servingCapability?: string | null;
+  desiredCapability?: string | null;
+  targetCapability?: string | null;
+  impactReport?: {
+    imageAssets: number;
+    ocrAvailableAssets: number;
+    ocrEmptyAssets: number;
+    textVectorFailures: number;
+    expectedVisualSemanticLossAssets: number;
+    confirmationRequired: boolean;
+    confirmed: boolean;
+  } | null;
   pendingRebuild?: {
     taskId: string;
     expectedDim: number;
@@ -816,7 +833,7 @@ export type SegmentIndexStatus = {
   rebuildProgress?: {
     migrated: number;
     total: number;
-    phase: "PREPARING" | "MIGRATING" | "SWITCHING_ALIAS" | "COMPLETED" | "FAILED";
+    phase: "PREPARING" | "MIGRATING" | "BACKFILLING" | "VALIDATING" | "SWITCHING_ALIAS" | "CUTTING_OVER" | "COMPLETED" | "FAILED";
   } | null;
   lastError?: string | null;
 };
