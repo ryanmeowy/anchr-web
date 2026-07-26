@@ -21,6 +21,7 @@ import type {
   ConversationSession,
   ConversationSessionList,
   ConversationTurn,
+  DocumentAvailabilityStatus,
   ElasticsearchHealth,
   IngestionCapability,
   IngestionCreateRequest,
@@ -454,7 +455,13 @@ export const apiClient = {
     request<KnowledgeBaseHealth>(`/api/v1/kbs/${encodeURIComponent(kbId)}/health`),
   listKnowledgeBaseDocuments: (
     kbId: string,
-    query: { page: number; size: number; keyword?: string; fileType?: string },
+    query: {
+      page: number;
+      size: number;
+      keyword?: string;
+      fileType?: string;
+      availabilityStatus?: DocumentAvailabilityStatus;
+    },
   ) => {
     const params = new URLSearchParams({
       page: String(query.page),
@@ -462,6 +469,9 @@ export const apiClient = {
     });
     if (query.keyword) params.set("keyword", query.keyword);
     if (query.fileType) params.set("fileType", query.fileType);
+    if (query.availabilityStatus) {
+      params.set("availabilityStatus", query.availabilityStatus);
+    }
     return request<KnowledgeBaseDocumentList>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/documents?${params.toString()}`,
     );

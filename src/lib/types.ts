@@ -45,6 +45,8 @@ export type KnowledgeBaseUpdateRequest = {
 
 export type KnowledgeBaseListResponse = PagedList<KnowledgeBase>;
 
+export type DocumentAvailabilityStatus = "ANSWERABLE" | "PROCESSING" | "FAILED";
+
 export type KnowledgeBaseDocument = {
   id: string;
   kbId: string;
@@ -58,6 +60,7 @@ export type KnowledgeBaseDocument = {
   previewAvailable: boolean;
   parseStatus: string;
   indexStatus: string;
+  availabilityStatus: DocumentAvailabilityStatus;
   segmentCount: number;
   indexedSegmentCount: number;
   embeddingProfile?: string | null;

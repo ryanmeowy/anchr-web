@@ -48,7 +48,15 @@ import { saveAskAssetScope, saveAssetScopeHandoff, type AssetScope } from "@/lib
 import { formatDateTime, formatFileSize, formatNumber, statusText } from "@/lib/format";
 import { PREMIUM_THEME, type PremiumThemeMode } from "@/lib/premium-theme";
 import { saveRecentCitationPreviewNavigation } from "@/lib/preview-context";
-import type { KnowledgeBase, KnowledgeBaseDocument, KnowledgeBaseHealth, KnowledgeBaseStats, RecentCitation, RecentQuestion } from "@/lib/types";
+import type {
+  DocumentAvailabilityStatus,
+  KnowledgeBase,
+  KnowledgeBaseDocument,
+  KnowledgeBaseHealth,
+  KnowledgeBaseStats,
+  RecentCitation,
+  RecentQuestion,
+} from "@/lib/types";
 
 type ViewMode = "grid" | "list";
 type FilterMode = "all" | "answerable" | "archived";
@@ -707,6 +715,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
 }
 
 type LibraryDocumentType = "PDF" | "MD" | "IMAGE" | "TXT";
+type DocumentStatusFilter = "ALL" | DocumentAvailabilityStatus;
 
 type LibraryDocumentItem = {
   id: string;
@@ -719,9 +728,18 @@ type LibraryDocumentItem = {
   previewAvailable: boolean;
   parseStatus: string;
   indexStatus: string;
+  availabilityStatus: DocumentAvailabilityStatus;
+  errorCode?: string | null;
+  errorMessage?: string | null;
 };
 const DOCUMENT_GRID_PAGE_SIZES = [24, 48, 72] as const;
 const DOCUMENT_LIST_PAGE_SIZES = [25, 50, 100] as const;
+const DOCUMENT_STATUS_FILTERS: Array<{ value: DocumentStatusFilter; label: string }> = [
+  { value: "ALL", label: "全部" },
+  { value: "ANSWERABLE", label: "可问答" },
+  { value: "PROCESSING", label: "入库中" },
+  { value: "FAILED", label: "失败" },
+];
 
 function KnowledgeBaseDocumentView({
   knowledgeBase,
@@ -735,6 +753,7 @@ function KnowledgeBaseDocumentView({
   const documentListRef = useRef<HTMLElement | null>(null);
   const [keyword, setKeyword] = useState("");
   const [typeFilter, setTypeFilter] = useState<"ALL" | LibraryDocumentType>("ALL");
+  const [statusFilter, setStatusFilter] = useState<DocumentStatusFilter>("ALL");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [documentPage, setDocumentPage] = useState(1);
   const [documentPageSize, setDocumentPageSize] = useState<number>(DOCUMENT_GRID_PAGE_SIZES[0]);
@@ -751,14 +770,27 @@ function KnowledgeBaseDocumentView({
       documentPageSize,
       deferredDocumentKeyword,
       typeFilter,
+      statusFilter,
     ],
     queryFn: () => apiClient.listKnowledgeBaseDocuments(knowledgeBase.id, {
       page: documentPage,
       size: documentPageSize,
       ...(deferredDocumentKeyword ? { keyword: deferredDocumentKeyword } : {}),
       ...(typeFilter !== "ALL" ? { fileType: typeFilter } : {}),
+      ...(statusFilter !== "ALL" ? { availabilityStatus: statusFilter } : {}),
     }),
     refetchOnWindowFocus: false,
+    refetchInterval: (query) => (
+      query.state.data?.items.some((asset) => (
+        asset.availabilityStatus === "PROCESSING"
+        || asset.parseStatus === "PENDING"
+        || asset.parseStatus === "RUNNING"
+        || asset.indexStatus === "PENDING"
+        || asset.indexStatus === "RUNNING"
+      ))
+        ? 3_000
+        : false
+    ),
   });
   const documents = useMemo(
     () => (documentsQuery.data?.items ?? []).map(toLibraryDocumentItem),
@@ -808,7 +840,7 @@ function KnowledgeBaseDocumentView({
   };
 
   const handleAskDocument = async (document: LibraryDocumentItem) => {
-    if (askingDocumentId) return;
+    if (askingDocumentId || document.availabilityStatus !== "ANSWERABLE") return;
     setAskingDocumentId(document.id);
     setDocumentActionError(null);
     try {
@@ -875,7 +907,7 @@ function KnowledgeBaseDocumentView({
             <div className="grid grid-cols-3 gap-2 sm:min-w-[360px]">
               <DocumentMetric value={formatNumber(documentTotal)} label="DOCUMENTS" />
               <DocumentMetric value={formatNumber(documentSegmentTotal)} label="SEGMENTS" />
-              <DocumentMetric value="READY" label="INDEX" accent />
+              <DocumentMetric value={documentStatusFilterMetric(statusFilter)} label="VIEW" accent />
             </div>
           </div>
         </section>
@@ -898,6 +930,27 @@ function KnowledgeBaseDocumentView({
             </span>
           </label>
           <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] p-1" aria-label="文档状态">
+              {DOCUMENT_STATUS_FILTERS.map((filter) => (
+                <button
+                  key={filter.value}
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter(filter.value);
+                    setDocumentPage(1);
+                  }}
+                  aria-pressed={statusFilter === filter.value}
+                  className={[
+                    "h-8 rounded-full px-3 text-[10px] font-black transition duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]",
+                    statusFilter === filter.value
+                      ? documentStatusFilterActiveClass(filter.value)
+                      : "text-[var(--premium-muted)] hover:bg-[var(--premium-panel-muted)] hover:text-[var(--premium-ink)]",
+                  ].join(" ")}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
             <div className="flex items-center gap-1 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] p-1" aria-label="文档类型">
               <SlidersHorizontal size={14} className="ml-2 text-[var(--premium-muted)]" />
               {(["ALL", "PDF", "MD", "IMAGE", "TXT"] as const).map((type) => (
@@ -965,8 +1018,8 @@ function KnowledgeBaseDocumentView({
             </div>
           ) : (
             <div className="overflow-x-auto rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel)] shadow-[var(--premium-tight-shadow)]">
-              <div className="grid min-w-[880px] grid-cols-[minmax(0,1fr)_100px_100px_168px_210px] gap-4 border-b border-[var(--premium-line)] px-4 py-3 text-[10px] font-black text-[var(--premium-muted)]">
-                <span>文档名称</span><span>类型</span><span>版本</span><span>入库时间</span><span className="flex items-center justify-center">操作</span>
+              <div className="grid min-w-[1020px] grid-cols-[minmax(0,1fr)_90px_150px_90px_168px_210px] gap-4 border-b border-[var(--premium-line)] px-4 py-3 text-[10px] font-black text-[var(--premium-muted)]">
+                <span>文档名称</span><span>类型</span><span>状态</span><span>版本</span><span>上传时间</span><span className="flex items-center justify-center">操作</span>
               </div>
               <div className="divide-y divide-[var(--premium-line)]">
                 {documents.map((document, index) => (
@@ -1151,20 +1204,30 @@ function DocumentCard({
           <FileTypeIcon fileName={document.name} sourceType={document.type} palette="document" className="shadow-[0_10px_28px_rgba(17,19,21,0.1)]" />
         </span>
         <span className="relative z-10 mt-7 min-w-0">
-          <span className="mb-2 flex items-center gap-2">
+          <span className="mb-2 flex flex-wrap items-center gap-2">
             <span
               className="rounded-full px-2 py-1 text-[9px] font-black"
               style={{ color: typeColor, backgroundColor: `color-mix(in srgb, ${typeColor} 14%, transparent)` }}
             >
               {document.type}
             </span>
+            <DocumentAvailabilityBadge document={document} />
             <span className="text-[10px] font-bold text-[var(--premium-muted)]">{document.size} · {document.segments} 片段</span>
           </span>
           <strong className="line-clamp-2 break-words text-[17px] font-black leading-[1.18] text-[var(--premium-ink)]">{document.name}</strong>
+          {documentHasLatestFailure(document) && document.errorMessage ? (
+            <span
+              className="mt-2 line-clamp-2 text-[10px] font-bold leading-4 text-rose-600 dark:text-rose-300"
+              title={document.errorMessage}
+            >
+              {document.availabilityStatus === "ANSWERABLE" ? "最近更新失败：" : "失败原因："}
+              {document.errorMessage}
+            </span>
+          ) : null}
         </span>
         <span className="relative z-10 mt-auto flex items-end justify-between gap-3 border-t border-[var(--premium-line)] pt-3">
           <span className="min-w-0 text-[10px] text-[var(--premium-muted)]">
-            <span className="mb-1 flex items-center gap-1.5 font-bold"><Clock3 size={12} /> 入库时间</span>
+            <span className="mb-1 flex items-center gap-1.5 font-bold"><Clock3 size={12} /> 上传时间</span>
             <time className="block truncate font-black text-[var(--premium-ink-soft)]" dateTime={document.importedAt}>{formatDateTime(document.importedAt)}</time>
           </span>
           <span className={[
@@ -1184,10 +1247,10 @@ function DocumentCard({
         <button
           type="button"
           onClick={onAsk}
-          disabled={asking}
-          className="grid size-8 place-items-center rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] shadow-sm transition enabled:hover:-translate-y-0.5 enabled:hover:border-[#4B8DE6] enabled:hover:bg-[rgba(75,141,230,0.12)] enabled:hover:text-[#4B8DE6] disabled:cursor-wait disabled:opacity-65"
-          aria-label={`使用 ${document.name} 新建问答`}
-          title={`仅使用 ${document.name} 新建问答`}
+          disabled={asking || document.availabilityStatus !== "ANSWERABLE"}
+          className="grid size-8 place-items-center rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] shadow-sm transition enabled:hover:-translate-y-0.5 enabled:hover:border-[#4B8DE6] enabled:hover:bg-[rgba(75,141,230,0.12)] enabled:hover:text-[#4B8DE6] disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={documentAskTitle(document)}
+          title={documentAskTitle(document)}
         >
           {asking ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
         </button>
@@ -1225,26 +1288,39 @@ function DocumentListItem({
   return (
     <div
       style={{ animationDelay: `${Math.min(index, 6) * 48}ms` }}
-      className="library-document-card group grid min-h-16 w-full min-w-[880px] grid-cols-[minmax(0,1fr)_100px_100px_168px_210px] items-center gap-4 px-4 py-2 text-left transition duration-300 hover:bg-[var(--premium-panel-strong)]"
+      className="library-document-card group grid min-h-16 w-full min-w-[1020px] grid-cols-[minmax(0,1fr)_90px_150px_90px_168px_210px] items-center gap-4 px-4 py-2 text-left transition duration-300 hover:bg-[var(--premium-panel-strong)]"
     >
       <span className="flex min-w-0 items-center gap-3">
         <FileTypeIcon fileName={document.name} sourceType={document.type} palette="document" compact />
         <span className="min-w-0">
           <strong className="block truncate text-xs font-black text-[var(--premium-ink)]">{document.name}</strong>
-          <span className="mt-1 block text-[10px] text-[var(--premium-muted)]">{document.size} · {document.segments} 片段</span>
+          <span
+            className={[
+              "mt-1 block truncate text-[10px]",
+              documentHasLatestFailure(document) && document.errorMessage
+                ? "font-bold text-rose-600 dark:text-rose-300"
+                : "text-[var(--premium-muted)]",
+            ].join(" ")}
+            title={documentHasLatestFailure(document) ? document.errorMessage ?? undefined : undefined}
+          >
+            {documentHasLatestFailure(document) && document.errorMessage
+              ? `${document.availabilityStatus === "ANSWERABLE" ? "最近更新失败" : "失败原因"}：${document.errorMessage}`
+              : `${document.size} · ${document.segments} 片段`}
+          </span>
         </span>
       </span>
       <span className="text-[11px] font-black" style={{ color: typeColor }}>{document.type}</span>
+      <DocumentAvailabilityBadge document={document} />
       <span className="grid size-8 place-items-center rounded-full border border-[var(--premium-line)] bg-transparent text-[10px] font-black text-[var(--premium-ink-soft)]">V{document.version}</span>
       <time className="truncate text-[11px] font-bold text-[var(--premium-muted)]" dateTime={document.importedAt}>{formatDateTime(document.importedAt)}</time>
       <span className="flex w-full items-center justify-center gap-1.5">
         <button
           type="button"
           onClick={onAsk}
-          disabled={asking}
-          aria-label={`使用 ${document.name} 新建问答`}
-          title={`仅使用 ${document.name} 新建问答`}
-          className="grid size-8 place-items-center rounded-full border border-[var(--premium-line)] bg-transparent text-[var(--premium-ink-soft)] transition enabled:hover:-translate-y-0.5 enabled:hover:border-[#4B8DE6] enabled:hover:bg-[rgba(75,141,230,0.12)] enabled:hover:text-[#4B8DE6] disabled:cursor-wait disabled:opacity-60"
+          disabled={asking || document.availabilityStatus !== "ANSWERABLE"}
+          aria-label={documentAskTitle(document)}
+          title={documentAskTitle(document)}
+          className="grid size-8 place-items-center rounded-full border border-[var(--premium-line)] bg-transparent text-[var(--premium-ink-soft)] transition enabled:hover:-translate-y-0.5 enabled:hover:border-[#4B8DE6] enabled:hover:bg-[rgba(75,141,230,0.12)] enabled:hover:text-[#4B8DE6] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {asking ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
         </button>
@@ -1356,7 +1432,90 @@ function toLibraryDocumentItem(asset: KnowledgeBaseDocument): LibraryDocumentIte
     previewAvailable: asset.previewAvailable,
     parseStatus: asset.parseStatus,
     indexStatus: asset.indexStatus,
+    availabilityStatus: asset.availabilityStatus ?? (
+      asset.indexStatus === "SUCCESS"
+        ? "ANSWERABLE"
+        : asset.indexStatus === "FAILED" || asset.parseStatus === "FAILED"
+          ? "FAILED"
+          : "PROCESSING"
+    ),
+    errorCode: asset.errorCode,
+    errorMessage: asset.errorMessage,
   };
+}
+
+function DocumentAvailabilityBadge({ document }: { document: LibraryDocumentItem }) {
+  return (
+    <span
+      className={[
+        "inline-flex w-fit items-center rounded-full border px-2 py-1 text-[9px] font-black",
+        documentAvailabilityBadgeClass(document),
+      ].join(" ")}
+      title={documentAvailabilityLabel(document)}
+    >
+      {documentAvailabilityLabel(document)}
+    </span>
+  );
+}
+
+function documentAvailabilityLabel(document: LibraryDocumentItem) {
+  if (document.availabilityStatus === "ANSWERABLE") {
+    if (documentHasLatestFailure(document)) {
+      return "可问答 · 更新失败";
+    }
+    if (
+      document.indexStatus === "RUNNING"
+      || document.indexStatus === "PENDING"
+      || document.parseStatus === "RUNNING"
+      || document.parseStatus === "PENDING"
+    ) {
+      return "可问答 · 更新中";
+    }
+    return "可问答";
+  }
+  return document.availabilityStatus === "FAILED" ? "入库失败" : "入库中";
+}
+
+function documentAvailabilityBadgeClass(document: LibraryDocumentItem) {
+  if (document.availabilityStatus === "FAILED") {
+    return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200";
+  }
+  if (document.availabilityStatus === "PROCESSING") {
+    return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200";
+  }
+  if (documentHasLatestFailure(document)) {
+    return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200";
+  }
+  return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200";
+}
+
+function documentHasLatestFailure(document: LibraryDocumentItem) {
+  return document.indexStatus === "FAILED" || document.parseStatus === "FAILED";
+}
+
+function documentAskTitle(document: LibraryDocumentItem) {
+  if (document.availabilityStatus === "ANSWERABLE") {
+    return `仅使用 ${document.name} 新建问答`;
+  }
+  return document.availabilityStatus === "FAILED"
+    ? `${document.name} 入库失败，暂不可问答`
+    : `${document.name} 正在入库，完成后可问答`;
+}
+
+function documentStatusFilterMetric(filter: DocumentStatusFilter) {
+  return {
+    ALL: "ALL",
+    ANSWERABLE: "READY",
+    PROCESSING: "ACTIVE",
+    FAILED: "FAILED",
+  }[filter];
+}
+
+function documentStatusFilterActiveClass(filter: DocumentStatusFilter) {
+  if (filter === "ANSWERABLE") return "bg-[#89C777] text-white shadow-sm";
+  if (filter === "PROCESSING") return "bg-[#4B8DE6] text-white shadow-sm";
+  if (filter === "FAILED") return "bg-[#DF836D] text-white shadow-sm";
+  return "bg-[var(--premium-ink)] text-[var(--premium-bg)] shadow-sm";
 }
 
 function libraryDocumentType(asset: KnowledgeBaseDocument): LibraryDocumentType {
@@ -1433,7 +1592,7 @@ function ingestionBadgeClass(status?: string | null) {
     return "bg-[rgba(255,117,95,0.16)] text-[#9c2b1d] dark:text-[#ffb4a8]";
   }
   if (normalized === "RUNNING" || normalized === "PENDING") {
-    return "bg-[rgba(39,93,255,0.14)] text-[var(--premium-blue)]";
+    return "bg-[rgba(75,141,230,0.16)] text-[#4B8DE6]";
   }
   if (normalized === "SUCCESS") {
     return "bg-[var(--library-status-success-bg)] text-[var(--library-status-success-text)]";
@@ -1877,6 +2036,11 @@ function RecentIngestionCard({
   const failure = stats?.lastIngestionFailureCount ?? 0;
   const running = stats?.lastIngestionRunningCount ?? 0;
   const status = stats?.lastIngestionStatus ?? null;
+  const normalizedStatus = status?.toUpperCase();
+  const activeItems = normalizedStatus === "RUNNING" || normalizedStatus === "PENDING"
+    ? Math.max(running, total - success - failure)
+    : running;
+  const activeLabel = normalizedStatus === "PENDING" ? "等待中" : "处理中";
   const ingestedAt = stats?.lastIngestedAt;
 
   return (
@@ -1893,16 +2057,16 @@ function RecentIngestionCard({
           {ingestionStatusLabel(status)}
         </span>
       </div>
-      <div className="flex h-2 overflow-hidden rounded-full bg-black/10 dark:bg-black/35" aria-label={`最近导入成功 ${success}，失败 ${failure}，运行中 ${running}`}>
+      <div className="flex h-2 overflow-hidden rounded-full bg-black/10 dark:bg-black/35" aria-label={`最近导入成功 ${success}，失败 ${failure}，${activeLabel} ${activeItems}`}>
         <span className="h-full bg-[var(--library-progress-accent)]" style={{ flex: ingestionFlex(success, total) }} />
         <span className="h-full bg-[#ff755f]" style={{ flex: ingestionFlex(failure, total) }} />
-        <span className="h-full bg-[var(--premium-blue)]" style={{ flex: ingestionFlex(running, total) }} />
+        <span className="h-full bg-[#4B8DE6]" style={{ flex: ingestionFlex(activeItems, total) }} />
       </div>
       <div className="grid grid-cols-4 gap-1">
         <IngestionCount value={total} label="总条目" />
         <IngestionCount value={success} label="成功" />
         <IngestionCount value={failure} label="失败" />
-        <IngestionCount value={running} label="运行中" />
+        <IngestionCount value={activeItems} label={activeLabel} />
       </div>
     </div>
   );
