@@ -988,6 +988,15 @@ function EvidenceExcerptPanel({ item }: { item: PreviewSegment }) {
   return (
     <SidePanel>
       <PanelLabel label="EVIDENCE EXCERPT" value={location} />
+      {item.segmentType === "DOCUMENT_IMAGE" && item.imagePreviewUrl ? (
+        // A signed object URL must bypass the Next image optimizer.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={item.imagePreviewUrl}
+          alt={item.title ?? "文档内图片"}
+          className="mt-3.5 max-h-48 w-full rounded-[8px] border border-[var(--premium-line)] bg-white object-contain"
+        />
+      ) : null}
       {evidenceText ? (
         <>
           <div className={[

@@ -62,7 +62,6 @@ type RebuildDialogState =
       actualDim?: number;
       expectedDim?: number;
       reason?: string;
-      impactReport?: SegmentIndexStatus["impactReport"];
     }
   | {
       phase: "ERROR";
@@ -498,13 +497,20 @@ export function SettingsPremiumPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["index", "status"] }),
   });
 
+  const hasEnabledEmbeddingConfig = useMemo(
+    () =>
+      configsByCapability.EMBEDDING.some((config) => config.enabled) ||
+      configsByCapability.MULTI_EMBEDDING.some((config) => config.enabled),
+    [configsByCapability],
+  );
+
   const handleEnable = useCallback((capability: CapabilityName, id: number) => {
-    if (embeddingSwitchAffects(capability)) {
+    if (embeddingSwitchAffects(capability) && hasEnabledEmbeddingConfig) {
       setRebuildDialog({ phase: "CONFIRM_SWITCH", capability, id });
       return;
     }
     enableMutation.mutate({ capability, id });
-  }, [enableMutation]);
+  }, [enableMutation, hasEnabledEmbeddingConfig]);
 
   const showRebuildConfirmation = useCallback((
     taskId: string,
@@ -516,7 +522,6 @@ export function SettingsPremiumPage() {
       actualDim: status?.actualDim ?? undefined,
       expectedDim: status?.expectedDim ?? undefined,
       reason: status?.pendingRebuild?.reason,
-      impactReport: status?.impactReport,
     });
   }, []);
 
@@ -718,23 +723,12 @@ export function SettingsPremiumPage() {
             </div>
             <div className="mt-4 rounded-[8px] border border-[rgba(49,88,255,0.16)] bg-[rgba(49,88,255,0.08)] p-3 text-[11px] font-black leading-[1.55] text-[var(--premium-ink-soft)]">
               {rebuildDialog.phase === "CONFIRM_SWITCH" ? (
-                <p>选择新模型只会创建待部署版本；线上检索与写入继续使用当前模型，验证完成后才原子切换。</p>
+                <p>切换 Embedding 模型会先重建向量索引。重建完成前继续使用当前模型；重建期间索引写入不可用。</p>
               ) : rebuildDialog.phase === "CONFIRM_REBUILD" ? (
-                <div className="grid gap-2">
-                  <p>
-                    {rebuildDialog.reason ??
-                      `索引配置将从当前模型${rebuildDialog.actualDim != null ? `（${rebuildDialog.actualDim} 维）` : ""}迁移到目标模型${rebuildDialog.expectedDim != null ? `（${rebuildDialog.expectedDim} 维）` : ""}。后台迁移期间检索与写入继续使用旧模型，仅最终切换存在短暂写屏障。`}
-                  </p>
-                  {rebuildDialog.impactReport?.confirmationRequired ? (
-                    <p className="text-amber-700 dark:text-amber-300">
-                      能力影响：共 {rebuildDialog.impactReport.imageAssets} 个图片资产，
-                      {rebuildDialog.impactReport.ocrAvailableAssets} 个已通过目标文本向量预检，
-                      {rebuildDialog.impactReport.ocrEmptyAssets} 个没有有效 OCR，
-                      {rebuildDialog.impactReport.textVectorFailures} 个文本向量预检失败；
-                      切换后 {rebuildDialog.impactReport.expectedVisualSemanticLossAssets} 个资产将失去原图视觉语义召回。确认重建即表示接受该能力降级。
-                    </p>
-                  ) : null}
-                </div>
+                <p>
+                  {rebuildDialog.reason ??
+                    `索引配置将从当前模型${rebuildDialog.actualDim != null ? `（${rebuildDialog.actualDim} 维）` : ""}迁移到目标模型${rebuildDialog.expectedDim != null ? `（${rebuildDialog.expectedDim} 维）` : ""}。重建完成前继续使用当前模型；重建期间索引写入不可用。`}
+                </p>
               ) : (
                 <p>{rebuildDialog.error ?? "发生未知错误"}</p>
               )}
@@ -1474,11 +1468,9 @@ function RuntimeStatusPanel({
   const rebuildPhaseLabel =
     indexStatus?.rebuildProgress?.phase === "PREPARING"
       ? "准备重建中"
-      : indexStatus?.rebuildProgress?.phase === "MIGRATING" || indexStatus?.rebuildProgress?.phase === "BACKFILLING"
+      : indexStatus?.rebuildProgress?.phase === "MIGRATING"
       ? "迁移数据中"
-      : indexStatus?.rebuildProgress?.phase === "VALIDATING"
-        ? "校验增量中"
-      : indexStatus?.rebuildProgress?.phase === "SWITCHING_ALIAS" || indexStatus?.rebuildProgress?.phase === "CUTTING_OVER"
+      : indexStatus?.rebuildProgress?.phase === "SWITCHING_ALIAS"
         ? "切换索引中"
         : indexStatus?.rebuildProgress?.phase === "COMPLETED"
           ? "重建完成"

@@ -312,7 +312,7 @@ export type UploadIngestionItem = IngestionCreateItem & {
 };
 
 export type SearchAssetType = string;
-export type SearchHitType = "TEXT_CHUNK" | "IMAGE_OCR_BLOCK";
+export type SearchHitType = "TEXT_CHUNK" | "IMAGE_OCR_BLOCK" | "DOCUMENT_IMAGE";
 export type SearchResultType = "TEXT" | "IMAGE" | "MIXED";
 export type SearchStrategy = "KB_RRF" | "KB_RRF_RERANK";
 export type SearchAnswerMode = "STRICT";
@@ -340,6 +340,9 @@ export type SearchResult = {
   kbId?: string;
   assetId?: string;
   sourceRef?: string;
+  imageBlockId?: string;
+  imagePreviewUrl?: string;
+  imagePreviewExpiresAt?: number;
   segmentType?: string;
   title?: string;
   assetType: SearchAssetType;
@@ -385,6 +388,10 @@ export type SearchResult = {
   totalHits?: number;
   topChunks?: Array<{
     segmentId: string;
+    segmentType?: string;
+    imageBlockId?: string;
+    imagePreviewUrl?: string;
+    imagePreviewExpiresAt?: number;
     title?: string;
     content?: string;
     snippet?: string;
@@ -519,6 +526,9 @@ export type PreviewSegment = {
   previewType?: string;
   previewUrl?: string;
   expiresAt?: number;
+  imagePreviewUrl?: string;
+  imagePreviewExpiresAt?: number;
+  imageBlockId?: string;
   sourceRef?: string;
   thumbnail?: string;
   title?: string;
@@ -807,23 +817,6 @@ export type SegmentIndexStatus = {
   expectedDim?: number | null;
   expectedModel?: string | null;
   expectedProfileFingerprint?: string | null;
-  deploymentStatus?: "ACTIVE" | "DESIRED" | "PREPARED" | "BACKFILLING" | "VALIDATING" | "CUTTING_OVER" | "FAILED" | null;
-  physicalIndex?: string | null;
-  servingProfileFingerprint?: string | null;
-  desiredProfileFingerprint?: string | null;
-  targetProfileFingerprint?: string | null;
-  servingCapability?: string | null;
-  desiredCapability?: string | null;
-  targetCapability?: string | null;
-  impactReport?: {
-    imageAssets: number;
-    ocrAvailableAssets: number;
-    ocrEmptyAssets: number;
-    textVectorFailures: number;
-    expectedVisualSemanticLossAssets: number;
-    confirmationRequired: boolean;
-    confirmed: boolean;
-  } | null;
   pendingRebuild?: {
     taskId: string;
     expectedDim: number;
@@ -833,7 +826,7 @@ export type SegmentIndexStatus = {
   rebuildProgress?: {
     migrated: number;
     total: number;
-    phase: "PREPARING" | "MIGRATING" | "BACKFILLING" | "VALIDATING" | "SWITCHING_ALIAS" | "CUTTING_OVER" | "COMPLETED" | "FAILED";
+    phase: "PREPARING" | "MIGRATING" | "SWITCHING_ALIAS" | "COMPLETED" | "FAILED";
   } | null;
   lastError?: string | null;
 };

@@ -12,6 +12,7 @@ import {
   Copy,
   Database,
   Folder,
+  ImageIcon,
   Loader2,
   RefreshCcw,
   ScanSearch,
@@ -79,6 +80,7 @@ const SOURCE_TYPE_LABEL: Record<string, string> = {
 const HIT_TYPE_OPTIONS: Array<{ value: SearchHitType; label: string }> = [
   { value: "TEXT_CHUNK", label: "文本片段" },
   { value: "IMAGE_OCR_BLOCK", label: "OCR片段" },
+  { value: "DOCUMENT_IMAGE", label: "文档内图片" },
 ];
 
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
@@ -1044,6 +1046,7 @@ function ResultRow({
 }) {
   const type = getEvidenceSourceLabel(item);
   const position = formatResultPosition(item);
+  const documentImage = item.segmentType === "DOCUMENT_IMAGE";
 
   return (
     <button
@@ -1052,6 +1055,14 @@ function ResultRow({
       disabled={!item.segmentId}
       className="search-premium-result"
     >
+      {documentImage || item.thumbnail ? (
+        <span className="search-premium-result-thumbnail" aria-hidden="true">
+          {item.imagePreviewUrl || item.thumbnail ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.imagePreviewUrl ?? item.thumbnail} alt="" />
+          ) : <ImageIcon size={20} />}
+        </span>
+      ) : null}
       <span className="min-w-0">
         <span className="search-premium-result-title">
           <SourceBadge label={type} />
@@ -2152,6 +2163,9 @@ function nullableCount(value: number | null | undefined) {
 }
 
 function getEvidenceSourceLabel(item: SearchResult) {
+  if (item.segmentType === "DOCUMENT_IMAGE") {
+    return "文档图片";
+  }
   if (item.segmentType === "IMAGE_OCR_BLOCK") {
     return "OCR";
   }
@@ -2215,6 +2229,7 @@ function searchResultToCitation(item: SearchResult): PreviewCitation {
         chunkOrder: chunk.chunkOrder ?? chunk.anchor?.chunkOrder ?? undefined,
         content: chunk.content,
         snippet: chunk.snippet,
+        hitType: chunk.segmentType,
         anchor: chunk.anchor,
         ...(chunk.segmentId === item.segmentId && (item.score !== undefined || hitSources?.length)
           ? {
@@ -2232,6 +2247,7 @@ function searchResultToCitation(item: SearchResult): PreviewCitation {
         chunkOrder: item.anchor?.chunkOrder ?? undefined,
         content: item.content,
         snippet: item.snippet || item.content || item.ocrSummary,
+        hitType: item.segmentType,
         anchor: item.anchor,
         ...(item.score !== undefined || hitSources?.length
           ? {
