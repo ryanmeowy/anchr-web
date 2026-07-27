@@ -329,7 +329,6 @@ export type SearchRequest = {
     from?: number;
     to?: number;
   };
-  cursor?: string;
   sort?: string;
   withAnswer?: boolean;
   answerMode?: SearchAnswerMode;
@@ -478,7 +477,6 @@ export type SearchInsight = {
 export type SearchPage = {
   items: SearchResult[];
   total: number;
-  nextCursor?: string | null;
   facets?: {
     assetType?: Array<{
       value: SearchAssetType;

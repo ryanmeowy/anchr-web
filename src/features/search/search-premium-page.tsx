@@ -102,8 +102,6 @@ type SearchFiltersValue = {
 type SearchMutationVariables = {
   query: string;
   filters: SearchFiltersValue;
-  cursor?: string | null;
-  append?: boolean;
   startedAt: number;
 };
 
@@ -311,7 +309,6 @@ export function SearchPremiumPage() {
         assetTypes: variables.filters.assetTypes.length ? variables.filters.assetTypes : undefined,
         hitTypes: variables.filters.hitType.length ? variables.filters.hitType : undefined,
         dateRange: buildDateRange(variables.filters),
-        cursor: variables.cursor ?? undefined,
         withAnswer: variables.filters.withAnswer,
       }),
     onSuccess: (data, variables) => {
@@ -320,17 +317,7 @@ export function SearchPremiumPage() {
         fileName: citation.fileName,
       })));
       setElapsedMs(Math.max(1, Math.round(performance.now() - variables.startedAt)));
-      setSearchData((previous) => {
-        if (!variables.append || !previous) return data;
-        return {
-          ...data,
-          items: [...previous.items, ...(data.items ?? [])],
-          answer: previous.answer ?? data.answer,
-          suggestedQuestions: previous.suggestedQuestions ?? data.suggestedQuestions,
-          rewrittenKeywords: previous.rewrittenKeywords ?? data.rewrittenKeywords,
-          facets: data.facets ?? previous.facets,
-        };
-      });
+      setSearchData(data);
     },
   });
 
@@ -349,15 +336,13 @@ export function SearchPremiumPage() {
   );
 
   const executeSearch = useCallback(
-    (searchText: string, filters: SearchFiltersValue, cursor?: string | null, append = false) => {
+    (searchText: string, filters: SearchFiltersValue) => {
       const trimmed = searchText.trim();
       if (!trimmed) return;
-      if (!append) setElapsedMs(null);
+      setElapsedMs(null);
       searchMutation.mutate({
         query: trimmed,
         filters,
-        cursor,
-        append,
         startedAt: performance.now(),
       });
     },
@@ -396,11 +381,6 @@ export function SearchPremiumPage() {
       return;
     }
     setActiveTab(tab);
-  };
-
-  const handleLoadMore = () => {
-    if (!submittedQuery || !submittedFilters || !searchData?.nextCursor || searchMutation.isPending) return;
-    executeSearch(submittedQuery, submittedFilters, searchData.nextCursor, true);
   };
 
   const handleClearCurrentSearch = () => {
@@ -561,8 +541,7 @@ export function SearchPremiumPage() {
     () => buildInsightData(searchData, normalizedCitations, submittedFilters, kbById),
     [kbById, normalizedCitations, searchData, submittedFilters],
   );
-  const isSearching = Boolean(searchMutation.isPending && !searchMutation.variables?.append);
-  const isAppending = Boolean(searchMutation.isPending && searchMutation.variables?.append);
+  const isSearching = searchMutation.isPending;
   const hasSearched = Boolean(submittedQuery);
   const onlyImageSelected = selectedAssetTypes.length === 1 && selectedAssetTypes[0] === "IMAGE";
   const ocrDisabled = selectedAssetTypes.length > 0 && !selectedAssetTypes.includes("IMAGE");
@@ -737,9 +716,6 @@ export function SearchPremiumPage() {
                       <ResultsPanel
                         ref={resultsScrollRef}
                         results={displayResults}
-                        hasMore={Boolean(searchData?.nextCursor)}
-                        isAppending={isAppending}
-                        onLoadMore={handleLoadMore}
                         onPreview={(item) => {
                           openPreview(item.segmentId, 1, [searchResultToCitation(item)], "NONE", {
                             question: submittedQuery,
@@ -984,16 +960,10 @@ const AnswerPanel = function AnswerPanel({
 
 const ResultsPanel = function ResultsPanel({
   results,
-  hasMore,
-  isAppending,
-  onLoadMore,
   onPreview,
   ref,
 }: {
   results: DisplayResult[];
-  hasMore: boolean;
-  isAppending: boolean;
-  onLoadMore: () => void;
   onPreview: (item: SearchResult) => void;
   ref: React.Ref<HTMLDivElement>;
 }) {
@@ -1016,17 +986,6 @@ const ResultsPanel = function ResultsPanel({
               ))}
             </div>
           </div>
-          {hasMore ? (
-            <button
-              type="button"
-              onClick={onLoadMore}
-              disabled={isAppending}
-              className="search-premium-load-more"
-            >
-              {isAppending ? <Loader2 size={13} className="animate-spin" /> : <ChevronDown size={13} />}
-              加载更多
-            </button>
-          ) : null}
         </div>
       ) : (
         <SearchPrompt>没有找到相关来源</SearchPrompt>
