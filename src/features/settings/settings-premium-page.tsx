@@ -655,7 +655,23 @@ export function SettingsPremiumPage() {
                           mode: "select",
                         });
                       }}
-                      onActiveEmbeddingUpdated={() => void prepareRebuild()}
+                      onActiveEmbeddingUpdated={async (savedConfig) => {
+                        try {
+                          await enableMutation.mutateAsync({
+                            capability: selectedType,
+                            id: savedConfig.id,
+                          });
+                          await prepareRebuild();
+                        } catch (error) {
+                          setRebuildDialog({
+                            phase: "ERROR",
+                            error: getErrorMessage(
+                              error,
+                              "新配置已保存为未启用草稿，但创建重建任务失败；旧配置仍在使用。",
+                            ),
+                          });
+                        }
+                      }}
                       onDeleted={() => {
                         setSelection({
                           type: selectedType,
@@ -1020,7 +1036,7 @@ function ConfigPanel({
   restricted: boolean;
   restrictedMessage: string;
   onSaved: (savedConfig: CapabilityConfig) => void;
-  onActiveEmbeddingUpdated: () => void;
+  onActiveEmbeddingUpdated: (savedConfig: CapabilityConfig) => Promise<void>;
   onDeleted: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -1130,7 +1146,7 @@ function ConfigPanel({
       await queryClient.invalidateQueries({ queryKey: capabilityQueryKey(capability) });
       onSaved(savedConfig);
       if (shouldPrepareRebuild) {
-        onActiveEmbeddingUpdated();
+        await onActiveEmbeddingUpdated(savedConfig);
       }
     },
   });
