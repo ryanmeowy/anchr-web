@@ -111,7 +111,7 @@ export function normalizePersistedIngestionCreateRequest(
   const request = value as Partial<IngestionCreateRequest>;
   const sourceType = request.sourceType;
   if (!isValidClientRequestId(request.clientRequestId)
-    || (sourceType !== "UPLOAD" && sourceType !== "URL")
+    || sourceType !== "UPLOAD"
     || !hasText(request.dedupeStrategy)
     || !Array.isArray(request.items)
     || request.items.length === 0
@@ -119,7 +119,7 @@ export function normalizePersistedIngestionCreateRequest(
     return null;
   }
 
-  const items = request.items.map((item) => normalizeCreateItem(item, sourceType));
+  const items = request.items.map(normalizeCreateItem);
   if (items.some((item) => item === null)) return null;
 
   return {
@@ -130,23 +130,21 @@ export function normalizePersistedIngestionCreateRequest(
   };
 }
 
-function normalizeCreateItem(value: unknown, sourceType: IngestionCreateRequest["sourceType"]) {
+function normalizeCreateItem(value: unknown) {
   if (!value || typeof value !== "object") return null;
   const item = value as Partial<IngestionCreateItem>;
   if (!hasText(item.fileType)) return null;
-  if (sourceType === "UPLOAD" && (!hasText(item.fileName) || !hasText(item.objectKey))) return null;
-  if (sourceType === "URL" && !hasText(item.sourceUrl)) return null;
+  if (!hasText(item.fileName) || !hasText(item.objectKey)) return null;
   if (item.sizeBytes !== undefined && (!Number.isFinite(item.sizeBytes) || item.sizeBytes < 0)) return null;
 
   return {
-    ...(typeof item.fileName === "string" ? { fileName: item.fileName } : {}),
+    fileName: item.fileName,
     ...(typeof item.title === "string" ? { title: item.title } : {}),
     fileType: item.fileType,
     ...(typeof item.mimeType === "string" ? { mimeType: item.mimeType } : {}),
     ...(typeof item.sizeBytes === "number" ? { sizeBytes: item.sizeBytes } : {}),
-    ...(typeof item.objectKey === "string" ? { objectKey: item.objectKey } : {}),
+    objectKey: item.objectKey,
     ...(typeof item.fileHash === "string" ? { fileHash: item.fileHash } : {}),
-    ...(typeof item.sourceUrl === "string" ? { sourceUrl: item.sourceUrl } : {}),
   } satisfies IngestionCreateItem;
 }
 

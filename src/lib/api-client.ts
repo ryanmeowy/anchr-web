@@ -513,22 +513,6 @@ export const apiClient = {
       method: "POST",
       body,
     }).then(requireIngestionTaskResponse),
-  createUrlIngestionTask: (kbId: string, body: { clientRequestId: string; sourceUrl: string; fileName: string; fileType: string; dedupeStrategy: string }) =>
-    request<IngestionTask>(`/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks`, {
-      method: "POST",
-      body: {
-        clientRequestId: body.clientRequestId,
-        sourceType: "URL",
-        dedupeStrategy: body.dedupeStrategy,
-        items: [
-          {
-            sourceUrl: body.sourceUrl,
-            fileName: body.fileName,
-            fileType: body.fileType,
-          },
-        ],
-      },
-    }).then(requireIngestionTaskResponse),
   createUploadIngestionTask: (kbId: string, body: { clientRequestId: string; dedupeStrategy: string; items: UploadIngestionItem[] }) =>
     request<IngestionTask>(`/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks`, {
       method: "POST",

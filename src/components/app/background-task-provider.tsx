@@ -985,7 +985,6 @@ function importStatus(status: string): BackgroundTaskStatus {
 }
 
 async function cleanupRejectedUpload(request: IngestionCreateRequest) {
-  if (request.sourceType !== "UPLOAD") return;
   const items = request.items.filter((item): item is UploadIngestionItem => (
     typeof item.fileName === "string"
     && typeof item.objectKey === "string"
@@ -1012,7 +1011,7 @@ function importTaskLabel(task: IngestionTask) {
   const names = (task.items ?? []).map((item) => item.fileName?.trim()).filter((name): name is string => Boolean(name));
   if (names.length === 1) return names[0];
   if (names.length > 1) return `${names[0]} 等 ${names.length} 个文件`;
-  return task.sourceType === "URL" ? "URL 资料" : "知识库文件";
+  return "知识库文件";
 }
 
 function latestImportStage(task: IngestionTask) {

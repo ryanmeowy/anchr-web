@@ -9,7 +9,6 @@ import {
   Download,
   Folder,
   FolderDown,
-  Link2,
   ListChecks,
   Loader2,
   RefreshCcw,
@@ -43,7 +42,6 @@ import {
   submitPersistedIngestionCreate,
 } from "@/lib/ingestion-create-recovery";
 import {
-  buildDisplayNameFromUrl,
   deleteUploadedFilesFromOss,
   inferFileType,
   uploadFilesToOss,
@@ -94,9 +92,6 @@ export function ImportsPremiumPage({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const theme: ThemeMode = PREMIUM_THEME;
   const [kbId, setKbId] = useState(initialKbId);
-  const [sourceUrl, setSourceUrl] = useState("");
-  const [urlTitle, setUrlTitle] = useState("");
-  const [showUrlForm, setShowUrlForm] = useState(false);
   const [isKbMenuOpen, setIsKbMenuOpen] = useState(false);
   const [dedupeStrategy, setDedupeStrategy] = useState("SKIP");
   const [currentTaskId, setCurrentTaskId] = useState(initialTaskId);
@@ -175,67 +170,6 @@ export function ImportsPremiumPage({
 
   const currentTask = activeTaskId ? currentTaskQuery.data : undefined;
   const selectedFilesSize = files.reduce((total, file) => total + file.size, 0);
-
-  const createUrlMutation = useMutation({
-    mutationFn: async ({ pending }: { pending: PendingImportTaskSnapshot }) => {
-      const trimmedUrl = sourceUrl.trim();
-      const displayName = urlTitle.trim() || buildDisplayNameFromUrl(trimmedUrl);
-
-      const urlFileType = inferFileType(displayName || trimmedUrl, undefined, supportedFormats);
-      if (urlFileType === null) {
-        throw new Error("URL 指向的文件格式不支持，请确认链接指向支持的文件类型。");
-      }
-
-      const request: IngestionCreateRequest = {
-        clientRequestId: pending.clientRequestId,
-        sourceType: "URL",
-        dedupeStrategy: effectiveDedupeStrategy,
-        items: [{
-          sourceUrl: trimmedUrl,
-          fileName: displayName,
-          fileType: urlFileType,
-        }],
-      };
-      try {
-        const task = await submitPersistedIngestionCreate(
-          () => prepareImportCreate(pending, request, Date.now() + IMPORT_OWNER_LEASE_MS),
-          () => apiClient.createIngestionTask(pending.kbId, request),
-        );
-        return { task, confirming: false as const };
-      } catch (error) {
-        if (isIngestionCreatePersistenceError(error)) throw error;
-        if (!isUncertainIngestionCreateError(error)) {
-          rejectImportCreate(pending, ingestionCreateErrorMessage(error, "URL 导入任务创建失败。"));
-          throw error;
-        }
-        updateImportTask(pending.id, {
-          currentStage: "CONFIRMING",
-          confirmationNotBefore: 0,
-          ownerLeaseExpiresAt: 0,
-        });
-        return { task: null, confirming: true as const };
-      }
-    },
-    onSuccess: async (result, { pending }) => {
-      setSourceUrl("");
-      setUrlTitle("");
-      setShowUrlForm(false);
-      setFiles([]);
-      if (result.confirming) {
-        void invalidateIngestionQueries(queryClient, pending.kbId);
-        return;
-      }
-      const task = result.task;
-      resolveImportTask(pending.id, task);
-      queryClient.setQueryData(["ingestion-task", pending.kbId, task.taskId], task);
-      setKbId(pending.kbId);
-      setCurrentTaskId(task.taskId);
-      await invalidateIngestionQueries(queryClient, pending.kbId);
-    },
-    onError: (error, { pending }) => {
-      rejectImportCreate(pending, ingestionCreateErrorMessage(error, "URL 导入任务创建失败。"));
-    },
-  });
 
   const uploadMutation = useMutation({
     mutationFn: async ({
@@ -363,7 +297,7 @@ export function ImportsPremiumPage({
 
   const ownedTrackingId = uploadMutation.isPending
     ? uploadMutation.variables?.pending.id
-    : createUrlMutation.isPending ? createUrlMutation.variables?.pending.id : undefined;
+    : undefined;
 
   useEffect(() => {
     if (!ownedTrackingId) return;
@@ -429,7 +363,7 @@ export function ImportsPremiumPage({
     updateImportTask(activeTrackedCreate.id, { navigationPending: false });
   }, [activeTrackedCreate, initialTaskId, updateImportTask]);
 
-  const isSubmitting = uploadMutation.isPending || createUrlMutation.isPending || createConfirmationPending;
+  const isSubmitting = uploadMutation.isPending || createConfirmationPending;
   const pendingFileCount = files.length;
   const displayedCurrentTask = pendingFileCount > 0 ? undefined : currentTask;
   const progress = createLifecyclePending
@@ -462,7 +396,6 @@ export function ImportsPremiumPage({
     setFiles(nextFiles);
     setPermissionNotice(null);
     uploadMutation.reset();
-    createUrlMutation.reset();
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
@@ -490,23 +423,6 @@ export function ImportsPremiumPage({
     };
     registerPendingImportTask(pending);
     uploadMutation.mutate({ pending, uploadFiles: files });
-  }
-
-  function handleUrlSubmit() {
-    if (createConfirmationPending) return;
-    const { trackingId, clientRequestId } = makeImportRequestIdentity();
-    setActiveCreateTrackingId(trackingId);
-    const pending: PendingImportTaskSnapshot = {
-      id: trackingId,
-      clientRequestId,
-      kbId: selectedKbId,
-      label: urlTitle.trim() || buildDisplayNameFromUrl(sourceUrl.trim()) || "URL 资料",
-      totalCount: 1,
-      startedAt: currentTimestamp(),
-      ownerLeaseExpiresAt: Date.now() + IMPORT_OWNER_LEASE_MS,
-    };
-    registerPendingImportTask(pending);
-    createUrlMutation.mutate({ pending });
   }
 
   return (
@@ -636,39 +552,6 @@ export function ImportsPremiumPage({
                 </div>
               </div>
 
-              {showUrlForm ? (
-                <div className="mb-3 grid shrink-0 gap-2 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-2 lg:grid-cols-[minmax(0,1fr)_180px_auto]">
-                  <label className="relative min-w-0">
-                    <span className="sr-only">URL</span>
-                    <Link2 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--premium-muted)]" size={16} />
-                    <input
-                      value={sourceUrl}
-                      onChange={(event) => setSourceUrl(event.target.value)}
-                      className={FIELD_CLASS + " pl-9"}
-                      placeholder="https://example.com/docs/import"
-                    />
-                  </label>
-                  <label className="min-w-0">
-                    <span className="sr-only">文件名</span>
-                    <input
-                      value={urlTitle}
-                      onChange={(event) => setUrlTitle(event.target.value)}
-                      className={FIELD_CLASS}
-                      placeholder="文件名，可选"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleUrlSubmit}
-                    disabled={!selectedKbId || !capabilitiesReady || !sourceUrl.trim() || createUrlMutation.isPending || createConfirmationPending}
-                    className={BUTTON_PRIMARY_CLASS}
-                  >
-                    {createUrlMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />}
-                    {createUrlMutation.isPending ? "提交中" : "提交导入"}
-                  </button>
-                </div>
-              ) : null}
-
               <div className="min-h-0 flex-1 basis-0 overflow-x-hidden overflow-y-auto pr-1">
                 {showQueueEmpty ? (
                   <EmptyPanel label="暂无待上传文件" />
@@ -697,10 +580,9 @@ export function ImportsPremiumPage({
               <MutationError
                 errors={[
                   isAccessDeniedError(uploadMutation.error) ? null : uploadMutation.error,
-                  createUrlMutation.error,
                   retryTaskMutation.error,
                   retryItemMutation.error,
-                  uploadMutation.error || createUrlMutation.error || !recoveredCreateFailure
+                  uploadMutation.error || !recoveredCreateFailure
                     ? null
                     : new Error(recoveredCreateFailure),
                 ]}
@@ -840,11 +722,11 @@ function TaskItemCard({
   retrying: boolean;
   onRetry: (taskId: string, itemId: string) => void;
 }) {
-  const title = item.fileName || item.sourceUrl || "未命名文件";
+  const title = item.fileName || "未命名文件";
 
   return (
     <article className="grid min-h-[58px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[8px] border border-black/10 bg-white/55 p-2 dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-muted)]">
-      <FileTypeIcon fileName={title} sourceType={item.sourceUrl ? "URL" : undefined} className="size-9" palette="imports" />
+      <FileTypeIcon fileName={title} className="size-9" palette="imports" />
       <div className="min-w-0">
         <strong className="block truncate text-[13px] text-[var(--premium-ink)]">{title}</strong>
         <span className="mt-1 block truncate text-xs text-[var(--premium-muted)]">
@@ -1441,7 +1323,6 @@ function formatLabel(fileType: string) {
     XLSX: "Excel",
     CSV: "CSV",
     HTML: "HTML",
-    URL: "URL",
     PPT: "PPT",
     PPTX: "PPT",
     ZIP: "ZIP",
@@ -1510,9 +1391,6 @@ const BUTTON_RETRY_CLASS =
 
 const BUTTON_RETRY_ALL_CLASS =
   "inline-flex min-h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-transparent bg-[rgba(255,117,95,0.16)] px-[13px] text-[11px] font-black leading-none text-[#ffb4a8] transition hover:-translate-y-px hover:bg-[rgba(255,117,95,0.24)] disabled:translate-y-0 disabled:opacity-50";
-
-const FIELD_CLASS =
-  "h-9 w-full rounded-[8px] border border-[var(--premium-line)] bg-white/70 px-3 text-[12px] text-[var(--premium-ink)] outline-none transition placeholder:text-[var(--premium-muted)] focus:border-[var(--premium-focus-line)] focus:bg-[var(--premium-elevated)] focus:shadow-[0_0_0_3px_var(--premium-focus-ring)] dark:bg-[var(--premium-panel-strong)]";
 
 const SELECT_BUTTON_CLASS =
   "inline-flex min-h-9 w-full items-center gap-2 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-2.5 text-[12px] font-extrabold leading-none text-[var(--premium-ink)] transition hover:bg-[var(--premium-elevated)]";

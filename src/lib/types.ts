@@ -55,7 +55,6 @@ export type KnowledgeBaseDocument = {
   fileType: string;
   mimeType?: string | null;
   sizeBytes?: number | null;
-  sourceUrl?: string | null;
   versionNo?: number | null;
   previewAvailable: boolean;
   parseStatus: string;
@@ -63,7 +62,6 @@ export type KnowledgeBaseDocument = {
   availabilityStatus: DocumentAvailabilityStatus;
   segmentCount: number;
   indexedSegmentCount: number;
-  embeddingProfile?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
   createdAt?: string;
@@ -90,7 +88,6 @@ export type AssetPreview = {
   segmentCount: number;
   previewType: string;
   previewUrl?: string | null;
-  thumbnailUrl?: string | null;
   expiresAt?: number | null;
 };
 
@@ -266,7 +263,6 @@ export type IngestionTaskItem = {
   assetId?: string | null;
   fileName?: string | null;
   fileHash?: string | null;
-  sourceUrl?: string | null;
   stage: string;
   status: string;
   progress: number;
@@ -289,27 +285,23 @@ export type StsToken = {
 };
 
 export type IngestionCreateItem = {
-  fileName?: string;
+  fileName: string;
   title?: string;
   fileType: string;
   mimeType?: string;
   sizeBytes?: number;
-  objectKey?: string;
+  objectKey: string;
   fileHash?: string;
-  sourceUrl?: string;
 };
 
 export type IngestionCreateRequest = {
   clientRequestId: string;
-  sourceType: "UPLOAD" | "URL";
+  sourceType: "UPLOAD";
   dedupeStrategy: string;
   items: IngestionCreateItem[];
 };
 
-export type UploadIngestionItem = IngestionCreateItem & {
-  fileName: string;
-  objectKey: string;
-};
+export type UploadIngestionItem = IngestionCreateItem;
 
 export type SearchAssetType = string;
 export type SearchHitType = "TEXT_CHUNK" | "IMAGE_OCR_BLOCK" | "DOCUMENT_IMAGE";

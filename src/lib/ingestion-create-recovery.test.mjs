@@ -198,6 +198,15 @@ test("restores only the whitelisted create payload and never persists credential
   }), null);
   assert.equal(normalizePersistedIngestionCreateRequest({
     ...uploadRequest,
+    sourceType: "URL",
+    items: [{
+      fileName: "remote.pdf",
+      fileType: "PDF",
+      sourceUrl: "https://example.test/remote.pdf",
+    }],
+  }), null);
+  assert.equal(normalizePersistedIngestionCreateRequest({
+    ...uploadRequest,
     clientRequestId: "invalid/request",
   }), null);
   assert.equal(normalizePersistedIngestionCreateRequest({

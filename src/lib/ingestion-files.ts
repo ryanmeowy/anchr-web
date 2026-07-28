@@ -26,15 +26,6 @@ export function inferFileType(input: string, mimeType?: string, formats: Support
   return FALLBACK_TYPES[extension] ?? null;
 }
 
-export function buildDisplayNameFromUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return url.pathname.split("/").filter(Boolean).at(-1) || url.hostname;
-  } catch {
-    return value.split("/").filter(Boolean).at(-1) || "remote-url";
-  }
-}
-
 export async function uploadFilesToOss(
   files: File[],
   token: StsToken,

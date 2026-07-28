@@ -302,7 +302,6 @@ export function AssetPreviewContent({
     title: asset.title ?? undefined,
     previewType: asset.previewType || asset.fileType,
     previewUrl: asset.previewUrl ?? undefined,
-    thumbnail: asset.thumbnailUrl ?? undefined,
     expiresAt: asset.expiresAt ?? undefined,
   }), [asset]);
 
