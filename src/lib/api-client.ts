@@ -42,7 +42,7 @@ import type {
   RecentQuestionList,
   RecentSearchList,
   SearchRequest,
-  SearchPage,
+  SearchTopNResponse,
   SegmentIndexStatus,
   StorageConfig,
   StorageConfigUpdateRequest,
@@ -535,7 +535,7 @@ export const apiClient = {
     ),
   getStsToken: () => request<StsToken>("/api/v1/auth/sts"),
   searchKnowledgeBase: (body: SearchRequest) =>
-    request<SearchPage>("/api/v1/search/kb", { method: "POST", body }),
+    request<SearchTopNResponse>("/api/v1/search/kb", { method: "POST", body }),
   listConversations: (limit = 50, cursor?: string | null) =>
     request<ConversationSessionList>(`/api/v1/conversations?${conversationListQuery(limit, cursor)}`),
   getConversationCapabilities: () =>

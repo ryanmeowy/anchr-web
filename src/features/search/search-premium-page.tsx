@@ -59,15 +59,19 @@ import type {
   SearchAnswer,
   SearchAssetType,
   SearchHitType,
-  SearchPage as SearchPageData,
+  SearchTopNResponse,
   SearchResult,
 } from "@/lib/types";
+import {
+  SEARCH_SESSION_STATE_VERSION,
+  isSearchTopNResponse,
+} from "./search-top-n-state";
 
 const DEFAULT_SEARCH_LIMIT = 10;
 const MIN_SEARCH_LIMIT = 1;
 const MAX_SEARCH_LIMIT = 10;
 const RECENT_SEARCH_PAGE_SIZE = 8;
-const SEARCH_SESSION_STORAGE_KEY = "anchr.search.session-state.v1";
+const SEARCH_SESSION_STORAGE_KEY = "anchr.search.session-state.v2";
 
 const SOURCE_TYPE_LABEL: Record<string, string> = {
   PDF: "PDF",
@@ -117,7 +121,7 @@ type SearchPremiumReturnState = {
   dateFrom: string;
   dateTo: string;
   activeTab: SearchTab;
-  searchData: SearchPageData | null;
+  searchData: SearchTopNResponse | null;
   elapsedMs: number | null;
   windowScrollY: number;
   answerScrollTop: number;
@@ -125,7 +129,7 @@ type SearchPremiumReturnState = {
 };
 
 type SearchSessionState = {
-  version: 1;
+  version: 2;
   query: string;
   submittedQuery: string;
   submittedFilters: SearchFiltersValue | null;
@@ -137,7 +141,7 @@ type SearchSessionState = {
   dateFrom: string;
   dateTo: string;
   activeTab: SearchTab;
-  searchData: SearchPageData | null;
+  searchData: SearchTopNResponse | null;
   elapsedMs: number | null;
 };
 
@@ -153,7 +157,11 @@ function readSearchSessionState(): SearchSessionState | null {
     const raw = window.sessionStorage.getItem(SEARCH_SESSION_STORAGE_KEY);
     if (!raw) return null;
     const state = JSON.parse(raw) as Partial<SearchSessionState>;
-    if (state.version !== 1 || typeof state.submittedQuery !== "string") return null;
+    if (state.version !== SEARCH_SESSION_STATE_VERSION
+      || typeof state.submittedQuery !== "string"
+      || (state.searchData !== null && !isSearchTopNResponse(state.searchData))) {
+      return null;
+    }
     return state as SearchSessionState;
   } catch {
     return null;
@@ -191,7 +199,7 @@ export function SearchPremiumPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [activeTab, setActiveTab] = useState<SearchTab>("answer");
-  const [searchData, setSearchData] = useState<SearchPageData | null>(null);
+  const [searchData, setSearchData] = useState<SearchTopNResponse | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [isKbMenuOpen, setIsKbMenuOpen] = useState(false);
   const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
@@ -271,7 +279,7 @@ export function SearchPremiumPage() {
       setDateFrom(state.dateFrom);
       setDateTo(state.dateTo);
       setActiveTab(state.activeTab);
-      setSearchData(state.searchData);
+      setSearchData(isSearchTopNResponse(state.searchData) ? state.searchData : null);
       setElapsedMs(state.elapsedMs);
       setSessionStateHydrated(true);
 
@@ -297,7 +305,7 @@ export function SearchPremiumPage() {
     return from === undefined && to === undefined ? undefined : { from, to };
   }, []);
 
-  const searchMutation = useMutation<SearchPageData, Error, SearchMutationVariables>({
+  const searchMutation = useMutation<SearchTopNResponse, Error, SearchMutationVariables>({
     mutationFn: (variables) =>
       apiClient.searchKnowledgeBase({
         query: variables.query,
@@ -470,7 +478,7 @@ export function SearchPremiumPage() {
     if (!sessionStateHydrated) return;
 
     writeSearchSessionState({
-      version: 1,
+      version: SEARCH_SESSION_STATE_VERSION,
       query,
       submittedQuery,
       submittedFilters,
@@ -656,7 +664,7 @@ export function SearchPremiumPage() {
                     <AnswerHeader
                       activeTab={activeTab}
                       evidenceCount={normalizedCitations.length}
-                      resultCount={searchData?.total ?? 0}
+                      resultCount={searchData?.returnedCount ?? 0}
                       answer={searchData?.answer?.answer}
                       canClear={Boolean((submittedQuery || searchData) && !searchMutation.isPending)}
                       canRegenerate={Boolean(submittedQuery && submittedFilters) && !searchMutation.isPending}
@@ -860,7 +868,7 @@ function AnswerHeader({
             ? evidenceCount > 0
               ? `基于 ${formatNumber(evidenceCount)} 条证据生成`
               : "回答结果"
-            : `证据来源 · ${formatNumber(resultCount)} 条`}
+            : `来源 · 本次返回 ${formatNumber(resultCount)} 条`}
         </h2>
         <p className="search-premium-answer-description truncate">
           {activeTab === "answer" ? "严格回答模式，保留可点击引用来源。" : "按知识库与相关性组织检索结果。"}
@@ -2006,7 +2014,7 @@ function SourceBadge({ label }: { label: string }) {
 }
 
 function buildInsightData(
-  data: SearchPageData | null,
+  data: SearchTopNResponse | null,
   citations: PreviewCitation[],
   filters: SearchFiltersValue | null,
   kbById: Map<string, KnowledgeBase>,

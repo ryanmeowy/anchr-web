@@ -321,7 +321,6 @@ export type SearchRequest = {
     from?: number;
     to?: number;
   };
-  sort?: string;
   withAnswer?: boolean;
   answerMode?: SearchAnswerMode;
 };
@@ -466,14 +465,10 @@ export type SearchInsight = {
   latencyMs?: number | null;
 };
 
-export type SearchPage = {
+export type SearchTopNResponse = {
   items: SearchResult[];
-  total: number;
-  facets?: {
-    assetType?: Array<{
-      value: SearchAssetType;
-      count: number;
-    }>;
+  returnedCount: number;
+  windowFacets?: {
     assetTypes?: Array<{
       value: SearchAssetType;
       count: number;
