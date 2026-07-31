@@ -41,6 +41,9 @@ import type {
   RecentCitationList,
   RecentQuestionList,
   RecentSearchList,
+  RuntimeConfigGroup,
+  RuntimeConfigResponse,
+  RuntimeConfigUpdateRequest,
   SearchRequest,
   SearchTopNResponse,
   SegmentIndexStatus,
@@ -699,6 +702,11 @@ export const apiClient = {
     request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}`, { method: "DELETE" }),
   getCapabilityParams: (capability: string) =>
     request<CapabilityParams>(`/api/v1/settings/${encodeURIComponent(capability)}/params`),
+
+  getRuntimeConfig: () =>
+    request<RuntimeConfigResponse>("/api/v1/settings/runtime"),
+  updateRuntimeConfig: (body: RuntimeConfigUpdateRequest) =>
+    request<RuntimeConfigGroup>("/api/v1/settings/runtime", { method: "PUT", body }),
 
   testConnection: (body: CapabilityConnectionTestRequest) =>
     request<CapabilityConnectionTestResult>("/api/v1/settings/test-connection", { method: "POST", body }),

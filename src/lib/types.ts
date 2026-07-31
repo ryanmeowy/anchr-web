@@ -739,6 +739,29 @@ export type AgentActivityStep = {
   createdAt?: number | null;
   errorCode?: string | null;
 };
+export type RuntimeConfigType =
+  | "SEARCH"
+  | "CONVERSATION"
+  | "AGENT"
+  | "INGESTION"
+  | "OUTBOX";
+
+export type RuntimeConfigParam = {
+  key: string;
+  value: string;
+};
+
+export type RuntimeConfigGroup = {
+  type: RuntimeConfigType;
+  params: RuntimeConfigParam[];
+};
+
+export type RuntimeConfigResponse = {
+  groups: RuntimeConfigGroup[];
+};
+
+export type RuntimeConfigUpdateRequest = RuntimeConfigGroup;
+
 export type AgentRunActivity = {
   runId: string;
   sessionId?: string;
