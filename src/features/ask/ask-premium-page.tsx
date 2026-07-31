@@ -124,7 +124,6 @@ type ChatMessage = {
   intent?: ConversationIntent;
   executionMode?: ConversationExecutionMode;
   agentRunId?: string;
-  workflowVersion?: string;
   agentTask?: AgentTask;
   pending?: boolean;
   presenting?: boolean;
@@ -284,7 +283,6 @@ function applyRuntimeSnapshotMessage(
     intent: terminal.intent ?? message.intent,
     executionMode: terminal.executionMode ?? message.executionMode,
     agentRunId: terminal.agentRunId ?? snapshot.runId,
-    workflowVersion: terminal.workflowVersion ?? message.workflowVersion,
     agentTask: terminal.agentTask ?? message.agentTask,
     pending: presenting || terminal.answerStatus === "PROCESSING",
     presenting,
@@ -1009,7 +1007,6 @@ export function AskPremiumPage() {
         intent: terminal.intent ?? persistentGeneration.intent,
         executionMode: terminal.executionMode ?? persistentGeneration.executionMode,
         agentRunId: terminal.agentRunId ?? snapshot.runId,
-        workflowVersion: terminal.workflowVersion ?? persistentGeneration.workflowVersion,
         agentTask: terminal.agentTask ?? persistentGeneration.agentTask,
       });
     }
@@ -2918,7 +2915,6 @@ export function AskPremiumPage() {
                 } : current.intent,
                 executionMode: event.executionMode ?? current.executionMode,
                 agentRunId: event.runId ?? current.agentRunId,
-                workflowVersion: event.workflowVersion ?? current.workflowVersion,
                 agentTask: event.agentTask ?? current.agentTask,
               }));
             }
@@ -2975,7 +2971,6 @@ export function AskPremiumPage() {
               } : message.intent,
               executionMode: event.executionMode,
               agentRunId: event.runId,
-              workflowVersion: event.workflowVersion,
               agentTask: event.agentTask,
               content: message.content,
             }));
@@ -3044,7 +3039,6 @@ export function AskPremiumPage() {
             intent: recoveredTurn.intent,
             executionMode: recoveredTurn.executionMode ?? "TRADITIONAL",
             agentRunId: recoveredTurn.agentRunId,
-            workflowVersion: recoveredTurn.workflowVersion,
             agentTask: recoveredTurn.agentTask,
           });
           answerWriter.replace(recoveredTurn.answer);
@@ -5157,7 +5151,6 @@ function mergeConversationGenerationMessages(
     intent: generation.intent ?? existingAssistant?.intent,
     executionMode: generation.executionMode,
     agentRunId: generation.agentRunId ?? existingAssistant?.agentRunId,
-    workflowVersion: generation.workflowVersion ?? existingAssistant?.workflowVersion,
     agentTask: generation.agentTask ?? existingAssistant?.agentTask,
     pending: inProgress,
     presenting: generation.phase === "presenting",
@@ -5256,7 +5249,6 @@ function turnsToMessages(turns: ConversationTurn[]) {
       intent: turn.intent,
       executionMode: turn.executionMode,
       agentRunId: turn.agentRunId,
-      workflowVersion: turn.workflowVersion,
       agentTask: turn.agentTask,
       persistedTerminal: isTerminalConversationTurn(turn),
       pending: agentTaskRunning || (turn.answerStatus === "PROCESSING"

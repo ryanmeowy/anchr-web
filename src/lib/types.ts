@@ -660,7 +660,6 @@ export type ConversationTurn = {
   citations?: ConversationCitation[];
   executionMode?: ConversationExecutionMode;
   agentRunId?: string;
-  workflowVersion?: string;
   agentTask?: AgentTask;
 };
 
@@ -688,7 +687,6 @@ export type ConversationMessage = {
   createdAt?: number;
   executionMode?: ConversationExecutionMode;
   agentRunId?: string;
-  workflowVersion?: string;
   agentTask?: AgentTask;
 };
 
@@ -768,7 +766,6 @@ export type AgentRunActivity = {
   turnId?: string;
   status: AgentActivityStatus;
   currentStep?: string | null;
-  workflowVersion?: string | null;
   stepCount: number;
   toolCallCount: number;
   promptTokens?: number | null;
@@ -801,7 +798,6 @@ export type AgentRunSummary = {
 };
 export type ConversationCapabilities = {
   agentAvailable: boolean;
-  workflowVersion?: string;
   maxDocumentsPerSummary?: number;
 };
 export type ConversationIntentType = "CHAT" | "KB_QUERY" | "OTHER";
