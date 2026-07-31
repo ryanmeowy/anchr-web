@@ -21,8 +21,10 @@ import type {
   ConversationSession,
   ConversationSessionList,
   ConversationTurn,
+  DocumentAvailabilityStatus,
   ElasticsearchHealth,
   IngestionCapability,
+  IngestionCreateRequest,
   IngestionTaskList,
   IngestionTask,
   KnowledgeBase,
@@ -39,8 +41,11 @@ import type {
   RecentCitationList,
   RecentQuestionList,
   RecentSearchList,
+  RuntimeConfigGroup,
+  RuntimeConfigResponse,
+  RuntimeConfigUpdateRequest,
   SearchRequest,
-  SearchPage,
+  SearchTopNResponse,
   SegmentIndexStatus,
   StorageConfig,
   StorageConfigUpdateRequest,
@@ -59,11 +64,20 @@ export const ACCESS_TOKEN_CHANGED_EVENT = "anchr:access-token-changed";
 export type AccessTokenRole = "ADMIN" | "USER" | "GUEST";
 export type TokenValidationResult = { valid: boolean; role: AccessTokenRole };
 
+type ApiErrorMetadata = {
+  traceId?: string;
+  errorId?: string;
+  retryable?: boolean;
+  requestAccepted?: boolean;
+  uploadCleanupAllowed?: boolean;
+};
+
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   token?: string | null;
   signal?: AbortSignal;
+  cache?: RequestCache;
 };
 
 type StreamMessageCallbacks = {
@@ -71,7 +85,7 @@ type StreamMessageCallbacks = {
   onDelta?: (text: string) => void;
   onAnswerReset?: (text: string) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
-  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string; workflowVersion?: string; agentTask?: AgentTask }) => void;
+  onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; sessionUpdatedAt?: number; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string; agentTask?: AgentTask }) => void;
 };
 
 type AgentTaskStreamCallbacks = {
@@ -96,13 +110,27 @@ type ConversationMessageRequest = {
 export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
+  readonly traceId?: string;
+  readonly errorId?: string;
+  readonly retryable?: boolean;
+  readonly requestAccepted?: boolean;
+  readonly uploadCleanupAllowed?: boolean;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, metadata: ApiErrorMetadata = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.traceId = metadata.traceId;
+    this.errorId = metadata.errorId;
+    this.retryable = metadata.retryable;
+    this.requestAccepted = metadata.requestAccepted;
+    this.uploadCleanupAllowed = metadata.uploadCleanupAllowed;
   }
+}
+
+export function isUploadCleanupAllowed(error: unknown) {
+  return error instanceof ApiError && error.uploadCleanupAllowed === true;
 }
 
 export function isAccessDeniedError(error: unknown) {
@@ -201,19 +229,60 @@ async function request<T>(path: string, options: RequestOptions = {}) {
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.signal,
+    cache: options.cache,
   });
 
   const payload = (await response.json().catch(() => null)) as ApiResult<T> | null;
 
   if (!response.ok || !payload || payload.code < 200 || payload.code >= 300) {
-    throw new ApiError(
-      payload?.message ?? `请求失败：${response.status}`,
-      response.status,
-      payload?.errorCode,
-    );
+    throw apiErrorFromPayload(payload, response.status, `请求失败：${response.status}`);
   }
 
   return payload.data;
+}
+
+function apiErrorFromPayload(
+  payload: ApiResult<unknown> | null,
+  status: number,
+  fallbackMessage: string,
+) {
+  return new ApiError(
+    payload?.message ?? fallbackMessage,
+    status,
+    payload?.errorCode,
+    {
+      traceId: payload?.traceId,
+      errorId: payload?.errorId,
+      retryable: payload?.retryable,
+      requestAccepted: payload?.requestAccepted,
+      uploadCleanupAllowed: payload?.uploadCleanupAllowed,
+    },
+  );
+}
+
+function requireIngestionTaskResponse(value: unknown): IngestionTask {
+  if (!value || typeof value !== "object") throw invalidIngestionTaskResponse();
+  const task = value as Partial<IngestionTask>;
+  if (typeof task.taskId !== "string" || !task.taskId.trim()
+    || typeof task.kbId !== "string" || !task.kbId.trim()
+    || typeof task.sourceType !== "string" || !task.sourceType.trim()
+    || typeof task.status !== "string" || !task.status.trim()
+    || !isNonNegativeFiniteNumber(task.totalCount)
+    || !isNonNegativeFiniteNumber(task.successCount)
+    || !isNonNegativeFiniteNumber(task.failureCount)
+    || !isNonNegativeFiniteNumber(task.runningCount)
+    || (task.items !== undefined && !Array.isArray(task.items))) {
+    throw invalidIngestionTaskResponse();
+  }
+  return task as IngestionTask;
+}
+
+function invalidIngestionTaskResponse() {
+  return new Error("ingestion task response is incomplete.");
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function normalizePreviewSegmentId(segmentId: string) {
@@ -295,10 +364,11 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   if (eventName === "done") {
     callbacks.onDone?.(parseSseJson<{
       turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null;
+      sessionUpdatedAt?: number;
       answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus;
       fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType;
       retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string;
-      workflowVersion?: string; agentTask?: AgentTask;
+      agentTask?: AgentTask;
     }>(data) ?? {});
     return;
   }
@@ -388,7 +458,13 @@ export const apiClient = {
     request<KnowledgeBaseHealth>(`/api/v1/kbs/${encodeURIComponent(kbId)}/health`),
   listKnowledgeBaseDocuments: (
     kbId: string,
-    query: { page: number; size: number; keyword?: string; fileType?: string },
+    query: {
+      page: number;
+      size: number;
+      keyword?: string;
+      fileType?: string;
+      availabilityStatus?: DocumentAvailabilityStatus;
+    },
   ) => {
     const params = new URLSearchParams({
       page: String(query.page),
@@ -396,6 +472,9 @@ export const apiClient = {
     });
     if (query.keyword) params.set("keyword", query.keyword);
     if (query.fileType) params.set("fileType", query.fileType);
+    if (query.availabilityStatus) {
+      params.set("availabilityStatus", query.availabilityStatus);
+    }
     return request<KnowledgeBaseDocumentList>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/documents?${params.toString()}`,
     );
@@ -427,30 +506,26 @@ export const apiClient = {
     request<IngestionTask>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks/${encodeURIComponent(taskId)}`,
     ),
-  createUrlIngestionTask: (kbId: string, body: { sourceUrl: string; fileName: string; fileType: string; dedupeStrategy: string }) =>
+  getIngestionTaskByClientRequestId: (kbId: string, clientRequestId: string) =>
+    request<IngestionTask>(
+      `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks/by-client-request/${encodeURIComponent(clientRequestId)}`,
+      { cache: "no-store" },
+    ).then(requireIngestionTaskResponse),
+  createIngestionTask: (kbId: string, body: IngestionCreateRequest) =>
+    request<IngestionTask>(`/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks`, {
+      method: "POST",
+      body,
+    }).then(requireIngestionTaskResponse),
+  createUploadIngestionTask: (kbId: string, body: { clientRequestId: string; dedupeStrategy: string; items: UploadIngestionItem[] }) =>
     request<IngestionTask>(`/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks`, {
       method: "POST",
       body: {
-        sourceType: "URL",
-        dedupeStrategy: body.dedupeStrategy,
-        items: [
-          {
-            sourceUrl: body.sourceUrl,
-            fileName: body.fileName,
-            fileType: body.fileType,
-          },
-        ],
-      },
-    }),
-  createUploadIngestionTask: (kbId: string, body: { dedupeStrategy: string; items: UploadIngestionItem[] }) =>
-    request<IngestionTask>(`/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks`, {
-      method: "POST",
-      body: {
+        clientRequestId: body.clientRequestId,
         sourceType: "UPLOAD",
         dedupeStrategy: body.dedupeStrategy,
         items: body.items,
       },
-    }),
+    }).then(requireIngestionTaskResponse),
   retryFailedIngestionTask: (kbId: string, taskId: string) =>
     request<IngestionTask>(
       `/api/v1/kbs/${encodeURIComponent(kbId)}/ingestion-tasks/${encodeURIComponent(taskId)}/retry-failed`,
@@ -463,7 +538,7 @@ export const apiClient = {
     ),
   getStsToken: () => request<StsToken>("/api/v1/auth/sts"),
   searchKnowledgeBase: (body: SearchRequest) =>
-    request<SearchPage>("/api/v1/search/kb", { method: "POST", body }),
+    request<SearchTopNResponse>("/api/v1/search/kb", { method: "POST", body }),
   listConversations: (limit = 50, cursor?: string | null) =>
     request<ConversationSessionList>(`/api/v1/conversations?${conversationListQuery(limit, cursor)}`),
   getConversationCapabilities: () =>
@@ -486,7 +561,8 @@ export const apiClient = {
       cache: "no-store",
     });
     if (!response.ok || !response.body) {
-      throw new ApiError(`任务流连接失败：${response.status}`, response.status);
+      const payload = (await response.json().catch(() => null)) as ApiResult<null> | null;
+      throw apiErrorFromPayload(payload, response.status, `任务流连接失败：${response.status}`);
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -557,11 +633,7 @@ export const apiClient = {
 
     if (!response.ok || !response.body) {
       const payload = (await response.json().catch(() => null)) as ApiResult<null> | null;
-      throw new ApiError(
-        payload?.message ?? `请求失败：${response.status}`,
-        response.status,
-        payload?.errorCode,
-      );
+      throw apiErrorFromPayload(payload, response.status, `请求失败：${response.status}`);
     }
 
     const reader = response.body.getReader();
@@ -630,6 +702,11 @@ export const apiClient = {
     request<null>(`/api/v1/settings/${encodeURIComponent(capability)}/${id}`, { method: "DELETE" }),
   getCapabilityParams: (capability: string) =>
     request<CapabilityParams>(`/api/v1/settings/${encodeURIComponent(capability)}/params`),
+
+  getRuntimeConfig: () =>
+    request<RuntimeConfigResponse>("/api/v1/settings/runtime"),
+  updateRuntimeConfig: (body: RuntimeConfigUpdateRequest) =>
+    request<RuntimeConfigGroup>("/api/v1/settings/runtime", { method: "PUT", body }),
 
   testConnection: (body: CapabilityConnectionTestRequest) =>
     request<CapabilityConnectionTestResult>("/api/v1/settings/test-connection", { method: "POST", body }),

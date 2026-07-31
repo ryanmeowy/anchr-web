@@ -302,7 +302,6 @@ export function AssetPreviewContent({
     title: asset.title ?? undefined,
     previewType: asset.previewType || asset.fileType,
     previewUrl: asset.previewUrl ?? undefined,
-    thumbnail: asset.thumbnailUrl ?? undefined,
     expiresAt: asset.expiresAt ?? undefined,
   }), [asset]);
 
@@ -967,11 +966,7 @@ function EvidenceExcerptPanel({ item }: { item: PreviewSegment }) {
   const evidenceText = (item.content || item.ocrSummary || item.title || "").trim();
   const plainEvidenceText = stripEmTags(evidenceText);
   const pageNo = item.anchor?.pageNo;
-  const chunkOrder = item.anchor?.chunkOrder;
-  const location = [
-    pageNo ? `第 ${pageNo} 页` : null,
-    chunkOrder != null ? `Chunk ${chunkOrder}` : null,
-  ].filter(Boolean).join(" · ") || "片段证据";
+  const location = pageNo ? `第 ${pageNo} 页` : "片段证据";
   const canExpand = plainEvidenceText.length > 180;
 
   useEffect(() => {
@@ -992,6 +987,15 @@ function EvidenceExcerptPanel({ item }: { item: PreviewSegment }) {
   return (
     <SidePanel>
       <PanelLabel label="EVIDENCE EXCERPT" value={location} />
+      {item.segmentType === "DOCUMENT_IMAGE" && item.imagePreviewUrl ? (
+        // A signed object URL must bypass the Next image optimizer.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={item.imagePreviewUrl}
+          alt={item.title ?? "文档内图片"}
+          className="mt-3.5 max-h-48 w-full rounded-[8px] border border-[var(--premium-line)] bg-white object-contain"
+        />
+      ) : null}
       {evidenceText ? (
         <>
           <div className={[

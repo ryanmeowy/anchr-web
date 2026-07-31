@@ -44,7 +44,6 @@ export type ConversationGenerationSnapshot = {
   intent?: ConversationIntent;
   executionMode: ConversationExecutionMode;
   agentRunId?: string;
-  workflowVersion?: string;
   agentTask?: AgentTask;
   error?: string;
   updatedAt: number;

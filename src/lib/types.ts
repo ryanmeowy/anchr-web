@@ -5,6 +5,9 @@ export type ApiResult<T> = {
   data: T;
   traceId?: string;
   errorId?: string;
+  retryable?: boolean;
+  requestAccepted?: boolean;
+  uploadCleanupAllowed?: boolean;
 };
 
 export type PagedList<T> = {
@@ -42,6 +45,8 @@ export type KnowledgeBaseUpdateRequest = {
 
 export type KnowledgeBaseListResponse = PagedList<KnowledgeBase>;
 
+export type DocumentAvailabilityStatus = "ANSWERABLE" | "PROCESSING" | "FAILED";
+
 export type KnowledgeBaseDocument = {
   id: string;
   kbId: string;
@@ -50,14 +55,13 @@ export type KnowledgeBaseDocument = {
   fileType: string;
   mimeType?: string | null;
   sizeBytes?: number | null;
-  sourceUrl?: string | null;
   versionNo?: number | null;
   previewAvailable: boolean;
   parseStatus: string;
   indexStatus: string;
+  availabilityStatus: DocumentAvailabilityStatus;
   segmentCount: number;
   indexedSegmentCount: number;
-  embeddingProfile?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
   createdAt?: string;
@@ -84,7 +88,6 @@ export type AssetPreview = {
   segmentCount: number;
   previewType: string;
   previewUrl?: string | null;
-  thumbnailUrl?: string | null;
   expiresAt?: number | null;
 };
 
@@ -232,6 +235,7 @@ export type IngestionCapability = {
 
 export type IngestionTaskSummary = {
   taskId: string;
+  clientRequestId?: string;
   kbId: string;
   sourceType: string;
   status: string;
@@ -259,7 +263,6 @@ export type IngestionTaskItem = {
   assetId?: string | null;
   fileName?: string | null;
   fileHash?: string | null;
-  sourceUrl?: string | null;
   stage: string;
   status: string;
   progress: number;
@@ -281,7 +284,7 @@ export type StsToken = {
   expiration: string;
 };
 
-export type UploadIngestionItem = {
+export type IngestionCreateItem = {
   fileName: string;
   title?: string;
   fileType: string;
@@ -291,8 +294,17 @@ export type UploadIngestionItem = {
   fileHash?: string;
 };
 
+export type IngestionCreateRequest = {
+  clientRequestId: string;
+  sourceType: "UPLOAD";
+  dedupeStrategy: string;
+  items: IngestionCreateItem[];
+};
+
+export type UploadIngestionItem = IngestionCreateItem;
+
 export type SearchAssetType = string;
-export type SearchHitType = "TEXT_CHUNK" | "IMAGE_OCR_BLOCK";
+export type SearchHitType = "TEXT_CHUNK" | "IMAGE_OCR_BLOCK" | "DOCUMENT_IMAGE";
 export type SearchResultType = "TEXT" | "IMAGE" | "MIXED";
 export type SearchStrategy = "KB_RRF" | "KB_RRF_RERANK";
 export type SearchAnswerMode = "STRICT";
@@ -309,8 +321,6 @@ export type SearchRequest = {
     from?: number;
     to?: number;
   };
-  cursor?: string;
-  sort?: string;
   withAnswer?: boolean;
   answerMode?: SearchAnswerMode;
 };
@@ -320,6 +330,9 @@ export type SearchResult = {
   kbId?: string;
   assetId?: string;
   sourceRef?: string;
+  imageBlockId?: string;
+  imagePreviewUrl?: string;
+  imagePreviewExpiresAt?: number;
   segmentType?: string;
   title?: string;
   assetType: SearchAssetType;
@@ -365,6 +378,10 @@ export type SearchResult = {
   totalHits?: number;
   topChunks?: Array<{
     segmentId: string;
+    segmentType?: string;
+    imageBlockId?: string;
+    imagePreviewUrl?: string;
+    imagePreviewExpiresAt?: number;
     title?: string;
     content?: string;
     snippet?: string;
@@ -448,15 +465,10 @@ export type SearchInsight = {
   latencyMs?: number | null;
 };
 
-export type SearchPage = {
+export type SearchTopNResponse = {
   items: SearchResult[];
-  total: number;
-  nextCursor?: string | null;
-  facets?: {
-    assetType?: Array<{
-      value: SearchAssetType;
-      count: number;
-    }>;
+  returnedCount: number;
+  windowFacets?: {
     assetTypes?: Array<{
       value: SearchAssetType;
       count: number;
@@ -499,6 +511,9 @@ export type PreviewSegment = {
   previewType?: string;
   previewUrl?: string;
   expiresAt?: number;
+  imagePreviewUrl?: string;
+  imagePreviewExpiresAt?: number;
+  imageBlockId?: string;
   sourceRef?: string;
   thumbnail?: string;
   title?: string;
@@ -645,7 +660,6 @@ export type ConversationTurn = {
   citations?: ConversationCitation[];
   executionMode?: ConversationExecutionMode;
   agentRunId?: string;
-  workflowVersion?: string;
   agentTask?: AgentTask;
 };
 
@@ -673,7 +687,6 @@ export type ConversationMessage = {
   createdAt?: number;
   executionMode?: ConversationExecutionMode;
   agentRunId?: string;
-  workflowVersion?: string;
   agentTask?: AgentTask;
 };
 
@@ -724,13 +737,35 @@ export type AgentActivityStep = {
   createdAt?: number | null;
   errorCode?: string | null;
 };
+export type RuntimeConfigType =
+  | "SEARCH"
+  | "CONVERSATION"
+  | "AGENT"
+  | "INGESTION"
+  | "OUTBOX";
+
+export type RuntimeConfigParam = {
+  key: string;
+  value: string;
+};
+
+export type RuntimeConfigGroup = {
+  type: RuntimeConfigType;
+  params: RuntimeConfigParam[];
+};
+
+export type RuntimeConfigResponse = {
+  groups: RuntimeConfigGroup[];
+};
+
+export type RuntimeConfigUpdateRequest = RuntimeConfigGroup;
+
 export type AgentRunActivity = {
   runId: string;
   sessionId?: string;
   turnId?: string;
   status: AgentActivityStatus;
   currentStep?: string | null;
-  workflowVersion?: string | null;
   stepCount: number;
   toolCallCount: number;
   promptTokens?: number | null;
@@ -763,7 +798,6 @@ export type AgentRunSummary = {
 };
 export type ConversationCapabilities = {
   agentAvailable: boolean;
-  workflowVersion?: string;
   maxDocumentsPerSummary?: number;
 };
 export type ConversationIntentType = "CHAT" | "KB_QUERY" | "OTHER";

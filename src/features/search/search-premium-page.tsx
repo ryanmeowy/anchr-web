@@ -12,6 +12,7 @@ import {
   Copy,
   Database,
   Folder,
+  ImageIcon,
   Loader2,
   RefreshCcw,
   ScanSearch,
@@ -58,15 +59,19 @@ import type {
   SearchAnswer,
   SearchAssetType,
   SearchHitType,
-  SearchPage as SearchPageData,
+  SearchTopNResponse,
   SearchResult,
 } from "@/lib/types";
+import {
+  SEARCH_SESSION_STATE_VERSION,
+  isSearchTopNResponse,
+} from "./search-top-n-state";
 
 const DEFAULT_SEARCH_LIMIT = 10;
 const MIN_SEARCH_LIMIT = 1;
 const MAX_SEARCH_LIMIT = 10;
 const RECENT_SEARCH_PAGE_SIZE = 8;
-const SEARCH_SESSION_STORAGE_KEY = "anchr.search.session-state.v1";
+const SEARCH_SESSION_STORAGE_KEY = "anchr.search.session-state.v2";
 
 const SOURCE_TYPE_LABEL: Record<string, string> = {
   PDF: "PDF",
@@ -79,6 +84,7 @@ const SOURCE_TYPE_LABEL: Record<string, string> = {
 const HIT_TYPE_OPTIONS: Array<{ value: SearchHitType; label: string }> = [
   { value: "TEXT_CHUNK", label: "文本片段" },
   { value: "IMAGE_OCR_BLOCK", label: "OCR片段" },
+  { value: "DOCUMENT_IMAGE", label: "文档内图片" },
 ];
 
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
@@ -100,8 +106,6 @@ type SearchFiltersValue = {
 type SearchMutationVariables = {
   query: string;
   filters: SearchFiltersValue;
-  cursor?: string | null;
-  append?: boolean;
   startedAt: number;
 };
 
@@ -117,7 +121,7 @@ type SearchPremiumReturnState = {
   dateFrom: string;
   dateTo: string;
   activeTab: SearchTab;
-  searchData: SearchPageData | null;
+  searchData: SearchTopNResponse | null;
   elapsedMs: number | null;
   windowScrollY: number;
   answerScrollTop: number;
@@ -125,7 +129,7 @@ type SearchPremiumReturnState = {
 };
 
 type SearchSessionState = {
-  version: 1;
+  version: 2;
   query: string;
   submittedQuery: string;
   submittedFilters: SearchFiltersValue | null;
@@ -137,7 +141,7 @@ type SearchSessionState = {
   dateFrom: string;
   dateTo: string;
   activeTab: SearchTab;
-  searchData: SearchPageData | null;
+  searchData: SearchTopNResponse | null;
   elapsedMs: number | null;
 };
 
@@ -153,7 +157,11 @@ function readSearchSessionState(): SearchSessionState | null {
     const raw = window.sessionStorage.getItem(SEARCH_SESSION_STORAGE_KEY);
     if (!raw) return null;
     const state = JSON.parse(raw) as Partial<SearchSessionState>;
-    if (state.version !== 1 || typeof state.submittedQuery !== "string") return null;
+    if (state.version !== SEARCH_SESSION_STATE_VERSION
+      || typeof state.submittedQuery !== "string"
+      || (state.searchData !== null && !isSearchTopNResponse(state.searchData))) {
+      return null;
+    }
     return state as SearchSessionState;
   } catch {
     return null;
@@ -191,7 +199,7 @@ export function SearchPremiumPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [activeTab, setActiveTab] = useState<SearchTab>("answer");
-  const [searchData, setSearchData] = useState<SearchPageData | null>(null);
+  const [searchData, setSearchData] = useState<SearchTopNResponse | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [isKbMenuOpen, setIsKbMenuOpen] = useState(false);
   const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
@@ -271,7 +279,7 @@ export function SearchPremiumPage() {
       setDateFrom(state.dateFrom);
       setDateTo(state.dateTo);
       setActiveTab(state.activeTab);
-      setSearchData(state.searchData);
+      setSearchData(isSearchTopNResponse(state.searchData) ? state.searchData : null);
       setElapsedMs(state.elapsedMs);
       setSessionStateHydrated(true);
 
@@ -297,7 +305,7 @@ export function SearchPremiumPage() {
     return from === undefined && to === undefined ? undefined : { from, to };
   }, []);
 
-  const searchMutation = useMutation<SearchPageData, Error, SearchMutationVariables>({
+  const searchMutation = useMutation<SearchTopNResponse, Error, SearchMutationVariables>({
     mutationFn: (variables) =>
       apiClient.searchKnowledgeBase({
         query: variables.query,
@@ -309,7 +317,6 @@ export function SearchPremiumPage() {
         assetTypes: variables.filters.assetTypes.length ? variables.filters.assetTypes : undefined,
         hitTypes: variables.filters.hitType.length ? variables.filters.hitType : undefined,
         dateRange: buildDateRange(variables.filters),
-        cursor: variables.cursor ?? undefined,
         withAnswer: variables.filters.withAnswer,
       }),
     onSuccess: (data, variables) => {
@@ -318,17 +325,7 @@ export function SearchPremiumPage() {
         fileName: citation.fileName,
       })));
       setElapsedMs(Math.max(1, Math.round(performance.now() - variables.startedAt)));
-      setSearchData((previous) => {
-        if (!variables.append || !previous) return data;
-        return {
-          ...data,
-          items: [...previous.items, ...(data.items ?? [])],
-          answer: previous.answer ?? data.answer,
-          suggestedQuestions: previous.suggestedQuestions ?? data.suggestedQuestions,
-          rewrittenKeywords: previous.rewrittenKeywords ?? data.rewrittenKeywords,
-          facets: data.facets ?? previous.facets,
-        };
-      });
+      setSearchData(data);
     },
   });
 
@@ -347,15 +344,13 @@ export function SearchPremiumPage() {
   );
 
   const executeSearch = useCallback(
-    (searchText: string, filters: SearchFiltersValue, cursor?: string | null, append = false) => {
+    (searchText: string, filters: SearchFiltersValue) => {
       const trimmed = searchText.trim();
       if (!trimmed) return;
-      if (!append) setElapsedMs(null);
+      setElapsedMs(null);
       searchMutation.mutate({
         query: trimmed,
         filters,
-        cursor,
-        append,
         startedAt: performance.now(),
       });
     },
@@ -394,11 +389,6 @@ export function SearchPremiumPage() {
       return;
     }
     setActiveTab(tab);
-  };
-
-  const handleLoadMore = () => {
-    if (!submittedQuery || !submittedFilters || !searchData?.nextCursor || searchMutation.isPending) return;
-    executeSearch(submittedQuery, submittedFilters, searchData.nextCursor, true);
   };
 
   const handleClearCurrentSearch = () => {
@@ -488,7 +478,7 @@ export function SearchPremiumPage() {
     if (!sessionStateHydrated) return;
 
     writeSearchSessionState({
-      version: 1,
+      version: SEARCH_SESSION_STATE_VERSION,
       query,
       submittedQuery,
       submittedFilters,
@@ -559,8 +549,7 @@ export function SearchPremiumPage() {
     () => buildInsightData(searchData, normalizedCitations, submittedFilters, kbById),
     [kbById, normalizedCitations, searchData, submittedFilters],
   );
-  const isSearching = Boolean(searchMutation.isPending && !searchMutation.variables?.append);
-  const isAppending = Boolean(searchMutation.isPending && searchMutation.variables?.append);
+  const isSearching = searchMutation.isPending;
   const hasSearched = Boolean(submittedQuery);
   const onlyImageSelected = selectedAssetTypes.length === 1 && selectedAssetTypes[0] === "IMAGE";
   const ocrDisabled = selectedAssetTypes.length > 0 && !selectedAssetTypes.includes("IMAGE");
@@ -675,7 +664,7 @@ export function SearchPremiumPage() {
                     <AnswerHeader
                       activeTab={activeTab}
                       evidenceCount={normalizedCitations.length}
-                      resultCount={searchData?.total ?? 0}
+                      resultCount={searchData?.returnedCount ?? 0}
                       answer={searchData?.answer?.answer}
                       canClear={Boolean((submittedQuery || searchData) && !searchMutation.isPending)}
                       canRegenerate={Boolean(submittedQuery && submittedFilters) && !searchMutation.isPending}
@@ -735,9 +724,6 @@ export function SearchPremiumPage() {
                       <ResultsPanel
                         ref={resultsScrollRef}
                         results={displayResults}
-                        hasMore={Boolean(searchData?.nextCursor)}
-                        isAppending={isAppending}
-                        onLoadMore={handleLoadMore}
                         onPreview={(item) => {
                           openPreview(item.segmentId, 1, [searchResultToCitation(item)], "NONE", {
                             question: submittedQuery,
@@ -882,7 +868,7 @@ function AnswerHeader({
             ? evidenceCount > 0
               ? `基于 ${formatNumber(evidenceCount)} 条证据生成`
               : "回答结果"
-            : `证据来源 · ${formatNumber(resultCount)} 条`}
+            : `来源 · 本次返回 ${formatNumber(resultCount)} 条`}
         </h2>
         <p className="search-premium-answer-description truncate">
           {activeTab === "answer" ? "严格回答模式，保留可点击引用来源。" : "按知识库与相关性组织检索结果。"}
@@ -982,16 +968,10 @@ const AnswerPanel = function AnswerPanel({
 
 const ResultsPanel = function ResultsPanel({
   results,
-  hasMore,
-  isAppending,
-  onLoadMore,
   onPreview,
   ref,
 }: {
   results: DisplayResult[];
-  hasMore: boolean;
-  isAppending: boolean;
-  onLoadMore: () => void;
   onPreview: (item: SearchResult) => void;
   ref: React.Ref<HTMLDivElement>;
 }) {
@@ -1014,17 +994,6 @@ const ResultsPanel = function ResultsPanel({
               ))}
             </div>
           </div>
-          {hasMore ? (
-            <button
-              type="button"
-              onClick={onLoadMore}
-              disabled={isAppending}
-              className="search-premium-load-more"
-            >
-              {isAppending ? <Loader2 size={13} className="animate-spin" /> : <ChevronDown size={13} />}
-              加载更多
-            </button>
-          ) : null}
         </div>
       ) : (
         <SearchPrompt>没有找到相关来源</SearchPrompt>
@@ -1044,6 +1013,7 @@ function ResultRow({
 }) {
   const type = getEvidenceSourceLabel(item);
   const position = formatResultPosition(item);
+  const documentImage = item.segmentType === "DOCUMENT_IMAGE";
 
   return (
     <button
@@ -1052,6 +1022,14 @@ function ResultRow({
       disabled={!item.segmentId}
       className="search-premium-result"
     >
+      {documentImage || item.thumbnail ? (
+        <span className="search-premium-result-thumbnail" aria-hidden="true">
+          {item.imagePreviewUrl || item.thumbnail ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.imagePreviewUrl ?? item.thumbnail} alt="" />
+          ) : <ImageIcon size={20} />}
+        </span>
+      ) : null}
       <span className="min-w-0">
         <span className="search-premium-result-title">
           <SourceBadge label={type} />
@@ -2036,7 +2014,7 @@ function SourceBadge({ label }: { label: string }) {
 }
 
 function buildInsightData(
-  data: SearchPageData | null,
+  data: SearchTopNResponse | null,
   citations: PreviewCitation[],
   filters: SearchFiltersValue | null,
   kbById: Map<string, KnowledgeBase>,
@@ -2152,6 +2130,9 @@ function nullableCount(value: number | null | undefined) {
 }
 
 function getEvidenceSourceLabel(item: SearchResult) {
+  if (item.segmentType === "DOCUMENT_IMAGE") {
+    return "文档图片";
+  }
   if (item.segmentType === "IMAGE_OCR_BLOCK") {
     return "OCR";
   }
@@ -2215,6 +2196,7 @@ function searchResultToCitation(item: SearchResult): PreviewCitation {
         chunkOrder: chunk.chunkOrder ?? chunk.anchor?.chunkOrder ?? undefined,
         content: chunk.content,
         snippet: chunk.snippet,
+        hitType: chunk.segmentType,
         anchor: chunk.anchor,
         ...(chunk.segmentId === item.segmentId && (item.score !== undefined || hitSources?.length)
           ? {
@@ -2232,6 +2214,7 @@ function searchResultToCitation(item: SearchResult): PreviewCitation {
         chunkOrder: item.anchor?.chunkOrder ?? undefined,
         content: item.content,
         snippet: item.snippet || item.content || item.ocrSummary,
+        hitType: item.segmentType,
         anchor: item.anchor,
         ...(item.score !== undefined || hitSources?.length
           ? {

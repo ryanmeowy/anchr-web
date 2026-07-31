@@ -26,20 +26,12 @@ export function inferFileType(input: string, mimeType?: string, formats: Support
   return FALLBACK_TYPES[extension] ?? null;
 }
 
-export function buildDisplayNameFromUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return url.pathname.split("/").filter(Boolean).at(-1) || url.hostname;
-  } catch {
-    return value.split("/").filter(Boolean).at(-1) || "remote-url";
-  }
-}
-
 export async function uploadFilesToOss(
   files: File[],
   token: StsToken,
   formats: SupportedFormat[],
   onFileUploaded?: (completedCount: number, totalCount: number, fileName: string) => void,
+  onPrepared?: (items: UploadIngestionItem[]) => void,
 ): Promise<UploadIngestionItem[]> {
   const batchId = createUploadBatchId();
   const prepared: Array<{ file: File; item: UploadIngestionItem }> = [];
@@ -61,6 +53,8 @@ export async function uploadFilesToOss(
       },
     });
   }
+
+  onPrepared?.(prepared.map((entry) => ({ ...entry.item })));
 
   const client = await createOssClient(token);
   const uploadedObjectKeys: string[] = [];

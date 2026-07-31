@@ -66,6 +66,10 @@ import {
   type MessageEdgeScrollbarMetrics,
 } from "@/features/ask/message-edge-scrollbar";
 import {
+  mergeConversationMessageMetadata,
+  shouldRecoverConversationCursor,
+} from "@/features/ask/conversation-list-state";
+import {
   clampPreviewMessageScrollTop,
   resolvePreviewMessageScrollTop,
 } from "@/features/ask/preview-message-restore";
@@ -120,7 +124,6 @@ type ChatMessage = {
   intent?: ConversationIntent;
   executionMode?: ConversationExecutionMode;
   agentRunId?: string;
-  workflowVersion?: string;
   agentTask?: AgentTask;
   pending?: boolean;
   presenting?: boolean;
@@ -280,7 +283,6 @@ function applyRuntimeSnapshotMessage(
     intent: terminal.intent ?? message.intent,
     executionMode: terminal.executionMode ?? message.executionMode,
     agentRunId: terminal.agentRunId ?? snapshot.runId,
-    workflowVersion: terminal.workflowVersion ?? message.workflowVersion,
     agentTask: terminal.agentTask ?? message.agentTask,
     pending: presenting || terminal.answerStatus === "PROCESSING",
     presenting,
@@ -403,6 +405,9 @@ export function AskPremiumPage() {
   const [activeSessionId, setActiveSessionId] = useState(initialSessionId);
   const [conversations, setConversations] = useState<ConversationSession[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const conversationAppendInFlightRef = useRef<string | null>(null);
+  const conversationListGenerationRef = useRef(0);
+  const conversationListReplacingRef = useRef(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [isLoadingMoreConversations, setIsLoadingMoreConversations] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
@@ -1002,7 +1007,6 @@ export function AskPremiumPage() {
         intent: terminal.intent ?? persistentGeneration.intent,
         executionMode: terminal.executionMode ?? persistentGeneration.executionMode,
         agentRunId: terminal.agentRunId ?? snapshot.runId,
-        workflowVersion: terminal.workflowVersion ?? persistentGeneration.workflowVersion,
         agentTask: terminal.agentTask ?? persistentGeneration.agentTask,
       });
     }
@@ -1558,19 +1562,64 @@ export function AskPremiumPage() {
   }, [initialTurnId]);
 
   const loadConversations = useCallback(async (cursor?: string | null, append = false) => {
+    const requestedCursor = cursor?.trim() || null;
+    if (append) {
+      if (!requestedCursor
+        || conversationListReplacingRef.current
+        || conversationAppendInFlightRef.current !== null) return;
+      conversationAppendInFlightRef.current = requestedCursor;
+    } else {
+      conversationListGenerationRef.current += 1;
+      conversationListReplacingRef.current = true;
+    }
+    const generation = conversationListGenerationRef.current;
+    let fallbackGeneration: number | null = null;
     if (append) setIsLoadingMoreConversations(true);
     else setIsLoadingConversations(true);
     setConversationError(null);
 
     try {
-      const data = await apiClient.listConversations(CONVERSATION_PAGE_SIZE, cursor);
+      const data = await apiClient.listConversations(CONVERSATION_PAGE_SIZE, requestedCursor);
+      if (generation !== conversationListGenerationRef.current) return;
       setConversations((previous) => mergeConversations(append ? previous : [], data.items ?? []));
       setNextCursor(data.nextCursor ?? null);
     } catch (error) {
+      if (generation !== conversationListGenerationRef.current) return;
+      if (shouldRecoverConversationCursor(
+        error,
+        append,
+        generation,
+        conversationListGenerationRef.current,
+      )) {
+        const resetGeneration = ++conversationListGenerationRef.current;
+        try {
+          fallbackGeneration = resetGeneration;
+          conversationListReplacingRef.current = true;
+          const firstPage = await apiClient.listConversations(CONVERSATION_PAGE_SIZE, null);
+          if (resetGeneration !== conversationListGenerationRef.current) return;
+          setConversations(firstPage.items ?? []);
+          setNextCursor(firstPage.nextCursor ?? null);
+          return;
+        } catch (reloadError) {
+          if (resetGeneration !== conversationListGenerationRef.current) return;
+          setConversationError(reloadError instanceof Error ? reloadError.message : "会话列表加载失败");
+          return;
+        }
+      }
       setConversationError(error instanceof Error ? error.message : "会话列表加载失败");
     } finally {
-      setIsLoadingConversations(false);
-      setIsLoadingMoreConversations(false);
+      if (!append && generation === conversationListGenerationRef.current) {
+        conversationListReplacingRef.current = false;
+        setIsLoadingConversations(false);
+      }
+      if (append && conversationAppendInFlightRef.current === requestedCursor) {
+        conversationAppendInFlightRef.current = null;
+        setIsLoadingMoreConversations(false);
+      }
+      if (fallbackGeneration != null && fallbackGeneration === conversationListGenerationRef.current) {
+        conversationListReplacingRef.current = false;
+        setIsLoadingConversations(false);
+      }
     }
   }, []);
 
@@ -2866,7 +2915,6 @@ export function AskPremiumPage() {
                 } : current.intent,
                 executionMode: event.executionMode ?? current.executionMode,
                 agentRunId: event.runId ?? current.agentRunId,
-                workflowVersion: event.workflowVersion ?? current.workflowVersion,
                 agentTask: event.agentTask ?? current.agentTask,
               }));
             }
@@ -2923,19 +2971,12 @@ export function AskPremiumPage() {
               } : message.intent,
               executionMode: event.executionMode,
               agentRunId: event.runId,
-              workflowVersion: event.workflowVersion,
               agentTask: event.agentTask,
               content: message.content,
             }));
             setConversations((previous) => previous.map((item) => (
               item.sessionId === targetSessionId
-                ? {
-                    ...item,
-                    title: event.title || item.title || "新对话",
-                    lastMessagePreview: text,
-                    kbScope: event.kbScope ?? item.kbScope,
-                    updatedAt: Date.now(),
-                  }
+                ? mergeConversationMessageMetadata(item, event, text)
                 : item
             )));
           },
@@ -2998,7 +3039,6 @@ export function AskPremiumPage() {
             intent: recoveredTurn.intent,
             executionMode: recoveredTurn.executionMode ?? "TRADITIONAL",
             agentRunId: recoveredTurn.agentRunId,
-            workflowVersion: recoveredTurn.workflowVersion,
             agentTask: recoveredTurn.agentTask,
           });
           answerWriter.replace(recoveredTurn.answer);
@@ -3600,7 +3640,7 @@ export function AskPremiumPage() {
                   {positionedComposerMenu === "kb" && activeComposerMenuPosition ? (
                     <FloatingMenu key="kb" phase={composerMenu ? "open" : "closing"} position={activeComposerMenuPosition}>
                       <MenuHeader label="KNOWLEDGE BASES" value="MULTI" />
-                      <MenuOption selected={allKbsSelected} onClick={toggleAllKbs} checkbox title="全部知识库" detail="发送时覆盖当前可用知识库" />
+                      <MenuOption selected={allKbsSelected} onClick={toggleAllKbs} title="全部知识库" detail="发送时覆盖当前可用知识库" />
                       {kbsQuery.isLoading ? (
                         <div className="px-3 py-3 text-sm text-slate-500">加载知识库...</div>
                       ) : kbOptions.length ? (
@@ -3609,7 +3649,6 @@ export function AskPremiumPage() {
                             key={item.id}
                             selected={selectedKbIds.includes(item.id)}
                             onClick={() => toggleKb(item.id)}
-                            checkbox
                             icon={<Folder size={16} />}
                             title={item.name}
                             detail="知识库范围"
@@ -4539,14 +4578,12 @@ function MenuOption({
   onClick,
   title,
   detail,
-  checkbox = false,
   icon,
 }: {
   selected: boolean;
   onClick: () => void;
   title: string;
   detail: string;
-  checkbox?: boolean;
   icon?: React.ReactNode;
 }) {
   return (
@@ -4563,8 +4600,7 @@ function MenuOption({
     >
       <span
         className={[
-          "ask-premium-menu-option-indicator grid size-4 shrink-0 place-items-center border text-white",
-          checkbox ? "rounded-[5px]" : "rounded-full",
+          "ask-premium-menu-option-indicator grid size-4 shrink-0 place-items-center rounded-full border text-white",
           selected ? "border-blue-600 bg-blue-600" : "border-black/15 bg-white text-transparent",
         ].join(" ")}
         aria-hidden="true"
@@ -5111,7 +5147,6 @@ function mergeConversationGenerationMessages(
     intent: generation.intent ?? existingAssistant?.intent,
     executionMode: generation.executionMode,
     agentRunId: generation.agentRunId ?? existingAssistant?.agentRunId,
-    workflowVersion: generation.workflowVersion ?? existingAssistant?.workflowVersion,
     agentTask: generation.agentTask ?? existingAssistant?.agentTask,
     pending: inProgress,
     presenting: generation.phase === "presenting",
@@ -5210,7 +5245,6 @@ function turnsToMessages(turns: ConversationTurn[]) {
       intent: turn.intent,
       executionMode: turn.executionMode,
       agentRunId: turn.agentRunId,
-      workflowVersion: turn.workflowVersion,
       agentTask: turn.agentTask,
       persistedTerminal: isTerminalConversationTurn(turn),
       pending: agentTaskRunning || (turn.answerStatus === "PROCESSING"

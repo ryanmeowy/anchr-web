@@ -4,7 +4,6 @@ import {
   FileSpreadsheet,
   FileText,
   FileType2,
-  Link2,
 } from "lucide-react";
 
 export function FileTypeIcon({
@@ -20,7 +19,7 @@ export function FileTypeIcon({
   className?: string;
   palette?: "default" | "imports" | "document";
 }) {
-  const type = sourceType === "URL" ? "URL" : inferIconType(fileName, sourceType);
+  const type = inferIconType(fileName, sourceType);
   const size = compact ? "size-5" : "size-11";
   const iconSize = compact ? 14 : 24;
   const shared = `${size} grid place-items-center rounded-[8px] ${className}`;
@@ -66,14 +65,6 @@ export function FileTypeIcon({
       </span>
     );
   }
-  if (type === "URL") {
-    return (
-      <span className={`${shared} border border-slate-200 bg-slate-100 text-slate-600`}>
-        <Link2 size={iconSize} />
-      </span>
-    );
-  }
-
   return (
     <span className={`${shared} border border-slate-200 bg-slate-50 text-slate-600`} style={paletteStyle}>
       <FileText size={iconSize} />

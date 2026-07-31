@@ -46,6 +46,14 @@ test("does not turn citation-like text inside LaTeX into a citation link", () =>
   assert.equal(citationLinks.length, 1);
 });
 
+test("does not turn array indexes into citation links", () => {
+  const html = renderMarkdown("Array arr[1] stays code-like while source [1] remains a citation.");
+  const citationLinks = html.match(/href="#anchr-citation-1"/g) ?? [];
+
+  assert.equal(citationLinks.length, 1);
+  assert.match(html, /arr\[1\]/);
+});
+
 test("keeps incomplete streaming LaTeX renderable as plain text", () => {
   const html = renderMarkdown("正在生成 $E = mc");
 

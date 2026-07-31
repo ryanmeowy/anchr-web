@@ -12,10 +12,14 @@ export type ResolvedConversationCitation = {
 export function conversationCitationLabels(citations: ConversationCitation[] | undefined) {
   const labels = new Set<CitationLabel>();
   (citations ?? []).forEach((citation, index) => {
-    if (citation.chunks?.length) labels.add(String(citation.citationIndex ?? index + 1));
-    citation.chunks?.forEach((chunk) => {
-      if (isCitationLabel(chunk.citationLabel)) labels.add(chunk.citationLabel);
-    });
+    const chunkLabels = (citation.chunks ?? [])
+      .map((chunk) => chunk.citationLabel)
+      .filter(isCitationLabel);
+    if (chunkLabels.length) {
+      chunkLabels.forEach((label) => labels.add(label));
+    } else if (citation.chunks?.length) {
+      labels.add(String(citation.citationIndex ?? index + 1));
+    }
   });
   return [...labels];
 }

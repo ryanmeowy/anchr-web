@@ -7,6 +7,8 @@ export type IndexCompatibilityIssue =
   | null;
 
 export function getIndexCompatibilityIssue(status: SegmentIndexStatus): IndexCompatibilityIssue {
+  // A pending target is not active yet; query vectors still use the current model.
+  if (status.pendingRebuild) return null;
   const dimensionMismatch =
     status.actualDim != null &&
     status.expectedDim != null &&
@@ -29,11 +31,9 @@ export function hasIndexRebuildFailed(status: SegmentIndexStatus) {
 export function isIndexFullyOperational(status?: SegmentIndexStatus) {
   return Boolean(
     status &&
-    status.status === "READY" &&
+    (status.status === "READY" || status.status === "REBUILDING") &&
     status.readable &&
-    status.writable &&
-    !status.pendingRebuild &&
-    !hasIndexRebuildFailed(status) &&
+    (status.status === "REBUILDING" || status.writable) &&
     !getIndexCompatibilityIssue(status),
   );
 }

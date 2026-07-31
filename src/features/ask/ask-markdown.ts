@@ -48,7 +48,7 @@ function transformCitationTextNodes(parent: MarkdownAstNode) {
 
 function splitCitationText(value: string) {
   const nodes: MarkdownAstNode[] = [];
-  const citationPattern = /\[(\d+(?:-\d+)?)]/g;
+  const citationPattern = /(?<![A-Za-z0-9_])\[(\d+(?:-\d+)?)]/g;
   let cursor = 0;
   let match = citationPattern.exec(value);
 

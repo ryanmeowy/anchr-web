@@ -439,8 +439,13 @@ export function SettingsPremiumPage() {
       setEnableError(null);
     },
     onSuccess: (_, variables) => {
-      markCapabilityConfigEnabled(variables.capability, variables.id);
+      if (!embeddingSwitchAffects(variables.capability)) {
+        markCapabilityConfigEnabled(variables.capability, variables.id);
+      }
       void refreshCapabilityConfigs(variables.capability);
+      if (embeddingSwitchAffects(variables.capability)) {
+        void queryClient.invalidateQueries({ queryKey: ["index", "status"] });
+      }
     },
     onError: (error, variables) => {
       setEnableError({
@@ -650,7 +655,23 @@ export function SettingsPremiumPage() {
                           mode: "select",
                         });
                       }}
-                      onActiveEmbeddingUpdated={() => void prepareRebuild()}
+                      onActiveEmbeddingUpdated={async (savedConfig) => {
+                        try {
+                          await enableMutation.mutateAsync({
+                            capability: selectedType,
+                            id: savedConfig.id,
+                          });
+                          await prepareRebuild();
+                        } catch (error) {
+                          setRebuildDialog({
+                            phase: "ERROR",
+                            error: getErrorMessage(
+                              error,
+                              "新配置已保存为未启用草稿，但创建重建任务失败；旧配置仍在使用。",
+                            ),
+                          });
+                        }
+                      }}
                       onDeleted={() => {
                         setSelection({
                           type: selectedType,
@@ -718,11 +739,11 @@ export function SettingsPremiumPage() {
             </div>
             <div className="mt-4 rounded-[8px] border border-[rgba(49,88,255,0.16)] bg-[rgba(49,88,255,0.08)] p-3 text-[11px] font-black leading-[1.55] text-[var(--premium-ink-soft)]">
               {rebuildDialog.phase === "CONFIRM_SWITCH" ? (
-                <p>切换 Embedding 或 Multi Embedding 模型将触发向量重建流程，期间系统不可用。</p>
+                <p>切换 Embedding 模型会先重建向量索引。重建完成前继续使用当前模型；重建期间索引写入不可用。</p>
               ) : rebuildDialog.phase === "CONFIRM_REBUILD" ? (
                 <p>
                   {rebuildDialog.reason ??
-                    `索引配置将从当前模型${rebuildDialog.actualDim != null ? `（${rebuildDialog.actualDim} 维）` : ""}迁移到目标模型${rebuildDialog.expectedDim != null ? `（${rebuildDialog.expectedDim} 维）` : ""}，期间检索功能暂不可用。`}
+                    `索引配置将从当前模型${rebuildDialog.actualDim != null ? `（${rebuildDialog.actualDim} 维）` : ""}迁移到目标模型${rebuildDialog.expectedDim != null ? `（${rebuildDialog.expectedDim} 维）` : ""}。重建完成前继续使用当前模型；重建期间索引写入不可用。`}
                 </p>
               ) : (
                 <p>{rebuildDialog.error ?? "发生未知错误"}</p>
@@ -1015,7 +1036,7 @@ function ConfigPanel({
   restricted: boolean;
   restrictedMessage: string;
   onSaved: (savedConfig: CapabilityConfig) => void;
-  onActiveEmbeddingUpdated: () => void;
+  onActiveEmbeddingUpdated: (savedConfig: CapabilityConfig) => Promise<void>;
   onDeleted: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -1125,7 +1146,7 @@ function ConfigPanel({
       await queryClient.invalidateQueries({ queryKey: capabilityQueryKey(capability) });
       onSaved(savedConfig);
       if (shouldPrepareRebuild) {
-        onActiveEmbeddingUpdated();
+        await onActiveEmbeddingUpdated(savedConfig);
       }
     },
   });
