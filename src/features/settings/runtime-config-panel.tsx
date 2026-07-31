@@ -30,7 +30,7 @@ const TYPE_LABELS: Record<RuntimeConfigType, { label: string; description: strin
   SEARCH: { label: "搜索", description: "召回、向量路由与重排参数" },
   CONVERSATION: { label: "会话", description: "意图路由与传统回答兜底" },
   AGENT: { label: "Agent", description: "预算、超时和文档总结限制" },
-  INGESTION: { label: "摄取", description: "解析、Embedding 与 Docling 限制" },
+  INGESTION: { label: "导入", description: "解析、Embedding 与 Docling 限制" },
   OUTBOX: { label: "Outbox", description: "清理事件批量、重试和保留策略" },
 };
 
@@ -165,12 +165,12 @@ export function RuntimeConfigPanel({ canEdit }: { canEdit: boolean }) {
   const canSave = canEdit && !loading && !updateMutation.isPending;
 
   return (
-    <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(220px,260px)_minmax(0,1fr)]">
-      <aside className={`${PANEL_CLASS} grid content-start gap-1.5`} aria-label="运行参数分区">
+    <div className="grid min-w-0 gap-3 lg:h-full lg:grid-cols-[minmax(220px,260px)_minmax(0,1fr)] lg:items-stretch">
+      <aside className={`${PANEL_CLASS} grid content-start gap-1.5 lg:h-full lg:min-h-0 lg:overflow-y-auto`} aria-label="运行参数分区">
         <div className="mb-2">
           <h2 className="text-[20px] font-black leading-none text-[var(--premium-ink)]">运行参数</h2>
           <p className="mt-1.5 text-[11px] font-bold leading-normal text-[var(--premium-muted)]">
-            保存后覆盖当前值，不保留历史版本
+            保存后覆盖当前值
           </p>
         </div>
         {TYPE_ORDER.map((type) => {
@@ -196,8 +196,8 @@ export function RuntimeConfigPanel({ canEdit }: { canEdit: boolean }) {
         })}
       </aside>
 
-      <section className={`${PANEL_CLASS} min-w-0`} aria-label={`${TYPE_LABELS[selectedType].label}运行参数`}>
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--premium-line)] pb-3">
+      <section className={`${PANEL_CLASS} min-w-0 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden`} aria-label={`${TYPE_LABELS[selectedType].label}运行参数`}>
+        <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-[var(--premium-line)] pb-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#89c777]">
               {selectedType}
@@ -217,7 +217,7 @@ export function RuntimeConfigPanel({ canEdit }: { canEdit: boolean }) {
         </div>
 
         {loading ? (
-          <div className="grid min-h-48 place-items-center text-[var(--premium-muted)]">
+          <div className="grid min-h-48 place-items-center text-[var(--premium-muted)] lg:min-h-0 lg:flex-1">
             <Loader2 size={20} className="animate-spin" />
           </div>
         ) : configQuery.isError ? (
@@ -226,7 +226,7 @@ export function RuntimeConfigPanel({ canEdit }: { canEdit: boolean }) {
           </div>
         ) : (
           <>
-            <div className="mt-3 grid min-w-0 gap-3 xl:grid-cols-2">
+            <div className="mt-3 grid min-w-0 content-start gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-3 lg:overflow-y-auto lg:pr-1">
               {definitions.map((definition) => (
                 <label key={definition.key} className="settings-form-field min-w-0">
                   <span className="flex items-center justify-between gap-3">
@@ -272,7 +272,7 @@ export function RuntimeConfigPanel({ canEdit }: { canEdit: boolean }) {
                     </select>
                   ) : (
                     <input
-                      className={FIELD_CLASS}
+                      className={`${FIELD_CLASS} settings-number-field`}
                       type="number"
                       min="0"
                       step={definition.step ?? "1"}
@@ -294,7 +294,7 @@ export function RuntimeConfigPanel({ canEdit }: { canEdit: boolean }) {
               ))}
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-3 border-t border-[var(--premium-line)] pt-3">
+            <div className="mt-4 flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--premium-line)] pt-3">
               {updateMutation.isError ? (
                 <span className="mr-auto text-[11px] font-bold text-rose-600 dark:text-rose-300">
                   {updateMutation.error instanceof Error

@@ -3640,7 +3640,7 @@ export function AskPremiumPage() {
                   {positionedComposerMenu === "kb" && activeComposerMenuPosition ? (
                     <FloatingMenu key="kb" phase={composerMenu ? "open" : "closing"} position={activeComposerMenuPosition}>
                       <MenuHeader label="KNOWLEDGE BASES" value="MULTI" />
-                      <MenuOption selected={allKbsSelected} onClick={toggleAllKbs} checkbox title="全部知识库" detail="发送时覆盖当前可用知识库" />
+                      <MenuOption selected={allKbsSelected} onClick={toggleAllKbs} title="全部知识库" detail="发送时覆盖当前可用知识库" />
                       {kbsQuery.isLoading ? (
                         <div className="px-3 py-3 text-sm text-slate-500">加载知识库...</div>
                       ) : kbOptions.length ? (
@@ -3649,7 +3649,6 @@ export function AskPremiumPage() {
                             key={item.id}
                             selected={selectedKbIds.includes(item.id)}
                             onClick={() => toggleKb(item.id)}
-                            checkbox
                             icon={<Folder size={16} />}
                             title={item.name}
                             detail="知识库范围"
@@ -4579,14 +4578,12 @@ function MenuOption({
   onClick,
   title,
   detail,
-  checkbox = false,
   icon,
 }: {
   selected: boolean;
   onClick: () => void;
   title: string;
   detail: string;
-  checkbox?: boolean;
   icon?: React.ReactNode;
 }) {
   return (
@@ -4603,8 +4600,7 @@ function MenuOption({
     >
       <span
         className={[
-          "ask-premium-menu-option-indicator grid size-4 shrink-0 place-items-center border text-white",
-          checkbox ? "rounded-[5px]" : "rounded-full",
+          "ask-premium-menu-option-indicator grid size-4 shrink-0 place-items-center rounded-full border text-white",
           selected ? "border-blue-600 bg-blue-600" : "border-black/15 bg-white text-transparent",
         ].join(" ")}
         aria-hidden="true"

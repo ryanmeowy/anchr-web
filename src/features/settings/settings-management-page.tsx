@@ -49,12 +49,11 @@ type SettingsSection = "CAPABILITY" | "STORAGE" | "RUNTIME" | "SECURITY";
 const SETTINGS_SECTIONS: Array<{
   value: SettingsSection;
   label: string;
-  description: string;
 }> = [
-  { value: "CAPABILITY", label: "能力配置", description: "模型与索引" },
-  { value: "STORAGE", label: "存储设置", description: "对象存储" },
-  { value: "RUNTIME", label: "运行参数", description: "检索与任务" },
-  { value: "SECURITY", label: "安全设置", description: "访问令牌" },
+  { value: "CAPABILITY", label: "能力配置" },
+  { value: "STORAGE", label: "存储设置" },
+  { value: "RUNTIME", label: "运行参数" },
+  { value: "SECURITY", label: "安全设置" },
 ];
 
 type CapabilitySelection = {
@@ -614,7 +613,7 @@ export function SettingsManagementPage() {
         <div className="ask-premium-shell grid h-screen min-h-0 overflow-hidden border-0 bg-white/70 shadow-none backdrop-blur-2xl lg:grid-cols-[60px_minmax(0,1fr)]">
           <PremiumRail />
 
-          <div className="grid min-h-0 min-w-0 grid-rows-[auto_auto_1fr]">
+          <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
             <header className="ask-premium-hero relative grid h-[112px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden border-b border-black/10 px-4 py-3 sm:px-5 lg:px-5">
               <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
                 SETTINGS
@@ -632,35 +631,36 @@ export function SettingsManagementPage() {
               <PremiumHeaderUtilities theme={theme} />
             </header>
 
-            <nav
-              className="relative z-20 flex min-w-0 gap-1 overflow-x-auto border-b border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-5 py-2 backdrop-blur-xl"
-              aria-label="设置分类"
-            >
-              {SETTINGS_SECTIONS.map((section) => {
-                const active = section.value === activeSection;
-                return (
-                  <button
-                    key={section.value}
-                    type="button"
-                    onClick={() => setActiveSection(section.value)}
-                    aria-current={active ? "page" : undefined}
-                    className={[
-                      "min-w-fit rounded-[8px] border px-3 py-2 text-left transition",
-                      active
-                        ? "border-[var(--premium-focus-line)] bg-[rgba(137,199,119,0.14)] text-[var(--premium-ink)]"
-                        : "border-transparent text-[var(--premium-muted)] hover:border-[var(--premium-line)] hover:bg-[var(--premium-panel-muted)] hover:text-[var(--premium-ink)]",
-                    ].join(" ")}
-                  >
-                    <strong className="block text-[11px] font-black">{section.label}</strong>
-                    <span className="mt-0.5 block text-[9px] font-bold">{section.description}</span>
-                  </button>
-                );
-              })}
-            </nav>
+            <main className="ask-premium-main settings-no-ambient-glow flex min-h-0 min-w-0 flex-col overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] p-3">
+              <nav
+                className="settings-section-nav mb-3 flex w-fit max-w-full min-w-0 shrink-0 gap-1 overflow-x-auto rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-muted)] p-1 shadow-[var(--premium-tight-shadow)]"
+                aria-label="设置分类"
+              >
+                {SETTINGS_SECTIONS.map((section) => {
+                  const active = section.value === activeSection;
+                  return (
+                    <button
+                      key={section.value}
+                      type="button"
+                      onClick={() => setActiveSection(section.value)}
+                      aria-current={active ? "page" : undefined}
+                      className={[
+                        "min-w-fit rounded-full border px-3 py-1.5 text-left transition",
+                        active
+                          ? "border-[var(--premium-focus-line)] bg-[rgba(137,199,119,0.14)] text-[var(--premium-ink)]"
+                          : "border-transparent text-[var(--premium-muted)] hover:border-[var(--premium-line)] hover:bg-[var(--premium-panel-strong)] hover:text-[var(--premium-ink)]",
+                      ].join(" ")}
+                    >
+                      <strong className="block text-[11px] font-black">{section.label}</strong>
+                    </button>
+                  );
+                })}
+              </nav>
 
-            <main className="ask-premium-main settings-no-ambient-glow min-h-0 min-w-0 overflow-auto bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] p-3">
-              {activeSection === "CAPABILITY" ? (
-              <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)]">
+              <div className="settings-section-content min-h-0 flex-1">
+                <div key={activeSection} className="settings-subpage-enter h-full min-h-0">
+                  {activeSection === "CAPABILITY" ? (
+                  <div className="grid min-w-0 gap-3 pb-3 lg:grid-cols-[minmax(260px,300px)_minmax(0,1fr)]">
                 <CapabilitySelector
                   selectedType={selectedType}
                   configsByCapability={configsByCapability}
@@ -741,25 +741,27 @@ export function SettingsManagementPage() {
                   </div>
 
                 </section>
+                  </div>
+                  ) : activeSection === "STORAGE" ? (
+                    <div className="w-full lg:w-[33%]">
+                      <StoragePanel
+                        restricted={!hasOwnerAccess}
+                        restrictedMessage={
+                          configuredAccessToken == null
+                            ? "正在检查访问权限"
+                            : "当前角色只能查看存储配置"
+                        }
+                      />
+                    </div>
+                  ) : activeSection === "RUNTIME" ? (
+                    <RuntimeConfigPanel canEdit={hasOwnerAccess} />
+                  ) : (
+                    <div className="w-full lg:w-[33%]">
+                      <SecurityPanel />
+                    </div>
+                  )}
+                </div>
               </div>
-              ) : activeSection === "STORAGE" ? (
-                <div className="w-full lg:w-1/2">
-                  <StoragePanel
-                    restricted={!hasOwnerAccess}
-                    restrictedMessage={
-                      configuredAccessToken == null
-                        ? "正在检查访问权限"
-                        : "当前角色只能查看存储配置"
-                    }
-                  />
-                </div>
-              ) : activeSection === "RUNTIME" ? (
-                <RuntimeConfigPanel canEdit={hasOwnerAccess} />
-              ) : (
-                <div className="w-full lg:w-1/2">
-                  <SecurityPanel />
-                </div>
-              )}
             </main>
           </div>
         </div>

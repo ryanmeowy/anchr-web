@@ -537,6 +537,17 @@ a {
     background 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
+.settings-premium-page .settings-number-field {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.settings-premium-page .settings-number-field::-webkit-inner-spin-button,
+.settings-premium-page .settings-number-field::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
 .settings-premium-page .settings-select {
   appearance: none;
   padding-right: 32px;
@@ -866,6 +877,18 @@ a {
   animation: premiumSecondaryPageContentFadeIn 680ms 160ms ease-out both;
 }
 
+.settings-premium-page .settings-section-nav {
+  animation: settingsSectionNavIn 520ms 240ms cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.settings-premium-page .settings-section-content {
+  animation: settingsSectionContentIn 600ms 300ms cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.settings-premium-page .settings-subpage-enter {
+  animation: settingsSubpageIn 360ms cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
 .search-premium-page .search-premium-side-column,
 .imports-premium-page:not(.library-premium-page) .imports-premium-side-column {
   animation: premiumSecondaryPageRightIn 760ms 220ms cubic-bezier(0.19, 1, 0.22, 1) both;
@@ -985,6 +1008,42 @@ a {
   }
 }
 
+@keyframes settingsSectionNavIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes settingsSectionContentIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes settingsSubpageIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ask-premium-entry-page .premium-rail,
   .ask-premium-entry-page .ask-premium-history,
@@ -1006,6 +1065,9 @@ a {
   .search-premium-page .search-premium-content,
   .imports-premium-page:not(.library-premium-page) .ask-premium-main,
   .settings-premium-page .ask-premium-main,
+  .settings-premium-page .settings-section-nav,
+  .settings-premium-page .settings-section-content,
+  .settings-premium-page .settings-subpage-enter,
   .preview-premium-page .preview-premium-main,
   .search-premium-page .search-premium-side-column,
   .imports-premium-page:not(.library-premium-page) .imports-premium-side-column {
