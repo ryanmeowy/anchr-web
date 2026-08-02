@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Check,
@@ -154,6 +154,26 @@ export function ImportsPremiumPage({
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+  });
+
+  const recentTaskSummaries = ingestionTasksQuery.data?.items ?? [];
+  const inProgressRecentTasks = recentTaskSummaries.filter((task) => isInProgressTaskStatus(task.status));
+  const inProgressRecentTaskQueries = useQueries({
+    queries: inProgressRecentTasks.map((task) => ({
+      queryKey: ["ingestion-task", selectedKbId, task.taskId],
+      queryFn: () => apiClient.getIngestionTask(selectedKbId, task.taskId),
+      enabled: Boolean(selectedKbId),
+      refetchInterval: (query: { state: { data?: IngestionTask } }) => (
+        query.state.data && isFinishedTaskStatus(query.state.data.status) ? false : 2000
+      ),
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    })),
+  });
+  const recentTaskDetails = new Map<string, IngestionTask>();
+  inProgressRecentTasks.forEach((task, index) => {
+    const detail = inProgressRecentTaskQueries[index]?.data;
+    if (detail) recentTaskDetails.set(task.taskId, detail);
   });
 
   const activeTaskId = currentTaskId;
@@ -618,14 +638,15 @@ export function ImportsPremiumPage({
                   <InlineLoading label="正在加载导入任务" />
                 ) : ingestionTasksQuery.isError ? (
                   <InlineError message={(ingestionTasksQuery.error as Error).message} />
-                ) : (ingestionTasksQuery.data?.items ?? []).length === 0 ? (
+                ) : recentTaskSummaries.length === 0 ? (
                   <EmptyPanel label="暂无导入记录" />
                 ) : (
                   <div className="grid gap-2">
-                    {(ingestionTasksQuery.data?.items ?? []).map((task) => (
+                    {recentTaskSummaries.map((task) => (
                       <RecentTaskRow
                         key={task.taskId}
                         task={task}
+                        detail={recentTaskDetails.get(task.taskId)}
                         active={task.taskId === activeTaskId}
                         kbName={selectedKbLabel}
                         onSelect={() => setCurrentTaskId(task.taskId)}
@@ -753,16 +774,18 @@ function TaskItemCard({
 
 function RecentTaskRow({
   task,
+  detail,
   active,
   kbName,
   onSelect,
 }: {
   task: IngestionTaskSummary;
+  detail?: IngestionTask;
   active: boolean;
   kbName: string;
   onSelect: () => void;
 }) {
-  const progress = task.totalCount > 0 ? Math.round(((task.successCount + task.failureCount) / task.totalCount) * 100) : 0;
+  const progress = taskProgressPercent(task, detail);
 
   return (
     <button
@@ -785,6 +808,22 @@ function RecentTaskRow({
       <StatusBadge status={task.status} progress={progress} />
     </button>
   );
+}
+
+function taskProgressPercent(task: IngestionTaskSummary, detail?: IngestionTask) {
+  if (detail?.items?.length) {
+    const completedItemStatuses = new Set(["SUCCESS", "COMPLETED", "FAILED", "SKIPPED"]);
+    const progressTotal = detail.items.reduce((total, item) => (
+      total + (completedItemStatuses.has(item.status)
+        ? 100
+        : Math.max(0, Math.min(100, item.progress ?? 0)))
+    ), 0);
+    return Math.round(progressTotal / Math.max(task.totalCount, detail.items.length, 1));
+  }
+
+  return task.totalCount > 0
+    ? Math.round(((task.successCount + task.failureCount) / task.totalCount) * 100)
+    : 0;
 }
 
 function KnowledgeBasePicker({
@@ -1140,8 +1179,9 @@ function ImportsSidePanelHeader({ label, icon, iconColor, value }: { label: stri
 }
 
 function StatusBadge({ status, progress }: { status: string; progress?: number }) {
+  const inProgress = isInProgressTaskStatus(status);
   const text =
-    status === "RUNNING"
+    inProgress
       ? `${stageStatusText(status)} ${Math.max(0, Math.min(100, progress ?? 0))}%`
       : status === "SKIPPED"
         ? "已跳过"
@@ -1155,7 +1195,7 @@ function StatusBadge({ status, progress }: { status: string; progress?: number }
           ? "border-transparent bg-[rgba(255,117,95,0.16)] text-[#ffb4a8]"
           : status === "PARTIAL_SUCCESS"
             ? "border-rose-400/30 bg-rose-500/15 text-rose-700 dark:border-[#a96660] dark:bg-[#56302d] dark:text-[#ffc4be]"
-            : status === "RUNNING"
+            : inProgress
               ? "border-blue-400/30 bg-blue-500/10 text-blue-800 dark:border-[#6b7ec0] dark:bg-[#2b3560] dark:text-[#d1dcff]"
               : "border-black/10 bg-black/5 text-[var(--premium-muted)] dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-muted)]";
 
@@ -1368,7 +1408,11 @@ function stageText(stage: string) {
 }
 
 function stageStatusText(status: string) {
-  return status === "RUNNING" ? "处理中" : statusText(status);
+  return status === "RUNNING" || status === "PROCESSING" ? "处理中" : statusText(status);
+}
+
+function isInProgressTaskStatus(status: string) {
+  return status === "PENDING" || status === "RUNNING" || status === "PROCESSING";
 }
 
 const APP_FONT_STACK =

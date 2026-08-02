@@ -3402,7 +3402,7 @@ export function AskPremiumPage() {
                   ))}
                 </div>
               ) : (
-                <div className="p-4 text-sm text-[var(--premium-muted)]">暂无历史会话。</div>
+                <div className="p-4 text-sm text-[var(--premium-muted)]">暂无历史会话</div>
               )}
               {isLoadingMoreConversations ? (
                 <div className="flex justify-center py-3" aria-label="加载更多会话">
