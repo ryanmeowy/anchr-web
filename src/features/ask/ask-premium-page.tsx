@@ -3480,8 +3480,9 @@ export function AskPremiumPage() {
                     className="ask-premium-message-scroll h-full min-h-0 overflow-auto pr-1"
                   >
                     <div
+                      key={activeSessionId || "empty-conversation"}
                       ref={messageContentRef}
-                      className="relative grid min-h-full grid-cols-[minmax(0,1fr)] content-start gap-4 pt-4"
+                      className="ask-premium-message-enter relative grid min-h-full grid-cols-[minmax(0,1fr)] content-start gap-4 pt-4"
                     >
                       {messageError ? (
                         <ErrorBlock message={messageError} />
@@ -3707,6 +3708,7 @@ export function AskPremiumPage() {
           </main>
 
           <TracePanel
+            sessionId={activeSessionId}
             answerMode={selectedAnswerMode}
             selectedKbLabel={selectedKbLabel}
             modelLabel={activeGenerationConfig?.modelName || activeGenerationConfig?.baseUrl || "未配置模型"}
@@ -3907,6 +3909,7 @@ function MessageEdgeScrollbar({
 }
 
 function TracePanel({
+  sessionId,
   answerMode,
   selectedKbLabel,
   modelLabel,
@@ -3917,6 +3920,7 @@ function TracePanel({
   activityError,
   collapsed,
 }: {
+  sessionId: string;
   answerMode: ConversationAnswerMode;
   selectedKbLabel: string;
   modelLabel: string;
@@ -3958,6 +3962,7 @@ function TracePanel({
           <TraceCard label="KNOWLEDGE BASES" title={selectedKbLabel} detail="当前问答范围" />
         </div>
         <AgentActivityCard
+          key={sessionId || "empty-conversation"}
           latestAssistantMessage={latestAssistantMessage}
           liveActivity={liveActivity}
           serverActivity={serverActivity}
