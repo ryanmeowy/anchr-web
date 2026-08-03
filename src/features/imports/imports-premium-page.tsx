@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Check,
@@ -27,6 +27,7 @@ import {
   type TrackedImportTask,
 } from "@/components/app/background-task-provider";
 import {
+  isTerminalIngestionTaskStatus,
   selectRecoverableImportCreate,
   type PendingImportTaskSnapshot,
 } from "@/components/app/background-import-state";
@@ -60,7 +61,6 @@ const MAX_TASK_LIST_SIZE = 100;
 const RECENT_IMPORT_REFRESH_INTERVAL_MS = 10_000;
 const IMPORT_OWNER_LEASE_MS = 15_000;
 const IMPORT_OWNER_HEARTBEAT_MS = 5_000;
-const MAX_IMAGE_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
 
 const FLOW_STEPS = [
   { key: "UPLOAD", label: "上传", helper: "文件接收与入队" },
@@ -82,6 +82,7 @@ export function ImportsPremiumPage({
   const router = useRouter();
   const {
     tasks: backgroundTasks,
+    acknowledgeViewedImportTasks,
     registerImportTask,
     registerPendingImportTask,
     prepareImportCreate,
@@ -156,13 +157,33 @@ export function ImportsPremiumPage({
     refetchOnReconnect: false,
   });
 
+  const recentTaskSummaries = ingestionTasksQuery.data?.items ?? [];
+  const inProgressRecentTasks = recentTaskSummaries.filter((task) => isInProgressTaskStatus(task.status));
+  const inProgressRecentTaskQueries = useQueries({
+    queries: inProgressRecentTasks.map((task) => ({
+      queryKey: ["ingestion-task", selectedKbId, task.taskId],
+      queryFn: () => apiClient.getIngestionTask(selectedKbId, task.taskId),
+      enabled: Boolean(selectedKbId),
+      refetchInterval: (query: { state: { data?: IngestionTask } }) => (
+        query.state.data && isTerminalIngestionTaskStatus(query.state.data.status) ? false : 2000
+      ),
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    })),
+  });
+  const recentTaskDetails = new Map<string, IngestionTask>();
+  inProgressRecentTasks.forEach((task, index) => {
+    const detail = inProgressRecentTaskQueries[index]?.data;
+    if (detail) recentTaskDetails.set(task.taskId, detail);
+  });
+
   const activeTaskId = currentTaskId;
 
   const currentTaskQuery = useQuery({
     queryKey: ["ingestion-task", selectedKbId, activeTaskId],
     queryFn: () => apiClient.getIngestionTask(selectedKbId, activeTaskId),
     enabled: Boolean(selectedKbId && activeTaskId),
-    refetchInterval: (query) => (query.state.data && !isFinishedTaskStatus(query.state.data.status) ? 2000 : false),
+    refetchInterval: (query) => (query.state.data && !isTerminalIngestionTaskStatus(query.state.data.status) ? 2000 : false),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -170,6 +191,33 @@ export function ImportsPremiumPage({
 
   const currentTask = activeTaskId ? currentTaskQuery.data : undefined;
   const selectedFilesSize = files.reduce((total, file) => total + file.size, 0);
+
+  useEffect(() => {
+    const viewedTerminalTasks = new Map<string, IngestionTaskSummary>();
+    if (ingestionTasksQuery.isSuccess) {
+      ingestionTasksQuery.data.items.forEach((task) => {
+        if (task.kbId === selectedKbId && isTerminalIngestionTaskStatus(task.status)) {
+          viewedTerminalTasks.set(task.taskId, task);
+        }
+      });
+    }
+    if (currentTaskQuery.isSuccess
+      && currentTask
+      && currentTask.kbId === selectedKbId
+      && isTerminalIngestionTaskStatus(currentTask.status)) {
+      viewedTerminalTasks.set(currentTask.taskId, currentTask);
+    }
+    if (viewedTerminalTasks.size > 0) {
+      acknowledgeViewedImportTasks(Array.from(viewedTerminalTasks.values()));
+    }
+  }, [
+    acknowledgeViewedImportTasks,
+    currentTask,
+    currentTaskQuery.isSuccess,
+    ingestionTasksQuery.data,
+    ingestionTasksQuery.isSuccess,
+    selectedKbId,
+  ]);
 
   const uploadMutation = useMutation({
     mutationFn: async ({
@@ -182,6 +230,7 @@ export function ImportsPremiumPage({
       validateUploadInput(
         uploadFiles,
         capabilitiesQuery.data?.maxFileSizeBytes,
+        capabilitiesQuery.data?.maxImageFileSizeBytes,
         capabilitiesQuery.data?.maxFilesPerBatch,
         supportedFormats,
       );
@@ -379,6 +428,7 @@ export function ImportsPremiumPage({
       validateUploadInput(
         nextFiles,
         capabilities?.maxFileSizeBytes,
+        capabilities?.maxImageFileSizeBytes,
         capabilities?.maxFilesPerBatch,
         supportedFormats,
       );
@@ -481,7 +531,7 @@ export function ImportsPremiumPage({
                 </h2>
                 <p className="mx-auto mt-2 max-w-[520px] text-xs leading-[1.45] text-[var(--premium-ink-soft)]">
                   {supportedFormatSummary}
-                  {capabilities ? ` 图片原文件最大 ${formatFileSize(MAX_IMAGE_UPLOAD_SIZE_BYTES)}，其他文件最大 ${formatFileSize(capabilities.maxFileSizeBytes)}，单次最多 ${capabilities.maxFilesPerBatch} 个文件。` : ""}
+                  {capabilities ? ` 图片原文件最大 ${formatFileSize(capabilities.maxImageFileSizeBytes ?? capabilities.maxFileSizeBytes)}，其他文件最大 ${formatFileSize(capabilities.maxFileSizeBytes)}，单次最多 ${capabilities.maxFilesPerBatch} 个文件。` : ""}
                 </p>
                 <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
                   <button
@@ -618,14 +668,15 @@ export function ImportsPremiumPage({
                   <InlineLoading label="正在加载导入任务" />
                 ) : ingestionTasksQuery.isError ? (
                   <InlineError message={(ingestionTasksQuery.error as Error).message} />
-                ) : (ingestionTasksQuery.data?.items ?? []).length === 0 ? (
+                ) : recentTaskSummaries.length === 0 ? (
                   <EmptyPanel label="暂无导入记录" />
                 ) : (
                   <div className="grid gap-2">
-                    {(ingestionTasksQuery.data?.items ?? []).map((task) => (
+                    {recentTaskSummaries.map((task) => (
                       <RecentTaskRow
                         key={task.taskId}
                         task={task}
+                        detail={recentTaskDetails.get(task.taskId)}
                         active={task.taskId === activeTaskId}
                         kbName={selectedKbLabel}
                         onSelect={() => setCurrentTaskId(task.taskId)}
@@ -753,16 +804,18 @@ function TaskItemCard({
 
 function RecentTaskRow({
   task,
+  detail,
   active,
   kbName,
   onSelect,
 }: {
   task: IngestionTaskSummary;
+  detail?: IngestionTask;
   active: boolean;
   kbName: string;
   onSelect: () => void;
 }) {
-  const progress = task.totalCount > 0 ? Math.round(((task.successCount + task.failureCount) / task.totalCount) * 100) : 0;
+  const progress = taskProgressPercent(task, detail);
 
   return (
     <button
@@ -785,6 +838,22 @@ function RecentTaskRow({
       <StatusBadge status={task.status} progress={progress} />
     </button>
   );
+}
+
+function taskProgressPercent(task: IngestionTaskSummary, detail?: IngestionTask) {
+  if (detail?.items?.length) {
+    const completedItemStatuses = new Set(["SUCCESS", "COMPLETED", "FAILED", "SKIPPED"]);
+    const progressTotal = detail.items.reduce((total, item) => (
+      total + (completedItemStatuses.has(item.status)
+        ? 100
+        : Math.max(0, Math.min(100, item.progress ?? 0)))
+    ), 0);
+    return Math.round(progressTotal / Math.max(task.totalCount, detail.items.length, 1));
+  }
+
+  return task.totalCount > 0
+    ? Math.round(((task.successCount + task.failureCount) / task.totalCount) * 100)
+    : 0;
 }
 
 function KnowledgeBasePicker({
@@ -1140,8 +1209,9 @@ function ImportsSidePanelHeader({ label, icon, iconColor, value }: { label: stri
 }
 
 function StatusBadge({ status, progress }: { status: string; progress?: number }) {
+  const inProgress = isInProgressTaskStatus(status);
   const text =
-    status === "RUNNING"
+    inProgress
       ? `${stageStatusText(status)} ${Math.max(0, Math.min(100, progress ?? 0))}%`
       : status === "SKIPPED"
         ? "已跳过"
@@ -1155,7 +1225,7 @@ function StatusBadge({ status, progress }: { status: string; progress?: number }
           ? "border-transparent bg-[rgba(255,117,95,0.16)] text-[#ffb4a8]"
           : status === "PARTIAL_SUCCESS"
             ? "border-rose-400/30 bg-rose-500/15 text-rose-700 dark:border-[#a96660] dark:bg-[#56302d] dark:text-[#ffc4be]"
-            : status === "RUNNING"
+            : inProgress
               ? "border-blue-400/30 bg-blue-500/10 text-blue-800 dark:border-[#6b7ec0] dark:bg-[#2b3560] dark:text-[#d1dcff]"
               : "border-black/10 bg-black/5 text-[var(--premium-muted)] dark:border-[var(--premium-line)] dark:bg-[var(--premium-panel-muted)]";
 
@@ -1229,6 +1299,7 @@ async function invalidateIngestionQueries(queryClient: ReturnType<typeof useQuer
 function validateUploadInput(
   files: File[],
   maxFileSizeBytes?: number,
+  maxImageFileSizeBytes?: number,
   maxFilesPerBatch?: number,
   supportedFormats: SupportedFormat[] = [],
 ) {
@@ -1238,15 +1309,20 @@ function validateUploadInput(
   if (maxFilesPerBatch && files.length > maxFilesPerBatch) {
     throw new Error(`单批最多上传 ${maxFilesPerBatch} 个文件。`);
   }
+  const imageFileSizeLimit = maxImageFileSizeBytes ?? maxFileSizeBytes;
   const oversizeImage = files.find((file) =>
     inferFileType(file.name, file.type, supportedFormats) === "IMAGE"
-      && file.size > MAX_IMAGE_UPLOAD_SIZE_BYTES,
+      && imageFileSizeLimit !== undefined
+      && file.size > imageFileSizeLimit,
   );
-  if (oversizeImage) {
-    throw new Error(`${oversizeImage.name} 超过图片原文件大小上限 ${formatFileSize(MAX_IMAGE_UPLOAD_SIZE_BYTES)}。`);
+  if (oversizeImage && imageFileSizeLimit !== undefined) {
+    throw new Error(`${oversizeImage.name} 超过图片原文件大小上限 ${formatFileSize(imageFileSizeLimit)}。`);
   }
   const oversize = maxFileSizeBytes
-    ? files.find((file) => file.size > maxFileSizeBytes)
+    ? files.find((file) =>
+      inferFileType(file.name, file.type, supportedFormats) !== "IMAGE"
+        && file.size > maxFileSizeBytes,
+    )
     : undefined;
   if (oversize) {
     throw new Error(`${oversize.name} 超过单文件大小上限 ${formatFileSize(maxFileSizeBytes)}。`);
@@ -1282,10 +1358,6 @@ function mapStageToFlowStep(stage: string, status: string) {
 
 function flowStepOrder(step: string) {
   return FLOW_STEPS.findIndex((item) => item.key === step);
-}
-
-function isFinishedTaskStatus(status: string) {
-  return status === "SUCCESS" || status === "COMPLETED" || status === "FAILED" || status === "PARTIAL_SUCCESS" || status === "SKIPPED";
 }
 
 function makeImportRequestIdentity() {
@@ -1368,7 +1440,11 @@ function stageText(stage: string) {
 }
 
 function stageStatusText(status: string) {
-  return status === "RUNNING" ? "处理中" : statusText(status);
+  return status === "RUNNING" || status === "PROCESSING" ? "处理中" : statusText(status);
+}
+
+function isInProgressTaskStatus(status: string) {
+  return status === "PENDING" || status === "RUNNING" || status === "PROCESSING";
 }
 
 const APP_FONT_STACK =

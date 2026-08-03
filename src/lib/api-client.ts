@@ -80,19 +80,27 @@ type RequestOptions = {
   cache?: RequestCache;
 };
 
+export type AnswerStreamEvent = {
+  answerId?: string;
+  revision?: number;
+  sequence?: number;
+  text: string;
+};
+
 type StreamMessageCallbacks = {
   onTrace?: (event: { stage?: string; message?: string; runId?: string; turnId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown> }) => void;
-  onDelta?: (text: string) => void;
-  onAnswerReset?: (text: string) => void;
+  onDelta?: (event: AnswerStreamEvent) => void;
+  onAnswerReset?: (event: AnswerStreamEvent) => void;
   onCitations?: (citations: ConversationCitation[]) => void;
   onDone?: (event: { turnId?: string; kbScope?: string[]; assetScope?: string[]; title?: string | null; sessionUpdatedAt?: number; answerMode?: ConversationAnswerMode | string; answerStatus?: ConversationAnswerStatus; fallbackReason?: string | null; citationCount?: number; intentType?: ConversationIntentType; retrievalExecuted?: boolean; executionMode?: ConversationExecutionMode; runId?: string; agentTask?: AgentTask }) => void;
 };
 
 type AgentTaskStreamCallbacks = {
   onTask?: (task: AgentTask) => void;
-  onDelta?: (text: string) => void;
-  onAnswerReset?: (text: string) => void;
-  onDone?: () => void;
+  onDelta?: (event: AnswerStreamEvent) => void;
+  onAnswerReset?: (event: AnswerStreamEvent) => void;
+  onCitations?: (citations: ConversationCitation[]) => void;
+  onDone?: (event: { answerId?: string; revision?: number }) => void;
 };
 
 type ConversationMessageRequest = {
@@ -131,6 +139,12 @@ export class ApiError extends Error {
 
 export function isUploadCleanupAllowed(error: unknown) {
   return error instanceof ApiError && error.uploadCleanupAllowed === true;
+}
+
+export function isTerminalIngestionPollError(error: unknown) {
+  if (!(error instanceof ApiError) || error.status !== 404) return false;
+  const code = error.code?.toUpperCase();
+  return code === "KNOWLEDGE_BASE_NOT_FOUND" || code === "INGESTION_TASK_NOT_FOUND";
 }
 
 export function isAccessDeniedError(error: unknown) {
@@ -345,14 +359,14 @@ function dispatchSseEvent(eventName: string, data: string, callbacks: StreamMess
   }
 
   if (eventName === "delta") {
-    const event = parseSseJson<{ text?: string }>(data);
-    callbacks.onDelta?.(event?.text ?? "");
+    const event = parseSseJson<AnswerStreamEvent>(data);
+    callbacks.onDelta?.({ ...(event ?? {}), text: event?.text ?? "" });
     return;
   }
 
   if (eventName === "answer_reset") {
-    const event = parseSseJson<{ text?: string }>(data);
-    callbacks.onAnswerReset?.(event?.text ?? "");
+    const event = parseSseJson<AnswerStreamEvent>(data);
+    callbacks.onAnswerReset?.({ ...(event ?? {}), text: event?.text ?? "" });
     return;
   }
 
@@ -385,11 +399,13 @@ function consumeSseChunk(
 ) {
   const { eventName, data } = parseSseChunk(chunk);
   if (eventName === "delta") {
-    callbacks.onDelta?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+    const event = parseSseJson<AnswerStreamEvent>(data);
+    callbacks.onDelta?.({ ...(event ?? {}), text: event?.text ?? "" });
     return eventName;
   }
   if (eventName === "answer_reset") {
-    callbacks.onAnswerReset?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+    const event = parseSseJson<AnswerStreamEvent>(data);
+    callbacks.onAnswerReset?.({ ...(event ?? {}), text: event?.text ?? "" });
     return eventName;
   }
   dispatchSseEvent(eventName, data, callbacks);
@@ -428,12 +444,20 @@ function consumeAgentTaskSseChunk(
     }
   }
   if (eventName === "delta") {
-    callbacks.onDelta?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+    const event = parseSseJson<AnswerStreamEvent>(data);
+    callbacks.onDelta?.({ ...(event ?? {}), text: event?.text ?? "" });
   }
   if (eventName === "answer_reset") {
-    callbacks.onAnswerReset?.(parseSseJson<{ text?: string }>(data)?.text ?? "");
+    const event = parseSseJson<AnswerStreamEvent>(data);
+    callbacks.onAnswerReset?.({ ...(event ?? {}), text: event?.text ?? "" });
   }
-  if (eventName === "done") callbacks.onDone?.();
+  if (eventName === "citations") {
+    const event = parseSseJson<{ citations?: ConversationCitation[] }>(data);
+    callbacks.onCitations?.(event?.citations ?? []);
+  }
+  if (eventName === "done") callbacks.onDone?.(
+    parseSseJson<{ answerId?: string; revision?: number }>(data) ?? {},
+  );
   return eventName;
 }
 

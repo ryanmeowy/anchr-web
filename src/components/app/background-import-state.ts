@@ -1,4 +1,6 @@
-import type { IngestionCreateRequest } from "../../lib/types";
+import type { IngestionCreateRequest, IngestionTaskSummary } from "../../lib/types";
+
+type ImportTaskStatus = "running" | "success" | "error" | "cancelled";
 
 type RetainedBackgroundTask = {
   id: string;
@@ -67,6 +69,90 @@ type MergeableBackgroundTask = {
   navigationPending?: boolean;
   updatedAt: number;
 };
+
+type AcknowledgeableImportTask = {
+  id: string;
+  kind: "import";
+  kbId: string;
+  taskId?: string;
+  status: ImportTaskStatus;
+  totalCount: number;
+  successCount: number;
+  failureCount: number;
+  runningCount: number;
+  progress: number;
+  navigationPending?: boolean;
+  failureMessage?: string;
+  dismissed?: boolean;
+  startedAt: number;
+  updatedAt: number;
+  finishedAt?: number;
+};
+
+export function isTerminalIngestionTaskStatus(status: string) {
+  return status === "SUCCESS"
+    || status === "COMPLETED"
+    || status === "FAILED"
+    || status === "PARTIAL_SUCCESS"
+    || status === "SKIPPED"
+    || status === "CANCELLED";
+}
+
+export function normalizeIngestionTaskStatus(status: string): ImportTaskStatus {
+  if (["SUCCESS", "COMPLETED", "PARTIAL_SUCCESS", "SKIPPED"].includes(status)) return "success";
+  if (status === "CANCELLED") return "cancelled";
+  if (status === "FAILED") return "error";
+  return "running";
+}
+
+export function acknowledgeViewedImportTaskSnapshots<T extends AcknowledgeableImportTask>(
+  tasks: T[],
+  snapshots: readonly IngestionTaskSummary[],
+  acknowledgedAt = Date.now(),
+): T[] {
+  const terminalByTask = new Map(snapshots
+    .filter((snapshot) => isTerminalIngestionTaskStatus(snapshot.status))
+    .map((snapshot) => [importTaskKey(snapshot.kbId, snapshot.taskId), snapshot]));
+  if (terminalByTask.size === 0) return tasks;
+
+  let changed = false;
+  const next = tasks.map((task) => {
+    if (!task.taskId) return task;
+    const snapshot = terminalByTask.get(importTaskKey(task.kbId, task.taskId));
+    if (!snapshot) return task;
+
+    const status = normalizeIngestionTaskStatus(snapshot.status);
+    const failureMessage = snapshot.failureReason ?? task.failureMessage;
+    const needsUpdate = task.status !== status
+      || task.totalCount !== snapshot.totalCount
+      || task.successCount !== snapshot.successCount
+      || task.failureCount !== snapshot.failureCount
+      || task.runningCount !== snapshot.runningCount
+      || task.progress !== 100
+      || task.navigationPending === true
+      || task.dismissed !== true
+      || task.failureMessage !== failureMessage
+      || task.finishedAt === undefined;
+    if (!needsUpdate) return task;
+
+    changed = true;
+    return {
+      ...task,
+      status,
+      totalCount: snapshot.totalCount,
+      successCount: snapshot.successCount,
+      failureCount: snapshot.failureCount,
+      runningCount: snapshot.runningCount,
+      progress: 100,
+      navigationPending: false,
+      failureMessage,
+      dismissed: true,
+      finishedAt: task.finishedAt ?? acknowledgedAt,
+      updatedAt: acknowledgedAt,
+    };
+  });
+  return changed ? next : tasks;
+}
 
 export function retainStoredBackgroundTasks<T extends RetainedBackgroundTask>(
   tasks: T[],
@@ -234,6 +320,10 @@ export function mergeStoredTaskSnapshots<T extends MergeableBackgroundTask>(
 
 function ownerLeaseExpired(ownerLeaseExpiresAt: number | undefined, now: number) {
   return (ownerLeaseExpiresAt ?? 0) <= now;
+}
+
+function importTaskKey(kbId: string, taskId: string) {
+  return JSON.stringify([kbId, taskId]);
 }
 
 function compareRetainedTask(left: RetainedBackgroundTask, right: RetainedBackgroundTask) {

@@ -19,7 +19,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, isTerminalIngestionPollError } from "@/lib/api-client";
 import {
   normalizePersistedIngestionCreateRequest,
   recoverIngestionCreate,
@@ -31,6 +31,7 @@ import type {
   AgentRunSummary,
   IngestionCreateRequest,
   IngestionTask,
+  IngestionTaskSummary,
   UploadIngestionItem,
 } from "@/lib/types";
 import {
@@ -38,7 +39,9 @@ import {
   shouldDiscoverRecoverableAgentRuns,
 } from "./background-task-recovery";
 import {
+  acknowledgeViewedImportTaskSnapshots,
   mergeStoredTaskSnapshots,
+  normalizeIngestionTaskStatus,
   preparedImportCreateTask,
   rejectedImportCreateTask,
   restoredImportStage,
@@ -116,6 +119,7 @@ type BackgroundTaskContextValue = {
   rejectImportCreate: (task: PendingImportTaskSnapshot, failureMessage: string) => boolean;
   updateImportTask: (id: string, patch: ImportTaskPatch) => void;
   resolveImportTask: (id: string, task: IngestionTask) => void;
+  acknowledgeViewedImportTasks: (tasks: readonly IngestionTaskSummary[]) => void;
   dismissTask: (id: string) => void;
 };
 
@@ -304,6 +308,22 @@ export function BackgroundTaskProvider({
     );
     setTasks(applyResolved);
     persistTaskUpdate(storageKey, applyResolved);
+  }, [storageKey]);
+
+  const acknowledgeViewedImportTasks = useCallback<BackgroundTaskContextValue["acknowledgeViewedImportTasks"]>((snapshots) => {
+    if (snapshots.length === 0) return;
+    const acknowledgedAt = Date.now();
+    const applyAcknowledgement = (previous: TrackedBackgroundTask[]) => {
+      const importTasks = previous.filter((task): task is TrackedImportTask => task.kind === "import");
+      const acknowledged = acknowledgeViewedImportTaskSnapshots(importTasks, snapshots, acknowledgedAt);
+      if (acknowledged.every((task, index) => task === importTasks[index])) return previous;
+      const acknowledgedById = new Map(acknowledged.map((task) => [task.id, task]));
+      return previous.map((task) => task.kind === "import"
+        ? acknowledgedById.get(task.id) ?? task
+        : task);
+    };
+    setTasks(applyAcknowledgement);
+    persistTaskUpdate(storageKey, applyAcknowledgement);
   }, [storageKey]);
 
   const dismissTask = useCallback((id: string) => {
@@ -549,8 +569,25 @@ export function BackgroundTaskProvider({
       }));
       if (cancelled) return;
 
-      setTasks((previous) => results.reduce((next, result) => {
-        if (result.status !== "fulfilled" || !result.value) return next;
+      const polledAt = Date.now();
+      setTasks((previous) => results.reduce((next, result, index) => {
+        if (result.status === "rejected") {
+          const task = activeTasks[index];
+          if (task?.kind !== "import" || !isTerminalIngestionPollError(result.reason)) return next;
+          return next.map((candidate) => candidate.kind === "import" && candidate.id === task.id
+            ? {
+                ...candidate,
+                status: "error" as const,
+                runningCount: 0,
+                currentStage: "TASK_UNAVAILABLE",
+                failureMessage: "知识库或导入任务已不存在，已停止状态检查。",
+                finishedAt: polledAt,
+                updatedAt: polledAt,
+                dismissed: false,
+              }
+            : candidate);
+        }
+        if (!result.value) return next;
         return result.value.kind === "agent"
           ? applyAgentActivity(next, result.value.id, result.value.data as AgentRunActivity)
           : applyImportSnapshot(next, result.value.id, result.value.data as IngestionTask);
@@ -602,8 +639,10 @@ export function BackgroundTaskProvider({
     rejectImportCreate,
     updateImportTask,
     resolveImportTask,
+    acknowledgeViewedImportTasks,
     dismissTask,
   }), [
+    acknowledgeViewedImportTasks,
     dismissTask,
     registerAgentTask,
     registerImportTask,
@@ -764,7 +803,7 @@ function trackedImportTask(task: IngestionTask): TrackedImportTask {
     taskId: task.taskId,
     ...(task.clientRequestId ? { clientRequestId: task.clientRequestId } : {}),
     label: importTaskLabel(task),
-    status: importStatus(task.status),
+    status: normalizeIngestionTaskStatus(task.status),
     totalCount,
     successCount: task.successCount ?? 0,
     failureCount: task.failureCount ?? 0,
@@ -972,13 +1011,6 @@ function isTrackedTask(value: unknown): value is TrackedBackgroundTask {
 
 function agentStatus(status: string): BackgroundTaskStatus {
   if (["COMPLETED", "AGENT_DEGRADED", "AGENT_FALLBACK", "SUCCEEDED"].includes(status)) return "success";
-  if (status === "CANCELLED") return "cancelled";
-  if (status === "FAILED") return "error";
-  return "running";
-}
-
-function importStatus(status: string): BackgroundTaskStatus {
-  if (["SUCCESS", "COMPLETED", "PARTIAL_SUCCESS", "SKIPPED"].includes(status)) return "success";
   if (status === "CANCELLED") return "cancelled";
   if (status === "FAILED") return "error";
   return "running";

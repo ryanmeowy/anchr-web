@@ -227,6 +227,7 @@ export type SupportedFormat = {
 export type IngestionCapability = {
   supportedFormats: SupportedFormat[];
   maxFileSizeBytes: number;
+  maxImageFileSizeBytes: number;
   maxFilesPerBatch: number;
   dedupeStrategies: string[];
   defaultDedupeStrategy: string;
@@ -695,6 +696,10 @@ export type ConversationExecutionMode = "TRADITIONAL" | "AGENT" | "AGENT_FALLBAC
 export type AgentTaskStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 export type AgentTask = {
   taskId: string;
+  sessionId?: string;
+  turnId?: string;
+  runId?: string;
+  revision?: number;
   type: string;
   status: AgentTaskStatus;
   progress: number;
