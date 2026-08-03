@@ -695,6 +695,10 @@ export type ConversationExecutionMode = "TRADITIONAL" | "AGENT" | "AGENT_FALLBAC
 export type AgentTaskStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 export type AgentTask = {
   taskId: string;
+  sessionId?: string;
+  turnId?: string;
+  runId?: string;
+  revision?: number;
   type: string;
   status: AgentTaskStatus;
   progress: number;

@@ -5,6 +5,7 @@ import {
   ApiError,
   apiClient,
   isAccessDeniedError,
+  isTerminalIngestionPollError,
   isUploadCleanupAllowed,
 } from "./api-client.ts";
 
@@ -41,6 +42,23 @@ test("keeps 403 permission detection independent from cleanup permission", () =>
   assert.equal(isUploadCleanupAllowed(safeRejection), true);
   assert.equal(isAccessDeniedError(conservativeRejection), true);
   assert.equal(isUploadCleanupAllowed(conservativeRejection), false);
+});
+
+test("stops ingestion polling only when the polled resource is explicitly missing", () => {
+  assert.equal(
+    isTerminalIngestionPollError(new ApiError("missing kb", 404, "KNOWLEDGE_BASE_NOT_FOUND")),
+    true,
+  );
+  assert.equal(
+    isTerminalIngestionPollError(new ApiError("missing task", 404, "INGESTION_TASK_NOT_FOUND")),
+    true,
+  );
+  assert.equal(isTerminalIngestionPollError(new ApiError("route missing", 404, "NOT_FOUND")), false);
+  assert.equal(
+    isTerminalIngestionPollError(new ApiError("temporary failure", 503, "KNOWLEDGE_BASE_NOT_FOUND")),
+    false,
+  );
+  assert.equal(isTerminalIngestionPollError(new Error("network timeout")), false);
 });
 
 test("copies the backend error disposition into ApiError", async () => {

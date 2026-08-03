@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { createTypewriterController, type TypewriterController } from "@/lib/typewriter-controller";
+import { resolveAnswerEventPosition } from "@/lib/answer-presentation-state";
 import type {
   AgentTask,
   ConversationAnswerStatus,
@@ -35,6 +36,10 @@ export type ConversationGenerationSnapshot = {
   query: string;
   phase: ConversationGenerationPhase;
   renderedAnswer: string;
+  canonicalAnswer: string;
+  revision: number;
+  lastSequence: number;
+  statusText?: string;
   turnId?: string;
   assetScope: string[];
   answerMode?: string;
@@ -65,11 +70,22 @@ export type ConversationGenerationHandle = {
 
 type BeginConversationGeneration = Omit<
   ConversationGenerationSnapshot,
-  "phase" | "renderedAnswer" | "citations" | "updatedAt"
+  "phase" | "renderedAnswer" | "canonicalAnswer" | "revision" | "lastSequence" | "citations" | "updatedAt"
 > & {
   phase?: ConversationGenerationPhase;
   renderedAnswer?: string;
   citations?: ConversationCitation[];
+  canonicalAnswer?: string;
+  revision?: number;
+  lastSequence?: number;
+};
+
+export type AnswerPresentationEvent = {
+  kind: "delta" | "snapshot";
+  answerId?: string;
+  revision?: number;
+  sequence?: number;
+  text: string;
 };
 
 type GenerationResource = {
@@ -88,7 +104,8 @@ type ConversationGenerationContextValue = {
   ) => void;
   findGeneration: (match: ConversationGenerationMatch) => ConversationGenerationSnapshot | undefined;
   getGenerationHandle: (match: ConversationGenerationMatch) => ConversationGenerationHandle | undefined;
-  finishGeneration: (id: string) => Promise<void>;
+  ingestAnswerEvent: (match: ConversationGenerationMatch, event: AnswerPresentationEvent) => boolean;
+  completeAnswer: (match: ConversationGenerationMatch) => Promise<void>;
   cancelGeneration: (id: string, phase?: "cancelled" | "error") => void;
   releaseGeneration: (id: string) => void;
 };
@@ -112,7 +129,7 @@ function matchesGeneration(
   return Boolean(match.sessionId && generation.sessionId === match.sessionId);
 }
 
-export function ConversationGenerationProvider({ children }: { children: ReactNode }) {
+export function AnswerPresentationProvider({ children }: { children: ReactNode }) {
   const [generations, setGenerations] = useState<ConversationGenerationSnapshot[]>([]);
   const generationsRef = useRef(generations);
   const resourcesRef = useRef(new Map<string, GenerationResource>());
@@ -150,7 +167,29 @@ export function ConversationGenerationProvider({ children }: { children: ReactNo
   }, [commit]);
 
   const beginGeneration = useCallback<ConversationGenerationContextValue["beginGeneration"]>((input) => {
-    const existing = resourcesRef.current.get(input.id);
+    const sameAnswer = generationsRef.current.find((generation) => (
+      Boolean(input.turnId && generation.turnId === input.turnId)
+      || Boolean(input.agentRunId && generation.agentRunId === input.agentRunId)
+      || Boolean(input.agentTask?.taskId && generation.agentTask?.taskId === input.agentTask.taskId)
+    ));
+    const generationId = sameAnswer?.id ?? input.id;
+    const existing = resourcesRef.current.get(generationId);
+    if (sameAnswer && existing) {
+      updateGeneration(generationId, {
+        sessionId: input.sessionId,
+        userMessageId: input.userMessageId,
+        assistantMessageId: input.assistantMessageId,
+        query: input.query,
+        turnId: input.turnId ?? sameAnswer.turnId,
+        assetScope: input.assetScope,
+        answerMode: input.answerMode ?? sameAnswer.answerMode,
+        answerStatus: input.answerStatus ?? sameAnswer.answerStatus,
+        executionMode: input.executionMode,
+        agentRunId: input.agentRunId ?? sameAnswer.agentRunId,
+        agentTask: input.agentTask ?? sameAnswer.agentTask,
+      });
+      return { id: generationId, ...existing };
+    }
     existing?.writer.cancel();
     existing?.controller.abort();
 
@@ -158,24 +197,28 @@ export function ConversationGenerationProvider({ children }: { children: ReactNo
     const writer = createTypewriterController({
       initialText: input.renderedAnswer ?? "",
       onRender: (renderedAnswer) => {
-        updateGeneration(input.id, (current) => ({
+        updateGeneration(generationId, (current) => ({
           renderedAnswer,
           phase: current.phase === "completed" ? "completed" : "presenting",
         }));
       },
     });
     if (presentationConsumersRef.current === 0) writer.pause();
-    resourcesRef.current.set(input.id, { controller, writer });
+    resourcesRef.current.set(generationId, { controller, writer });
 
     const snapshot: ConversationGenerationSnapshot = {
       ...input,
+      id: generationId,
       phase: input.phase ?? "receiving",
       renderedAnswer: input.renderedAnswer ?? "",
+      canonicalAnswer: input.canonicalAnswer ?? input.renderedAnswer ?? "",
+      revision: input.revision ?? 0,
+      lastSequence: input.lastSequence ?? 0,
       citations: input.citations ?? [],
       updatedAt: Date.now(),
     };
     commit((current) => [
-      ...current.filter((generation) => generation.id !== input.id),
+      ...current.filter((generation) => generation.id !== generationId),
       snapshot,
     ].sort((left, right) => right.updatedAt - left.updatedAt).slice(0, MAX_GENERATIONS));
     const retainedIds = new Set(generationsRef.current.map((generation) => generation.id));
@@ -185,7 +228,7 @@ export function ConversationGenerationProvider({ children }: { children: ReactNo
       resource.controller.abort();
       resourcesRef.current.delete(id);
     });
-    return { id: input.id, controller, writer };
+    return { id: generationId, controller, writer };
   }, [commit, updateGeneration]);
 
   const acquirePresentation = useCallback(() => {
@@ -215,11 +258,42 @@ export function ConversationGenerationProvider({ children }: { children: ReactNo
     return resource ? { id: generation.id, ...resource } : undefined;
   }, []);
 
-  const finishGeneration = useCallback(async (id: string) => {
-    const resource = resourcesRef.current.get(id);
-    if (!resource) return;
-    await resource.writer.finish();
-  }, []);
+  const ingestAnswerEvent = useCallback<ConversationGenerationContextValue["ingestAnswerEvent"]>((match, event) => {
+    const generation = generationsRef.current.find((item) => matchesGeneration(item, match));
+    if (!generation) return false;
+    const resource = resourcesRef.current.get(generation.id);
+    if (!resource) return false;
+
+    const incomingRevision = Math.max(1, event.revision ?? generation.revision ?? 1);
+    if (["completed", "cancelled", "error"].includes(generation.phase)
+      && incomingRevision <= generation.revision) return true;
+
+    const position = resolveAnswerEventPosition(generation, event);
+    if (!position.accepted) return true;
+
+    if (position.startsNewRevision) resource.writer.replace("");
+    if (event.kind === "delta") resource.writer.append(event.text);
+    else resource.writer.replace(event.text);
+
+    updateGeneration(generation.id, {
+      turnId: event.answerId ?? generation.turnId,
+      revision: position.revision,
+      lastSequence: position.lastSequence,
+      canonicalAnswer: event.kind === "snapshot"
+        ? event.text
+        : position.startsNewRevision ? "" : generation.canonicalAnswer,
+      phase: "presenting",
+    });
+    return true;
+  }, [updateGeneration]);
+
+  const completeAnswer = useCallback<ConversationGenerationContextValue["completeAnswer"]>(async (match) => {
+    const generation = generationsRef.current.find((item) => matchesGeneration(item, match));
+    if (!generation) return;
+    const resource = resourcesRef.current.get(generation.id);
+    if (resource) await resource.writer.finish();
+    updateGeneration(generation.id, { phase: "completed" });
+  }, [updateGeneration]);
 
   const cancelGeneration = useCallback<ConversationGenerationContextValue["cancelGeneration"]>((id, phase = "cancelled") => {
     const resource = resourcesRef.current.get(id);
@@ -250,7 +324,8 @@ export function ConversationGenerationProvider({ children }: { children: ReactNo
     updateGeneration,
     findGeneration,
     getGenerationHandle,
-    finishGeneration,
+    ingestAnswerEvent,
+    completeAnswer,
     cancelGeneration,
     releaseGeneration,
   }), [
@@ -259,7 +334,8 @@ export function ConversationGenerationProvider({ children }: { children: ReactNo
     cancelGeneration,
     findGeneration,
     getGenerationHandle,
-    finishGeneration,
+    ingestAnswerEvent,
+    completeAnswer,
     generations,
     releaseGeneration,
     updateGeneration,
@@ -272,10 +348,10 @@ export function ConversationGenerationProvider({ children }: { children: ReactNo
   );
 }
 
-export function useConversationGenerations() {
+export function useAnswerPresentation() {
   const context = useContext(ConversationGenerationContext);
   if (!context) {
-    throw new Error("useConversationGenerations must be used within ConversationGenerationProvider");
+    throw new Error("useAnswerPresentation must be used within AnswerPresentationProvider");
   }
   return context;
 }

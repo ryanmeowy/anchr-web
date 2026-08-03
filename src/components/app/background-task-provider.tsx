@@ -19,7 +19,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, isTerminalIngestionPollError } from "@/lib/api-client";
 import {
   normalizePersistedIngestionCreateRequest,
   recoverIngestionCreate,
@@ -549,8 +549,25 @@ export function BackgroundTaskProvider({
       }));
       if (cancelled) return;
 
-      setTasks((previous) => results.reduce((next, result) => {
-        if (result.status !== "fulfilled" || !result.value) return next;
+      const polledAt = Date.now();
+      setTasks((previous) => results.reduce((next, result, index) => {
+        if (result.status === "rejected") {
+          const task = activeTasks[index];
+          if (task?.kind !== "import" || !isTerminalIngestionPollError(result.reason)) return next;
+          return next.map((candidate) => candidate.kind === "import" && candidate.id === task.id
+            ? {
+                ...candidate,
+                status: "error" as const,
+                runningCount: 0,
+                currentStage: "TASK_UNAVAILABLE",
+                failureMessage: "知识库或导入任务已不存在，已停止状态检查。",
+                finishedAt: polledAt,
+                updatedAt: polledAt,
+                dismissed: false,
+              }
+            : candidate);
+        }
+        if (!result.value) return next;
         return result.value.kind === "agent"
           ? applyAgentActivity(next, result.value.id, result.value.data as AgentRunActivity)
           : applyImportSnapshot(next, result.value.id, result.value.data as IngestionTask);

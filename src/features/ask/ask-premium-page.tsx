@@ -34,7 +34,7 @@ import ReactMarkdown from "react-markdown";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { useBackgroundTasks, type TrackedAgentTask } from "@/components/app/background-task-provider";
 import {
-  useConversationGenerations,
+  useAnswerPresentation,
   type ConversationGenerationSnapshot,
 } from "@/components/app/conversation-generation-provider";
 import { ActionErrorNotice } from "@/components/shared/action-error-notice";
@@ -76,7 +76,6 @@ import {
 import { recoverTraditionalTurn } from "@/features/ask/traditional-turn-recovery";
 import { useConversationAnswerStatus } from "@/features/ask/use-conversation-answer-status";
 import { ApiError, apiClient, isAccessDeniedError } from "@/lib/api-client";
-import { createTypewriterController, type TypewriterController } from "@/lib/typewriter-controller";
 import {
   consumeAssetScopeHandoff,
   readAskAssetScope,
@@ -127,6 +126,7 @@ type ChatMessage = {
   agentTask?: AgentTask;
   pending?: boolean;
   presenting?: boolean;
+  statusText?: string;
   persistedTerminal?: boolean;
   error?: string;
 };
@@ -213,15 +213,15 @@ const ANSWER_MODES: Array<{ value: ConversationAnswerMode; label: string; detail
 
 function applyAgentTask(message: ChatMessage, task: AgentTask): ChatMessage {
   if (task.status === "SUCCEEDED") return {
-    ...message, agentTask: task, pending: false, presenting: false, content: task.answer || message.content,
+    ...message, agentTask: task, pending: false, presenting: false, content: message.content,
     citations: task.citations ?? [], answerStatus: "ANSWERED", answerFallbackReason: null,
   };
   if (task.status === "FAILED") return {
-    ...message, agentTask: task, pending: false, presenting: false, content: task.errorMessage || "文档处理失败，请稍后重试。",
+    ...message, agentTask: task, pending: false, presenting: false, content: message.content,
     citations: [], answerStatus: "MODEL_FALLBACK", answerFallbackReason: task.errorCode,
   };
   if (task.status === "CANCELLED") return {
-    ...message, agentTask: task, pending: false, presenting: false, content: task.answer || "任务已取消。",
+    ...message, agentTask: task, pending: false, presenting: false, content: message.content,
     citations: [], answerStatus: "CANCELLED", answerFallbackReason: task.errorCode,
   };
   return {
@@ -384,9 +384,10 @@ export function AskPremiumPage() {
     updateGeneration,
     findGeneration,
     getGenerationHandle,
-    finishGeneration,
+    ingestAnswerEvent,
+    completeAnswer,
     cancelGeneration,
-  } = useConversationGenerations();
+  } = useAnswerPresentation();
   const {
     hydrated: answerStatusHydrated,
     unreadSessionIds,
@@ -457,19 +458,7 @@ export function AskPremiumPage() {
     controller: AbortController;
     fallbackTimer?: number;
   }>>(new Map());
-  const taskAnswerWritersRef = useRef<Map<string, {
-    writer: TypewriterController;
-    finalizing?: Promise<void>;
-    terminalTask?: AgentTask;
-  }>>(new Map());
-  const settledTaskIdsRef = useRef<Set<string>>(new Set());
   const runtimeSnapshotVersionsRef = useRef<Map<string, number>>(new Map());
-  const runtimeAnswerWritersRef = useRef<Map<string, {
-    writer: TypewriterController;
-    snapshot: AgentRuntimeSnapshot;
-    finalizing?: Promise<void>;
-  }>>(new Map());
-  const settledRuntimeRunsRef = useRef<Set<string>>(new Set());
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const messageContentRef = useRef<HTMLDivElement | null>(null);
@@ -907,39 +896,46 @@ export function AskPremiumPage() {
     trackedAgentInProgress,
   ]);
 
-  const ensureTaskAnswerWriter = useCallback((taskId: string) => {
-    const existing = taskAnswerWritersRef.current.get(taskId);
+  const ensureTaskAnswerPresentation = useCallback((task: AgentTask) => {
+    const existing = findGeneration({ taskId: task.taskId, turnId: task.turnId, runId: task.runId });
     if (existing) return existing;
-    const persistentGeneration = getGenerationHandle({ taskId });
-    const state: { writer: TypewriterController; finalizing?: Promise<void>; terminalTask?: AgentTask } = {
-      writer: persistentGeneration?.writer ?? createTypewriterController({
-        onRender: (content) => {
-          if (settledTaskIdsRef.current.has(taskId)) return;
-          setMessagesBySession((previous) => Object.fromEntries(Object.entries(previous).map(([sessionId, messages]) => [
-            sessionId,
-            messages.map((message) => message.agentTask?.taskId === taskId
-              ? {
-                  ...message,
-                  content,
-                  pending: true,
-                  presenting: true,
-                  agentTask: { ...message.agentTask, answer: content },
-                }
-              : message),
-          ])) as MessageCache);
-        },
-      }),
-    };
-    taskAnswerWritersRef.current.set(taskId, state);
-    return state;
-  }, [getGenerationHandle]);
+    for (const [sessionId, messages] of Object.entries(messagesBySessionRef.current)) {
+      const assistant = messages.find((message) => message.agentTask?.taskId === task.taskId
+        || Boolean(task.turnId && message.turnId === task.turnId));
+      if (!assistant) continue;
+      const user = messages.find((message) => message.role === "user"
+        && Boolean(assistant.turnId && message.turnId === assistant.turnId));
+      beginGeneration({
+        id: `task:${task.taskId}`,
+        sessionId: task.sessionId ?? sessionId,
+        userMessageId: user?.id ?? `${assistant.id}:user`,
+        assistantMessageId: assistant.id,
+        query: user?.content ?? "",
+        turnId: task.turnId ?? assistant.turnId,
+        assetScope: assistant.assetScope ?? [],
+        answerMode: assistant.answerMode,
+        answerStatus: assistant.answerStatus ?? "PROCESSING",
+        citations: assistant.citations ?? task.citations ?? [],
+        executionMode: assistant.executionMode ?? "AGENT",
+        agentRunId: task.runId ?? assistant.agentRunId,
+        agentTask: task,
+        phase: "processing",
+        renderedAnswer: task.answer ?? "",
+        canonicalAnswer: task.answer ?? "",
+        revision: task.revision ?? 1,
+      });
+      return findGeneration({ taskId: task.taskId, turnId: task.turnId });
+    }
+    return undefined;
+  }, [beginGeneration, findGeneration]);
 
   const finalizeAgentTaskAnswer = useCallback((task: AgentTask) => {
-    if (settledTaskIdsRef.current.has(task.taskId)) return Promise.resolve();
-    const persistentGeneration = findGeneration({ taskId: task.taskId });
+    const persistentGeneration = ensureTaskAnswerPresentation(task)
+      ?? findGeneration({ taskId: task.taskId, turnId: task.turnId });
+    if (persistentGeneration?.phase === "completed") return Promise.resolve();
     if (persistentGeneration) {
       updateGeneration(persistentGeneration.id, {
-        phase: task.status === "SUCCEEDED" ? "presenting" : task.status === "CANCELLED" ? "cancelled" : "error",
+        phase: "presenting",
         agentTask: task,
         citations: task.citations ?? persistentGeneration.citations,
         answerStatus: task.status === "SUCCEEDED"
@@ -947,33 +943,35 @@ export function AskPremiumPage() {
           : task.status === "CANCELLED" ? "CANCELLED" : "MODEL_FALLBACK",
         answerFallbackReason: task.errorCode,
       });
+      const terminalAnswer = task.status === "SUCCEEDED"
+        ? task.answer ?? persistentGeneration.renderedAnswer
+        : task.status === "CANCELLED"
+          ? task.answer || "任务已取消。"
+          : task.errorMessage || "文档处理失败，请稍后重试。";
+      ingestAnswerEvent({ id: persistentGeneration.id }, {
+        kind: "snapshot",
+        answerId: task.turnId ?? persistentGeneration.turnId,
+        revision: task.revision ?? persistentGeneration.revision,
+        text: terminalAnswer,
+      });
     }
-    const state = ensureTaskAnswerWriter(task.taskId);
-    state.terminalTask = task;
-    if (task.answer !== null && task.answer !== undefined) {
-      state.writer.replace(task.answer);
-    }
-    if (state.finalizing) return state.finalizing;
-    state.finalizing = state.writer.finish().then(() => {
-      if (taskAnswerWritersRef.current.get(task.taskId) !== state) return;
-      const terminalTask = state.terminalTask ?? task;
-      settledTaskIdsRef.current.add(task.taskId);
+    return (persistentGeneration
+      ? completeAnswer({ id: persistentGeneration.id })
+      : Promise.resolve()).then(() => {
+      if (persistentGeneration) {
+        updateGeneration(persistentGeneration.id, {
+          phase: task.status === "SUCCEEDED"
+            ? "completed" : task.status === "CANCELLED" ? "cancelled" : "error",
+        });
+      }
       setMessagesBySession((previous) => Object.fromEntries(Object.entries(previous).map(([sessionId, messages]) => [
         sessionId,
         messages.map((message) => message.agentTask?.taskId === task.taskId
-          ? applyAgentTask(message, terminalTask)
+          ? applyAgentTask(message, task)
           : message),
       ])) as MessageCache);
-      state.writer.cancel();
-      taskAnswerWritersRef.current.delete(task.taskId);
-      if (persistentGeneration) {
-        updateGeneration(persistentGeneration.id, {
-          phase: task.status === "SUCCEEDED" ? "completed" : task.status === "CANCELLED" ? "cancelled" : "error",
-        });
-      }
     });
-    return state.finalizing;
-  }, [ensureTaskAnswerWriter, findGeneration, updateGeneration]);
+  }, [completeAnswer, ensureTaskAnswerPresentation, findGeneration, ingestAnswerEvent, updateGeneration]);
 
   const presentRuntimeSnapshotAnswer = useCallback((snapshot: AgentRuntimeSnapshot) => {
     const terminal = snapshot.message;
@@ -984,17 +982,37 @@ export function AskPremiumPage() {
     if (!terminal
       || terminal.answerStatus === "PROCESSING"
       || !finalAnswer
-      || activeStreamOwnsAnswer
-      || settledRuntimeRunsRef.current.has(snapshot.runId)) return Promise.resolve();
+      || activeStreamOwnsAnswer) return Promise.resolve();
 
-    const persistentGeneration = findGeneration({
+    let persistentGeneration = findGeneration({
       runId: snapshot.runId,
       turnId: snapshot.turnId,
       sessionId: snapshotSessionId,
     });
-    const persistentHandle = persistentGeneration
-      ? getGenerationHandle({ id: persistentGeneration.id })
-      : undefined;
+    if (!persistentGeneration) {
+      const currentMessage = (messagesBySessionRef.current[snapshotSessionId] ?? [])
+        .find((message) => matchesRuntimeSnapshot(message, snapshot));
+      if (currentMessage) {
+        beginGeneration({
+          id: `run:${snapshot.runId}`,
+          sessionId: snapshotSessionId,
+          userMessageId: `${currentMessage.id}:user`,
+          assistantMessageId: currentMessage.id,
+          query: "",
+          turnId: snapshot.turnId ?? currentMessage.turnId,
+          assetScope: currentMessage.assetScope ?? [],
+          answerMode: terminal.answerMode,
+          answerStatus: terminal.answerStatus,
+          citations: terminal.citations ?? [],
+          executionMode: terminal.executionMode ?? "AGENT",
+          agentRunId: snapshot.runId,
+          agentTask: terminal.agentTask ?? undefined,
+          phase: "processing",
+          renderedAnswer: "",
+        });
+        persistentGeneration = findGeneration({ runId: snapshot.runId, turnId: snapshot.turnId });
+      }
+    }
     if (persistentGeneration) {
       updateGeneration(persistentGeneration.id, {
         phase: "presenting",
@@ -1009,61 +1027,26 @@ export function AskPremiumPage() {
         agentRunId: terminal.agentRunId ?? snapshot.runId,
         agentTask: terminal.agentTask ?? persistentGeneration.agentTask,
       });
-    }
-
-    let state = runtimeAnswerWritersRef.current.get(snapshot.runId);
-    if (!state) {
-      const currentMessage = (messagesBySessionRef.current[snapshotSessionId] ?? [])
-        .find((message) => matchesRuntimeSnapshot(message, snapshot));
-      const currentContent = stripTraceText(currentMessage?.content ?? "");
-      const initialText = finalAnswer.startsWith(currentContent)
-        ? currentContent
-        : currentContent ? finalAnswer : "";
-      const writer = persistentHandle?.writer ?? createTypewriterController({
-        initialText,
-        onRender: (content) => {
-          if (settledRuntimeRunsRef.current.has(snapshot.runId)) return;
-          const latest = runtimeAnswerWritersRef.current.get(snapshot.runId)?.snapshot ?? snapshot;
-          setMessagesBySession((previous) => ({
-            ...previous,
-            [latest.sessionId ?? activeSessionId]: (previous[latest.sessionId ?? activeSessionId] ?? []).map((message) => (
-              matchesRuntimeSnapshot(message, latest)
-                ? applyRuntimeSnapshotMessage(message, latest, content, true)
-                : message
-            )),
-          }));
-        },
+      ingestAnswerEvent({ id: persistentGeneration.id }, {
+        kind: "snapshot",
+        answerId: snapshot.turnId,
+        revision: terminal.agentTask?.revision ?? persistentGeneration.revision,
+        text: finalAnswer,
       });
-      state = { writer, snapshot };
-      runtimeAnswerWritersRef.current.set(snapshot.runId, state);
-    } else {
-      state.snapshot = snapshot;
     }
-
-    state.writer.replace(finalAnswer);
-    if (state.finalizing) return state.finalizing;
-    const current = state;
-    current.finalizing = current.writer.finish().then(() => {
-      if (runtimeAnswerWritersRef.current.get(snapshot.runId) !== current) return;
-      const latest = current.snapshot;
-      const answer = latest.message?.answer ?? finalAnswer;
-      settledRuntimeRunsRef.current.add(snapshot.runId);
+    return (persistentGeneration
+      ? completeAnswer({ id: persistentGeneration.id })
+      : Promise.resolve()).then(() => {
       setMessagesBySession((previous) => ({
         ...previous,
-        [latest.sessionId ?? activeSessionId]: (previous[latest.sessionId ?? activeSessionId] ?? []).map((message) => (
-          matchesRuntimeSnapshot(message, latest)
-            ? applyRuntimeSnapshotMessage(message, latest, answer, false)
+        [snapshotSessionId]: (previous[snapshotSessionId] ?? []).map((message) => (
+          matchesRuntimeSnapshot(message, snapshot)
+            ? applyRuntimeSnapshotMessage(message, snapshot, finalAnswer, false)
             : message
         )),
       }));
-      current.writer.cancel();
-      runtimeAnswerWritersRef.current.delete(snapshot.runId);
-      if (persistentGeneration) {
-        updateGeneration(persistentGeneration.id, { phase: "completed" });
-      }
     });
-    return current.finalizing;
-  }, [activeSessionId, findGeneration, getGenerationHandle, updateGeneration]);
+  }, [activeSessionId, beginGeneration, completeAnswer, findGeneration, ingestAnswerEvent, updateGeneration]);
 
   useEffect(() => {
     const snapshot = agentRuntimeSnapshotQuery.data;
@@ -1135,25 +1118,6 @@ export function AskPremiumPage() {
     updateBackgroundAgentTask,
   ]);
 
-  useEffect(() => {
-    const taskAnswerWriters = taskAnswerWritersRef.current;
-    const settledTaskIds = settledTaskIdsRef.current;
-    const runtimeAnswerWriters = runtimeAnswerWritersRef.current;
-    const settledRuntimeRuns = settledRuntimeRunsRef.current;
-    return () => {
-      taskAnswerWriters.forEach(({ writer }, taskId) => {
-        if (getGenerationHandle({ taskId })?.writer !== writer) writer.cancel();
-      });
-      taskAnswerWriters.clear();
-      settledTaskIds.clear();
-      runtimeAnswerWriters.forEach(({ writer }, runId) => {
-        if (getGenerationHandle({ runId })?.writer !== writer) writer.cancel();
-      });
-      runtimeAnswerWriters.clear();
-      settledRuntimeRuns.clear();
-    };
-  }, [getGenerationHandle]);
-
   const pendingTaskIds = useMemo(() => Array.from(new Set(
     Object.values(messagesBySession).flat()
       .filter((message) => Boolean(message.agentTask && (
@@ -1207,18 +1171,18 @@ export function AskPremiumPage() {
       const scheduleFallback = () => {
         if (streamState.fallbackTimer) window.clearTimeout(streamState.fallbackTimer);
         streamState.fallbackTimer = window.setTimeout(() => {
-          if (!controller.signal.aborted && !settledTaskIdsRef.current.has(taskId)) {
+          if (!controller.signal.aborted) {
             setTaskPollingFallback(taskId, true);
           }
         }, 5_000);
       };
       scheduleFallback();
-      let lastStreamTask: AgentTask | undefined;
+      let terminalReceived = false;
       const updateTask = (task: AgentTask) => {
-        if (settledTaskIdsRef.current.has(task.taskId)) return;
-        lastStreamTask = task;
         const terminal = task.status === "SUCCEEDED" || task.status === "FAILED" || task.status === "CANCELLED";
-        const persistentGeneration = findGeneration({ taskId: task.taskId });
+        terminalReceived = terminal;
+        const persistentGeneration = ensureTaskAnswerPresentation(task)
+          ?? findGeneration({ taskId: task.taskId, turnId: task.turnId });
         if (persistentGeneration) {
           updateGeneration(persistentGeneration.id, {
             phase: terminal ? "presenting" : "processing",
@@ -1236,7 +1200,12 @@ export function AskPremiumPage() {
           scheduleFallback();
         }
         if (task.answer !== null && task.answer !== undefined) {
-          ensureTaskAnswerWriter(task.taskId).writer.replace(task.answer);
+          ingestAnswerEvent({ taskId: task.taskId, turnId: task.turnId }, {
+            kind: "snapshot",
+            answerId: task.turnId,
+            revision: task.revision,
+            text: task.answer,
+          });
         }
         setMessagesBySession((previous) => Object.fromEntries(Object.entries(previous).map(([sessionId, messages]) => [
           sessionId,
@@ -1254,19 +1223,18 @@ export function AskPremiumPage() {
         try {
           await apiClient.streamAgentTask(taskId, {
             onTask: updateTask,
-            onAnswerReset: (answer) => {
-              if (!settledTaskIdsRef.current.has(taskId)) ensureTaskAnswerWriter(taskId).writer.replace(answer);
+            onAnswerReset: (event) => {
+              ingestAnswerEvent({ taskId, turnId: event.answerId }, { kind: "snapshot", ...event });
             },
-            onDelta: (delta) => {
-              if (!settledTaskIdsRef.current.has(taskId)) ensureTaskAnswerWriter(taskId).writer.append(delta);
+            onDelta: (event) => {
+              ingestAnswerEvent({ taskId, turnId: event.answerId }, { kind: "delta", ...event });
+            },
+            onCitations: (citations) => {
+              const generation = findGeneration({ taskId });
+              if (generation) updateGeneration(generation.id, { citations });
             },
           }, controller.signal);
-          const streamTaskTerminal = lastStreamTask?.status === "SUCCEEDED"
-            || lastStreamTask?.status === "FAILED"
-            || lastStreamTask?.status === "CANCELLED";
-          const finalTask = streamTaskTerminal
-            ? lastStreamTask!
-            : await apiClient.getAgentTask(taskId);
+          const finalTask = await apiClient.getAgentTask(taskId);
           updateTask(finalTask);
           if (finalTask.status === "SUCCEEDED"
             || finalTask.status === "FAILED"
@@ -1281,7 +1249,7 @@ export function AskPremiumPage() {
         }
       })().finally(() => {
         if (streamState.fallbackTimer) window.clearTimeout(streamState.fallbackTimer);
-        if (!controller.signal.aborted && !settledTaskIdsRef.current.has(taskId)) {
+        if (!controller.signal.aborted && !terminalReceived) {
           setTaskPollingFallback(taskId, true);
         }
         if (activeTaskStreams.get(taskId) === streamState) {
@@ -1301,9 +1269,10 @@ export function AskPremiumPage() {
     pendingTaskKey,
     latestAgentTask?.taskId,
     activeSessionId,
-    ensureTaskAnswerWriter,
+    ensureTaskAnswerPresentation,
     findGeneration,
     finalizeAgentTaskAnswer,
+    ingestAnswerEvent,
     setTaskPollingFallback,
     updateGeneration,
   ]);
@@ -1324,14 +1293,12 @@ export function AskPremiumPage() {
           sessionId,
           messages.map((message) => {
             const task = message.agentTask ? updates.get(message.agentTask.taskId) : undefined;
-            return task && !settledTaskIdsRef.current.has(task.taskId)
-              ? applyAgentTaskProgress(message, task)
-              : message;
+            return task ? applyAgentTaskProgress(message, task) : message;
           }),
         ])) as MessageCache);
         updates.forEach((task) => {
-          if (settledTaskIdsRef.current.has(task.taskId)) return;
-          const persistentGeneration = findGeneration({ taskId: task.taskId });
+          const persistentGeneration = ensureTaskAnswerPresentation(task)
+            ?? findGeneration({ taskId: task.taskId, turnId: task.turnId });
           if (persistentGeneration) {
             const terminal = task.status === "SUCCEEDED"
               || task.status === "FAILED"
@@ -1345,7 +1312,12 @@ export function AskPremiumPage() {
             });
           }
           if (task.answer !== null && task.answer !== undefined) {
-            ensureTaskAnswerWriter(task.taskId).writer.replace(task.answer);
+            ingestAnswerEvent({ taskId: task.taskId, turnId: task.turnId }, {
+              kind: "snapshot",
+              answerId: task.turnId,
+              revision: task.revision,
+              text: task.answer,
+            });
           }
           const terminal = task.status === "SUCCEEDED"
             || task.status === "FAILED"
@@ -1374,9 +1346,10 @@ export function AskPremiumPage() {
     fallbackTaskKey,
     latestAgentTask?.taskId,
     activeSessionId,
-    ensureTaskAnswerWriter,
+    ensureTaskAnswerPresentation,
     findGeneration,
     finalizeAgentTaskAnswer,
+    ingestAnswerEvent,
     setTaskPollingFallback,
     updateGeneration,
   ]);
@@ -1385,18 +1358,20 @@ export function AskPremiumPage() {
     setCancellingTaskIds((previous) => new Set(previous).add(taskId));
     try {
       const task = await apiClient.cancelAgentTask(taskId);
-      const answerState = taskAnswerWritersRef.current.get(taskId);
-      answerState?.writer.cancel();
-      taskAnswerWritersRef.current.delete(taskId);
-      settledTaskIdsRef.current.add(taskId);
       const persistentGeneration = findGeneration({ taskId });
       if (persistentGeneration) {
+        ingestAnswerEvent({ id: persistentGeneration.id }, {
+          kind: "snapshot",
+          answerId: task.turnId ?? persistentGeneration.turnId,
+          revision: task.revision ?? persistentGeneration.revision,
+          text: task.answer || "任务已取消。",
+        });
         updateGeneration(persistentGeneration.id, {
-          renderedAnswer: task.answer || "任务已取消。",
           agentTask: task,
           answerStatus: "CANCELLED",
           answerFallbackReason: task.errorCode,
         });
+        await completeAnswer({ id: persistentGeneration.id });
         cancelGeneration(persistentGeneration.id);
       }
       setMessagesBySession((previous) => Object.fromEntries(Object.entries(previous).map(([sessionId, messages]) => [
@@ -1415,7 +1390,7 @@ export function AskPremiumPage() {
         return next;
       });
     }
-  }, [cancelGeneration, findGeneration, updateGeneration]);
+  }, [cancelGeneration, completeAnswer, findGeneration, ingestAnswerEvent, updateGeneration]);
 
   const cancelActiveQuery = useCallback(async () => {
     const localStream = streamRef.current;
@@ -1448,11 +1423,18 @@ export function AskPremiumPage() {
       if (localStream && streamRef.current?.requestId !== active.requestId) return;
       if (streamRef.current?.requestId === active.requestId) streamRef.current = null;
       if (persistentGeneration) {
-        updateGeneration(persistentGeneration.id, (current) => ({
-          renderedAnswer: current.renderedAnswer || "查询已取消。",
+        const cancelledAnswer = persistentGeneration.renderedAnswer || "查询已取消。";
+        ingestAnswerEvent({ id: persistentGeneration.id }, {
+          kind: "snapshot",
+          answerId: persistentGeneration.turnId,
+          revision: persistentGeneration.revision,
+          text: cancelledAnswer,
+        });
+        updateGeneration(persistentGeneration.id, {
           answerStatus: "CANCELLED",
           answerFallbackReason: "agent_run_cancelled",
-        }));
+        });
+        await completeAnswer({ id: persistentGeneration.id });
         cancelGeneration(persistentGeneration.id);
       }
       setStreamingSessionId(null);
@@ -1487,7 +1469,9 @@ export function AskPremiumPage() {
   }, [
     activeConversationGeneration,
     cancelGeneration,
+    completeAnswer,
     getGenerationHandle,
+    ingestAnswerEvent,
     queryClient,
     updateGeneration,
   ]);
@@ -2642,7 +2626,6 @@ export function AskPremiumPage() {
     let targetSessionId = activeSessionId;
     let backgroundTaskId: string | null = null;
     let generationId: string | null = null;
-    let answerWriter: TypewriterController | null = null;
     let acceptedTurnId: string | undefined;
     let traditionalRecoveryController: AbortController | null = null;
     const streamCompletion: { event: MessageStreamDoneEvent | null } = { event: null };
@@ -2702,7 +2685,6 @@ export function AskPremiumPage() {
         streamRef.current?.requestId === requestId &&
         streamRef.current.sessionId === targetSessionId
       );
-      answerWriter = generation.writer;
 
       if (requestUsesAgent) {
         backgroundTaskId = requestId;
@@ -2747,7 +2729,7 @@ export function AskPremiumPage() {
             ...message,
             pending: true,
             presenting: false,
-            content: stripTraceText(message.content) || "正在同步回答结果...",
+            statusText: "正在同步回答结果...",
           }));
         },
         delayMs: TRADITIONAL_RECOVERY_DELAY_MS,
@@ -2782,6 +2764,7 @@ export function AskPremiumPage() {
                   confidence: event.confidence,
                   retrievalRequired: event.intentType === "KB_QUERY",
                 } : current.intent,
+                statusText: traceText(event.stage).replace("__TRACE__", ""),
               }));
             }
             if (traceTurnId) {
@@ -2873,16 +2856,16 @@ export function AskPremiumPage() {
                 confidence: event.confidence,
                 retrievalRequired: event.intentType === "KB_QUERY",
               } : message.intent,
-              content: message.content || traceText(event.stage),
+              statusText: traceText(event.stage).replace("__TRACE__", ""),
             }));
           },
-          onDelta: (delta) => {
+          onDelta: (event) => {
             if (!isCurrentStream()) return;
-            answerWriter?.append(delta);
+            ingestAnswerEvent({ id: requestId }, { kind: "delta", ...event });
           },
-          onAnswerReset: (answer) => {
+          onAnswerReset: (event) => {
             if (!isCurrentStream()) return;
-            answerWriter?.replace(answer);
+            ingestAnswerEvent({ id: requestId }, { kind: "snapshot", ...event });
           },
           onCitations: (citations) => {
             if (!isCurrentStream()) return;
@@ -2958,7 +2941,7 @@ export function AskPremiumPage() {
             updateAssistantMessage(targetSessionId, assistantMessage.id, (message) => ({
               ...message,
               pending: true,
-              presenting: answerWriter?.hasContent() === true || message.presenting,
+              presenting: findGeneration({ id: requestId })?.phase === "presenting" || message.presenting,
               turnId: event.turnId,
               assetScope: event.assetScope ?? message.assetScope,
               answerMode: event.answerMode ?? message.answerMode,
@@ -3041,11 +3024,15 @@ export function AskPremiumPage() {
             agentRunId: recoveredTurn.agentRunId,
             agentTask: recoveredTurn.agentTask,
           });
-          answerWriter.replace(recoveredTurn.answer);
-          await finishGeneration(generationId);
+          ingestAnswerEvent({ id: generationId }, {
+            kind: "snapshot",
+            answerId: recoveredTurn.turnId,
+            revision: 1,
+            text: recoveredTurn.answer,
+          });
+          await completeAnswer({ id: generationId });
           updateGeneration(generationId, { phase: recoveredPhase });
         } else {
-          answerWriter.cancel();
           if (generationId) {
             updateGeneration(generationId, {
               phase: recoveredPhase,
@@ -3082,16 +3069,13 @@ export function AskPremiumPage() {
         setStreamingSessionId(null);
         setStreamingUsesAgent(false);
       }
-      await answerWriter.finish();
+      if (generationId) await completeAnswer({ id: generationId });
       const completedEvent = streamCompletion.event;
       if (!completedEvent) throw new Error("流式响应未正常结束，请重试。");
       if (generationId) {
         updateGeneration(generationId, {
           phase: completedEvent.answerStatus === "PROCESSING" ? "processing" : "completed",
         });
-      }
-      if (completedEvent.runId && completedEvent.answerStatus !== "PROCESSING") {
-        settledRuntimeRunsRef.current.add(completedEvent.runId);
       }
       if (isCurrentStream()) {
         updateAssistantMessage(targetSessionId, assistantMessage.id, (message) => ({
@@ -3101,7 +3085,10 @@ export function AskPremiumPage() {
           content: stripTraceText(message.content) || "未生成回答。",
         }));
       }
-      if (hasViewableAnswer(completedEvent.answerStatus, answerWriter.hasContent() ? "answer" : "")) {
+      if (hasViewableAnswer(
+        completedEvent.answerStatus,
+        generationId && findGeneration({ id: generationId })?.renderedAnswer ? "answer" : "",
+      )) {
         recordAnswerCompleted(targetSessionId, currentTimestamp(), isConversationVisible(targetSessionId));
       }
     } catch (error) {
@@ -5014,7 +5001,7 @@ function PremiumChatBubble({
         ) : null}
         <div className="ask-premium-answer-text break-words text-[14px] leading-7 text-slate-700">
           {message.pending && !stripTraceText(message.content) ? (
-            "正在生成回答..."
+            message.statusText ?? "正在生成回答..."
           ) : (
             <MarkdownAnswer
               content={normalizeMarkdownAnswer(stripTraceText(message.content), Boolean(message.agentTask))}
@@ -5150,6 +5137,7 @@ function mergeConversationGenerationMessages(
     agentTask: generation.agentTask ?? existingAssistant?.agentTask,
     pending: inProgress,
     presenting: generation.phase === "presenting",
+    statusText: generation.statusText ?? existingAssistant?.statusText,
     persistedTerminal: inProgress ? false : existingAssistant?.persistedTerminal,
     error: generation.error ?? existingAssistant?.error,
   };
