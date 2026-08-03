@@ -61,7 +61,6 @@ const MAX_TASK_LIST_SIZE = 100;
 const RECENT_IMPORT_REFRESH_INTERVAL_MS = 10_000;
 const IMPORT_OWNER_LEASE_MS = 15_000;
 const IMPORT_OWNER_HEARTBEAT_MS = 5_000;
-const MAX_IMAGE_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
 
 const FLOW_STEPS = [
   { key: "UPLOAD", label: "上传", helper: "文件接收与入队" },
@@ -231,6 +230,7 @@ export function ImportsPremiumPage({
       validateUploadInput(
         uploadFiles,
         capabilitiesQuery.data?.maxFileSizeBytes,
+        capabilitiesQuery.data?.maxImageFileSizeBytes,
         capabilitiesQuery.data?.maxFilesPerBatch,
         supportedFormats,
       );
@@ -428,6 +428,7 @@ export function ImportsPremiumPage({
       validateUploadInput(
         nextFiles,
         capabilities?.maxFileSizeBytes,
+        capabilities?.maxImageFileSizeBytes,
         capabilities?.maxFilesPerBatch,
         supportedFormats,
       );
@@ -530,7 +531,7 @@ export function ImportsPremiumPage({
                 </h2>
                 <p className="mx-auto mt-2 max-w-[520px] text-xs leading-[1.45] text-[var(--premium-ink-soft)]">
                   {supportedFormatSummary}
-                  {capabilities ? ` 图片原文件最大 ${formatFileSize(MAX_IMAGE_UPLOAD_SIZE_BYTES)}，其他文件最大 ${formatFileSize(capabilities.maxFileSizeBytes)}，单次最多 ${capabilities.maxFilesPerBatch} 个文件。` : ""}
+                  {capabilities ? ` 图片原文件最大 ${formatFileSize(capabilities.maxImageFileSizeBytes ?? capabilities.maxFileSizeBytes)}，其他文件最大 ${formatFileSize(capabilities.maxFileSizeBytes)}，单次最多 ${capabilities.maxFilesPerBatch} 个文件。` : ""}
                 </p>
                 <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
                   <button
@@ -1298,6 +1299,7 @@ async function invalidateIngestionQueries(queryClient: ReturnType<typeof useQuer
 function validateUploadInput(
   files: File[],
   maxFileSizeBytes?: number,
+  maxImageFileSizeBytes?: number,
   maxFilesPerBatch?: number,
   supportedFormats: SupportedFormat[] = [],
 ) {
@@ -1307,15 +1309,20 @@ function validateUploadInput(
   if (maxFilesPerBatch && files.length > maxFilesPerBatch) {
     throw new Error(`单批最多上传 ${maxFilesPerBatch} 个文件。`);
   }
+  const imageFileSizeLimit = maxImageFileSizeBytes ?? maxFileSizeBytes;
   const oversizeImage = files.find((file) =>
     inferFileType(file.name, file.type, supportedFormats) === "IMAGE"
-      && file.size > MAX_IMAGE_UPLOAD_SIZE_BYTES,
+      && imageFileSizeLimit !== undefined
+      && file.size > imageFileSizeLimit,
   );
-  if (oversizeImage) {
-    throw new Error(`${oversizeImage.name} 超过图片原文件大小上限 ${formatFileSize(MAX_IMAGE_UPLOAD_SIZE_BYTES)}。`);
+  if (oversizeImage && imageFileSizeLimit !== undefined) {
+    throw new Error(`${oversizeImage.name} 超过图片原文件大小上限 ${formatFileSize(imageFileSizeLimit)}。`);
   }
   const oversize = maxFileSizeBytes
-    ? files.find((file) => file.size > maxFileSizeBytes)
+    ? files.find((file) =>
+      inferFileType(file.name, file.type, supportedFormats) !== "IMAGE"
+        && file.size > maxFileSizeBytes,
+    )
     : undefined;
   if (oversize) {
     throw new Error(`${oversize.name} 超过单文件大小上限 ${formatFileSize(maxFileSizeBytes)}。`);

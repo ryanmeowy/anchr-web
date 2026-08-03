@@ -227,6 +227,7 @@ export type SupportedFormat = {
 export type IngestionCapability = {
   supportedFormats: SupportedFormat[];
   maxFileSizeBytes: number;
+  maxImageFileSizeBytes: number;
   maxFilesPerBatch: number;
   dedupeStrategies: string[];
   defaultDedupeStrategy: string;
