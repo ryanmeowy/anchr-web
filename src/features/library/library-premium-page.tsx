@@ -22,7 +22,6 @@ import {
   MessageCircle,
   Plus,
   Search,
-  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
@@ -520,7 +519,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
                           className={[
                             "inline-flex h-7 w-[68px] items-center justify-center rounded-full border px-1 transition hover:-translate-y-0.5",
                             filterMode === option.value
-                              ? "border-[var(--premium-ink)] bg-[var(--premium-ink)] text-[var(--premium-bg)]"
+                              ? "border-white bg-white text-black"
                               : "border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)]",
                           ].join(" ")}
                           aria-pressed={filterMode === option.value}
@@ -943,7 +942,7 @@ function KnowledgeBaseDocumentView({
                   className={[
                     "h-8 rounded-full px-3 text-[10px] font-black transition duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]",
                     statusFilter === filter.value
-                      ? documentStatusFilterActiveClass(filter.value)
+                      ? documentStatusFilterActiveClass()
                       : "text-[var(--premium-muted)] hover:bg-[var(--premium-panel-muted)] hover:text-[var(--premium-ink)]",
                   ].join(" ")}
                 >
@@ -952,7 +951,6 @@ function KnowledgeBaseDocumentView({
               ))}
             </div>
             <div className="flex items-center gap-1 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] p-1" aria-label="文档类型">
-              <SlidersHorizontal size={14} className="ml-2 text-[var(--premium-muted)]" />
               {(["ALL", "PDF", "MD", "IMAGE", "TXT"] as const).map((type) => (
                 <button
                   key={type}
@@ -965,7 +963,7 @@ function KnowledgeBaseDocumentView({
                   className={[
                     "h-8 rounded-full px-3 text-[10px] font-black transition duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)]",
                     typeFilter === type
-                      ? "bg-[var(--premium-ink)] text-[var(--premium-bg)] shadow-[0_8px_18px_rgba(17,19,21,0.14)]"
+                      ? "bg-white text-black shadow-[0_8px_18px_rgba(17,19,21,0.14)]"
                       : "text-[var(--premium-muted)] hover:bg-[var(--premium-panel-muted)] hover:text-[var(--premium-ink)]",
                   ].join(" ")}
                 >
@@ -974,8 +972,8 @@ function KnowledgeBaseDocumentView({
               ))}
             </div>
             <div className="inline-flex gap-1 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] p-1">
-              <button type="button" onClick={() => handleDocumentViewModeChange("grid")} className={viewButtonClass(viewMode === "grid")} aria-label="文档卡片视图" aria-pressed={viewMode === "grid"}><Grid3X3 size={16} /></button>
-              <button type="button" onClick={() => handleDocumentViewModeChange("list")} className={viewButtonClass(viewMode === "list")} aria-label="文档列表视图" aria-pressed={viewMode === "list"}><List size={16} /></button>
+              <button type="button" onClick={() => handleDocumentViewModeChange("grid")} className={documentViewButtonClass(viewMode === "grid")} aria-label="文档卡片视图" aria-pressed={viewMode === "grid"}><Grid3X3 size={16} /></button>
+              <button type="button" onClick={() => handleDocumentViewModeChange("list")} className={documentViewButtonClass(viewMode === "list")} aria-label="文档列表视图" aria-pressed={viewMode === "list"}><List size={16} /></button>
             </div>
           </div>
         </section>
@@ -1200,7 +1198,7 @@ function DocumentCard({
         aria-label={`预览 ${document.name}`}
       >
         <span aria-hidden="true" className="absolute -right-14 -top-14 size-36 rounded-full border border-[var(--premium-line)] transition duration-500 group-hover:scale-125 group-hover:border-[rgba(49,88,255,0.28)]" />
-        <span className="relative z-10 flex items-start pr-[112px]">
+        <span className="relative z-10 flex items-start pr-[80px]">
           <FileTypeIcon fileName={document.name} sourceType={document.type} palette="document" className="shadow-[0_10px_28px_rgba(17,19,21,0.1)]" />
         </span>
         <span className="relative z-10 mt-7 min-w-0">
@@ -1226,9 +1224,14 @@ function DocumentCard({
           ) : null}
         </span>
         <span className="relative z-10 mt-auto flex items-end justify-between gap-3 border-t border-[var(--premium-line)] pt-3">
-          <span className="min-w-0 text-[10px] text-[var(--premium-muted)]">
-            <span className="mb-1 flex items-center gap-1.5 font-bold"><Clock3 size={12} /> 上传时间</span>
-            <time className="block truncate font-black text-[var(--premium-ink-soft)]" dateTime={document.importedAt}>{formatDateTime(document.importedAt)}</time>
+          <span className="flex min-w-0 items-end gap-2.5">
+            <span className="grid size-8 shrink-0 place-items-center rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[10px] font-black text-[var(--premium-ink-soft)] shadow-sm">
+              V{document.version}
+            </span>
+            <span className="min-w-0 text-[10px] text-[var(--premium-muted)]">
+              <span className="mb-1 flex items-center gap-1.5 font-bold"><Clock3 size={12} /> 上传时间</span>
+              <time className="block truncate font-black text-[var(--premium-ink-soft)]" dateTime={document.importedAt}>{formatDateTime(document.importedAt)}</time>
+            </span>
           </span>
           <span className={[
             "grid shrink-0 place-items-center transition duration-500",
@@ -1241,9 +1244,6 @@ function DocumentCard({
         </span>
       </button>
       <div className="absolute right-3 top-3 z-20 flex items-center gap-1.5">
-        <span className="grid size-8 shrink-0 place-items-center rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[10px] font-black text-[var(--premium-ink-soft)] shadow-sm">
-          V{document.version}
-        </span>
         <button
           type="button"
           onClick={onAsk}
@@ -1511,11 +1511,8 @@ function documentStatusFilterMetric(filter: DocumentStatusFilter) {
   }[filter];
 }
 
-function documentStatusFilterActiveClass(filter: DocumentStatusFilter) {
-  if (filter === "ANSWERABLE") return "bg-[#89C777] text-white shadow-sm";
-  if (filter === "PROCESSING") return "bg-[#4B8DE6] text-white shadow-sm";
-  if (filter === "FAILED") return "bg-[#DF836D] text-white shadow-sm";
-  return "bg-[var(--premium-ink)] text-[var(--premium-bg)] shadow-sm";
+function documentStatusFilterActiveClass() {
+  return "bg-white text-black shadow-sm";
 }
 
 function libraryDocumentType(asset: KnowledgeBaseDocument): LibraryDocumentType {
@@ -1535,7 +1532,14 @@ function documentPreviewUnavailableLabel(document: LibraryDocumentItem) {
 function viewButtonClass(active: boolean) {
   return [
     "grid h-8 w-9 place-items-center rounded-full transition hover:-translate-y-0.5",
-    active ? "bg-[var(--premium-ink)] text-[var(--premium-bg)]" : "text-[var(--premium-muted)] hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)]",
+    active ? "bg-white text-black" : "text-[var(--premium-muted)] hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)]",
+  ].join(" ");
+}
+
+function documentViewButtonClass(active: boolean) {
+  return [
+    "grid h-8 w-9 place-items-center rounded-full transition hover:-translate-y-0.5",
+    active ? "bg-white text-black" : "text-[var(--premium-muted)] hover:bg-[var(--premium-ink)] hover:text-[var(--premium-bg)]",
   ].join(" ");
 }
 
@@ -1928,7 +1932,7 @@ function AskKbLink({ item, label }: { item: KnowledgeBase; label: string }) {
     <Link
       href={askHrefForKb(item)}
       onClick={(event) => event.stopPropagation()}
-      className="library-kb-action inline-flex min-h-8 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-xs font-black text-[var(--premium-ink-soft)] transition hover:translate-x-1 hover:border-[rgba(187,255,102,0.72)] hover:bg-[rgba(187,255,102,0.26)] hover:text-[var(--premium-ink)] dark:hover:border-[rgba(187,255,102,0.72)] dark:hover:bg-[rgba(187,255,102,0.26)] dark:hover:text-[var(--premium-ink)] dark:hover:shadow-[0_0_0_3px_rgba(187,255,102,0.08)]"
+      className="library-kb-action inline-flex min-h-8 items-center justify-center gap-2 rounded-full border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-3 text-xs font-black text-[var(--premium-ink-soft)] transition hover:translate-x-1 hover:border-white hover:bg-white hover:text-black dark:hover:border-white dark:hover:bg-white dark:hover:text-black dark:hover:shadow-[0_0_0_3px_rgba(255,255,255,0.08)]"
     >
       {label} <ArrowRight size={14} />
     </Link>
