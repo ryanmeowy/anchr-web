@@ -27,6 +27,7 @@ import {
   type TrackedImportTask,
 } from "@/components/app/background-task-provider";
 import {
+  isTerminalIngestionTaskStatus,
   selectRecoverableImportCreate,
   type PendingImportTaskSnapshot,
 } from "@/components/app/background-import-state";
@@ -82,6 +83,7 @@ export function ImportsPremiumPage({
   const router = useRouter();
   const {
     tasks: backgroundTasks,
+    acknowledgeViewedImportTasks,
     registerImportTask,
     registerPendingImportTask,
     prepareImportCreate,
@@ -164,7 +166,7 @@ export function ImportsPremiumPage({
       queryFn: () => apiClient.getIngestionTask(selectedKbId, task.taskId),
       enabled: Boolean(selectedKbId),
       refetchInterval: (query: { state: { data?: IngestionTask } }) => (
-        query.state.data && isFinishedTaskStatus(query.state.data.status) ? false : 2000
+        query.state.data && isTerminalIngestionTaskStatus(query.state.data.status) ? false : 2000
       ),
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
@@ -182,7 +184,7 @@ export function ImportsPremiumPage({
     queryKey: ["ingestion-task", selectedKbId, activeTaskId],
     queryFn: () => apiClient.getIngestionTask(selectedKbId, activeTaskId),
     enabled: Boolean(selectedKbId && activeTaskId),
-    refetchInterval: (query) => (query.state.data && !isFinishedTaskStatus(query.state.data.status) ? 2000 : false),
+    refetchInterval: (query) => (query.state.data && !isTerminalIngestionTaskStatus(query.state.data.status) ? 2000 : false),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -190,6 +192,33 @@ export function ImportsPremiumPage({
 
   const currentTask = activeTaskId ? currentTaskQuery.data : undefined;
   const selectedFilesSize = files.reduce((total, file) => total + file.size, 0);
+
+  useEffect(() => {
+    const viewedTerminalTasks = new Map<string, IngestionTaskSummary>();
+    if (ingestionTasksQuery.isSuccess) {
+      ingestionTasksQuery.data.items.forEach((task) => {
+        if (task.kbId === selectedKbId && isTerminalIngestionTaskStatus(task.status)) {
+          viewedTerminalTasks.set(task.taskId, task);
+        }
+      });
+    }
+    if (currentTaskQuery.isSuccess
+      && currentTask
+      && currentTask.kbId === selectedKbId
+      && isTerminalIngestionTaskStatus(currentTask.status)) {
+      viewedTerminalTasks.set(currentTask.taskId, currentTask);
+    }
+    if (viewedTerminalTasks.size > 0) {
+      acknowledgeViewedImportTasks(Array.from(viewedTerminalTasks.values()));
+    }
+  }, [
+    acknowledgeViewedImportTasks,
+    currentTask,
+    currentTaskQuery.isSuccess,
+    ingestionTasksQuery.data,
+    ingestionTasksQuery.isSuccess,
+    selectedKbId,
+  ]);
 
   const uploadMutation = useMutation({
     mutationFn: async ({
@@ -1322,10 +1351,6 @@ function mapStageToFlowStep(stage: string, status: string) {
 
 function flowStepOrder(step: string) {
   return FLOW_STEPS.findIndex((item) => item.key === step);
-}
-
-function isFinishedTaskStatus(status: string) {
-  return status === "SUCCESS" || status === "COMPLETED" || status === "FAILED" || status === "PARTIAL_SUCCESS" || status === "SKIPPED";
 }
 
 function makeImportRequestIdentity() {

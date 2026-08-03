@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  acknowledgeViewedImportTaskSnapshots,
+  isTerminalIngestionTaskStatus,
   mergeStoredTaskSnapshots,
   preparedImportCreateTask,
   rejectedImportCreateTask,
@@ -11,6 +13,92 @@ import {
   shouldInterruptImportUpload,
   shouldReplaceStoredTask,
 } from "./background-import-state.ts";
+
+test("terminal ingestion statuses share one definition", () => {
+  for (const status of ["SUCCESS", "COMPLETED", "FAILED", "PARTIAL_SUCCESS", "SKIPPED", "CANCELLED"]) {
+    assert.equal(isTerminalIngestionTaskStatus(status), true, status);
+  }
+  for (const status of ["PENDING", "RUNNING", "PROCESSING", "UNKNOWN"]) {
+    assert.equal(isTerminalIngestionTaskStatus(status), false, status);
+  }
+});
+
+test("viewed terminal snapshots acknowledge only the matching tracked import tasks", () => {
+  const tracked = [
+    trackedImport({
+      id: "import-create:request-103",
+      kbId: "kb-1",
+      taskId: "task-103",
+      navigationPending: true,
+    }),
+    trackedImport({ id: "import:running", kbId: "kb-1", taskId: "running" }),
+    trackedImport({ id: "import:other-kb", kbId: "kb-2", taskId: "task-103" }),
+    trackedImport({ id: "import:other-task", kbId: "kb-1", taskId: "other-task" }),
+  ];
+  const snapshots = [
+    ingestionTask({
+      kbId: "kb-1",
+      taskId: "task-103",
+      status: "PARTIAL_SUCCESS",
+      successCount: 2,
+      failureCount: 1,
+    }),
+    ingestionTask({ kbId: "kb-1", taskId: "running", status: "RUNNING", runningCount: 3 }),
+  ];
+
+  const acknowledged = acknowledgeViewedImportTaskSnapshots(tracked, snapshots, 20_000);
+
+  assert.equal(acknowledged[0].id, "import-create:request-103");
+  assert.equal(acknowledged[0].status, "success");
+  assert.equal(acknowledged[0].successCount, 2);
+  assert.equal(acknowledged[0].failureCount, 1);
+  assert.equal(acknowledged[0].runningCount, 0);
+  assert.equal(acknowledged[0].progress, 100);
+  assert.equal(acknowledged[0].navigationPending, false);
+  assert.equal(acknowledged[0].dismissed, true);
+  assert.equal(acknowledged[0].finishedAt, 20_000);
+  assert.equal(acknowledged[0].updatedAt, 20_000);
+  assert.strictEqual(acknowledged[1], tracked[1]);
+  assert.strictEqual(acknowledged[2], tracked[2]);
+  assert.strictEqual(acknowledged[3], tracked[3]);
+});
+
+test("viewed success, failure, skipped, and cancelled snapshots map to terminal card states", () => {
+  const cases = [
+    ["SUCCESS", "success"],
+    ["COMPLETED", "success"],
+    ["PARTIAL_SUCCESS", "success"],
+    ["SKIPPED", "success"],
+    ["FAILED", "error"],
+    ["CANCELLED", "cancelled"],
+  ];
+
+  cases.forEach(([backendStatus, expectedStatus], index) => {
+    const tracked = [trackedImport({ taskId: `task-${index}` })];
+    const acknowledged = acknowledgeViewedImportTaskSnapshots(
+      tracked,
+      [ingestionTask({ taskId: `task-${index}`, status: backendStatus })],
+      30_000 + index,
+    );
+    assert.equal(acknowledged[0].status, expectedStatus, backendStatus);
+    assert.equal(acknowledged[0].dismissed, true, backendStatus);
+  });
+});
+
+test("acknowledging the same terminal snapshot is idempotent", () => {
+  const snapshot = ingestionTask({ taskId: "task-103", status: "FAILED", failureReason: "parse failed" });
+  const first = acknowledgeViewedImportTaskSnapshots(
+    [trackedImport({ taskId: "task-103" })],
+    [snapshot],
+    20_000,
+  );
+  const second = acknowledgeViewedImportTaskSnapshots(first, [snapshot], 30_000);
+
+  assert.strictEqual(second, first);
+  assert.strictEqual(second[0], first[0]);
+  assert.equal(second[0].updatedAt, 20_000);
+  assert.equal(second[0].failureMessage, "parse failed");
+});
 
 test("an active owner lease prevents another tab from declaring upload interruption", () => {
   const activeUpload = {
@@ -225,3 +313,37 @@ test("an event snapshot repairs a stale whole-storage overwrite without losing r
   assert.equal(stateAfterEvent[0]?.taskId, "task-103");
   assert.equal(repairedStorage[0]?.taskId, "task-103");
 });
+
+function trackedImport(overrides = {}) {
+  return {
+    id: "import:task-1",
+    kind: "import",
+    kbId: "kb-1",
+    taskId: "task-1",
+    status: "running",
+    totalCount: 3,
+    successCount: 0,
+    failureCount: 0,
+    runningCount: 3,
+    progress: 25,
+    navigationPending: false,
+    dismissed: false,
+    startedAt: 1_000,
+    updatedAt: 10_000,
+    ...overrides,
+  };
+}
+
+function ingestionTask(overrides = {}) {
+  return {
+    taskId: "task-1",
+    kbId: "kb-1",
+    sourceType: "UPLOAD",
+    status: "SUCCESS",
+    totalCount: 3,
+    successCount: 3,
+    failureCount: 0,
+    runningCount: 0,
+    ...overrides,
+  };
+}
