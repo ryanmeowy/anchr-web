@@ -3432,7 +3432,7 @@ export function AskPremiumPage() {
                 <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
                   ASK / {selectedAnswerMode} ANSWER MODE
                 </p>
-                <h1 className="max-w-[720px] text-[clamp(28px,3.2vw,42px)] font-black leading-none">Anchor Your Answer</h1>
+                <h1 className="max-w-[720px] text-[clamp(28px,3.2vw,42px)] font-black leading-none">Anchor Every Answer</h1>
               </div>
               <div className="relative z-20 hidden lg:block">
                 <button

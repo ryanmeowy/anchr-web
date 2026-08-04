@@ -19,16 +19,6 @@
 
 ---
 
-<!--
-  项目截图
-
-  1. 将真实界面截图保存为：docs/images/anchr-workspace.png
-  2. 推荐尺寸：1600 × 900（16:9），建议展示 Ask 主界面、引用与 Agent Activity。
-  3. 删除本注释的开头和结尾，即可在 GitHub README 中显示下方图片。
-
-  ![Anchr 知识工作台](./docs/images/anchr-workspace.png)
--->
-
 ## 关于 Anchr
 
 Anchr Web 是 Anchr 知识系统的前端工作台。它将知识库管理、文档导入、混合检索、流式问答、引用预览和模型配置整合在同一个界面中，让团队不仅能更快获得答案，也能追溯答案来自哪里、如何生成。
