@@ -689,7 +689,7 @@ export function SettingsManagementPage() {
                       config={hasOwnerAccess ? selectedConfig : null}
                       isNew={hasOwnerAccess && isAdding}
                       restricted={!hasOwnerAccess}
-                      restrictedMessage={configuredAccessToken == null ? "正在检查访问权限" : "访客状态无法查看"}
+                      restrictedMessage={configuredAccessToken == null ? "正在检查访问权限" : "当前角色无法查看"}
                       onSaved={(savedConfig) => {
                         setSelection({
                           type: selectedType,
@@ -749,7 +749,7 @@ export function SettingsManagementPage() {
                         restrictedMessage={
                           configuredAccessToken == null
                             ? "正在检查访问权限"
-                            : "当前角色只能查看存储配置"
+                            : "当前角色无法查看"
                         }
                       />
                     </div>
