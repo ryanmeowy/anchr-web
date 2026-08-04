@@ -19,16 +19,6 @@ English · [简体中文](./README.zh-CN.md)
 
 ---
 
-<!--
-  Product screenshot
-
-  1. Save the final screenshot as docs/images/anchr-workspace.png.
-  2. Recommended size: 1600 × 900 (16:9), ideally showing Ask, citations, and Agent Activity.
-  3. Remove the opening and closing comment markers to display the image on GitHub.
-
-  ![Anchr knowledge workspace](./docs/images/anchr-workspace.png)
--->
-
 ## About Anchr
 
 Anchr Web is the frontend workspace for the Anchr knowledge system. It brings knowledge-base management, document ingestion, hybrid search, streaming answers, citation preview, and model configuration into one focused interface—so teams can find answers quickly and still understand where each answer came from and how it was produced.
