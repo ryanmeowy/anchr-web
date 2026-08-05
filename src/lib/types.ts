@@ -744,6 +744,7 @@ export type AgentActivityStep = {
 };
 export type RuntimeConfigType =
   | "SEARCH"
+  | "REBUILD"
   | "CONVERSATION"
   | "AGENT"
   | "INGESTION"
