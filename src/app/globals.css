@@ -1397,6 +1397,10 @@ a {
   padding-top: 16px;
 }
 
+.ask-premium-assistant-message + .ask-premium-user-message {
+  margin-top: 16px;
+}
+
 .ask-premium-message-scroll {
   overflow-anchor: none;
   overscroll-behavior-y: contain;
@@ -2234,7 +2238,7 @@ a {
   color: var(--premium-ink);
 }
 
-.ask-premium-ask-page[data-premium-theme="light"] .ask-premium-floating-menu button:not(.ask-premium-menu-option):hover,
+.ask-premium-ask-page[data-premium-theme="light"] .ask-premium-floating-menu button:not(.ask-premium-menu-option, .ask-premium-materials-done):hover,
 .ask-premium-ask-page[data-premium-theme="light"] .ask-premium-conversation-menu button:hover {
   background: var(--premium-panel-muted);
 }
@@ -2741,12 +2745,47 @@ a {
   box-shadow: none;
 }
 
-.ask-premium-ask-page .ask-premium-agent-control[aria-pressed="true"],
-.ask-premium-ask-page .ask-premium-agent-control[aria-pressed="true"]:hover {
-  border-color: rgba(17, 19, 21, 0.16);
-  background: #d9dad4;
-  color: #111315;
-  box-shadow: none;
+.ask-premium-agent-switch-track {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: 40px;
+  height: 24px;
+  padding: 3px;
+  border: 1px solid var(--premium-line-strong);
+  border-radius: 999px;
+  background: var(--premium-panel-muted);
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.ask-premium-agent-switch-thumb {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #9297a2;
+  transition: transform 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+
+.ask-premium-agent-switch[aria-checked="true"] .ask-premium-agent-switch-track {
+  border-color: #ffffff;
+  background: #ffffff;
+}
+
+.ask-premium-agent-switch[aria-checked="true"] .ask-premium-agent-switch-thumb {
+  background: var(--premium-bg);
+  color: var(--ask-new-chat-accent, var(--premium-rail));
+  transform: translateX(16px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-premium-agent-switch-track,
+  .ask-premium-agent-switch-thumb {
+    transition: none;
+  }
 }
 
 .ask-premium-page[data-premium-theme="dark"] .ask-premium-send-button {
@@ -2793,7 +2832,7 @@ a {
   color: var(--premium-muted);
 }
 
-.ask-premium-page[data-premium-theme="dark"] .ask-premium-floating-menu button:not(.ask-premium-menu-option):hover {
+.ask-premium-page[data-premium-theme="dark"] .ask-premium-floating-menu button:not(.ask-premium-menu-option, .ask-premium-materials-done):hover {
   background: #3a3a3a;
 }
 
@@ -3927,38 +3966,8 @@ a {
   --premium-blue: #2446d8;
 }
 
-.library-document-command {
-  animation: libraryDocumentCommandIn 620ms cubic-bezier(0.19, 1, 0.22, 1) both;
-}
-
 .library-document-card {
   animation: libraryDocumentCardIn 520ms cubic-bezier(0.19, 1, 0.22, 1) both;
-}
-
-.library-document-orbit {
-  animation: libraryDocumentOrbit 12s linear infinite;
-  box-shadow:
-    0 0 0 28px rgba(255, 255, 255, 0.025),
-    0 0 0 68px rgba(255, 255, 255, 0.018);
-}
-
-.library-document-orbit-secondary {
-  animation-direction: reverse;
-  animation-duration: 8s;
-}
-
-@keyframes libraryDocumentCommandIn {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.985);
-    clip-path: inset(0 0 18% 0 round 8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    clip-path: inset(0 0 0 0 round 8px);
-  }
 }
 
 @keyframes libraryDocumentCardIn {
@@ -3970,12 +3979,6 @@ a {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes libraryDocumentOrbit {
-  to {
-    transform: rotate(360deg) scale(1.04);
   }
 }
 
@@ -4017,9 +4020,7 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .library-document-command,
   .library-document-card,
-  .library-document-orbit,
   .library-health-snapshot,
   .library-kb-search:focus-within .library-kb-search-submit {
     animation: none;
@@ -4027,7 +4028,6 @@ a {
 
   .library-document-card,
   .library-document-card *,
-  .library-document-command button,
   .library-kb-card,
   .library-kb-card *,
   .library-kb-list-row,

@@ -51,10 +51,17 @@ const SETTINGS_SECTIONS: Array<{
   label: string;
 }> = [
   { value: "CAPABILITY", label: "能力配置" },
-  { value: "STORAGE", label: "存储设置" },
+  { value: "STORAGE", label: "存储配置" },
   { value: "RUNTIME", label: "运行参数" },
   { value: "SECURITY", label: "安全设置" },
 ];
+
+const SETTINGS_SECTION_TITLES: Record<SettingsSection, string> = {
+  CAPABILITY: "CAPABILITIES",
+  STORAGE: "STORAGE",
+  RUNTIME: "RUNTIME",
+  SECURITY: "SECURITY",
+};
 
 type CapabilitySelection = {
   type: CapabilityName;
@@ -621,10 +628,10 @@ export function SettingsManagementPage() {
               <section className="premium-page-header-content relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
                   <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
-                    SETTINGS / SYSTEM CONFIGURATION
+                    SETTINGS / {SETTINGS_SECTION_TITLES[activeSection]}
                   </p>
                   <h1 className="max-w-[720px] text-[clamp(16px,2.4vw,34px)] font-black leading-none">
-                    把模型、存储与访问令牌调成一条稳定链路。
+                    用你习惯的方式
                   </h1>
                 </div>
               </section>
@@ -1851,12 +1858,12 @@ function StoragePanel({
   };
 
   return (
-    <article className={`${PANEL_CLASS} relative min-w-0`} aria-label="存储设置">
-      {restricted ? <RestrictedPanelOverlay title="存储设置" message={restrictedMessage} /> : null}
+    <article className={`${PANEL_CLASS} relative min-w-0`} aria-label="存储配置">
+      {restricted ? <RestrictedPanelOverlay title="存储配置" message={restrictedMessage} /> : null}
       <div inert={restricted ? true : undefined} aria-hidden={restricted || undefined}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">存储设置</h2>
+          <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">存储配置</h2>
           <p className="mt-1 text-[11px] leading-normal text-[var(--premium-muted)]">配置对象存储的连接参数</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">

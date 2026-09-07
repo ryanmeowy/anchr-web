@@ -67,13 +67,13 @@ export function AssetPreviewPremiumPage({ assetId }: { assetId: string }) {
                 </button>
                 <section className="min-w-0">
                   <p className="ask-premium-kicker mb-1.5 text-[10px] font-black" style={{ color: "#87CEEB" }}>
-                    LIBRARY / DOCUMENT SOURCE
+                    PREVIEW / DOCUMENT
                   </p>
                   <h1 className="max-w-[900px] truncate text-[clamp(18px,2.6vw,36px)] font-black leading-none text-[var(--premium-ink)]">
                     {previewQuery.data?.fileName ?? "文档预览"}
                   </h1>
                   <p className="mt-1.5 truncate text-[11px] font-bold text-[var(--premium-muted)]">
-                    {previewQuery.data?.kbName ?? previewQuery.data?.kbId ?? "知识库"} · Library 文档资产
+                    {previewQuery.data?.kbName ?? previewQuery.data?.kbId ?? "知识库"} · 文档预览
                   </p>
                 </section>
               </div>
@@ -106,7 +106,7 @@ function AssetPreviewState() {
   return (
     <div className="grid min-h-[calc(100vh-112px)] place-items-center p-6 lg:min-h-[calc(100vh-160px)]">
       <div className="premium-surface grid min-h-40 w-full max-w-[420px] place-items-center rounded-[8px] p-6 text-center">
-        <span className="size-7 animate-spin rounded-full border-2 border-[var(--premium-line)] border-t-[var(--premium-blue)]" />
+        <span className="ask-premium-spinner" aria-hidden="true" />
         <p className="mt-3 text-sm font-black text-[var(--premium-ink-soft)]">正在加载完整文档</p>
       </div>
     </div>

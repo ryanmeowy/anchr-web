@@ -607,10 +607,10 @@ export function SettingsPremiumPage() {
               <section className="premium-page-header-content relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
                   <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
-                    SETTINGS / SYSTEM CONFIGURATION
+                    SETTINGS
                   </p>
                   <h1 className="max-w-[720px] text-[clamp(16px,2.4vw,34px)] font-black leading-none">
-                    把模型、存储与访问令牌调成一条稳定链路。
+                    用你习惯的方式
                   </h1>
                 </div>
               </section>

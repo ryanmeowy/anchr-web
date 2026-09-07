@@ -18,6 +18,8 @@ type FieldDefinition = {
   options?: string[];
   unit?: string;
   step?: string;
+  min?: string;
+  max?: string;
 };
 
 const PANEL_CLASS =
@@ -28,6 +30,7 @@ const BUTTON_PRIMARY_CLASS =
 
 const TYPE_LABELS: Record<RuntimeConfigType, { label: string; description: string }> = {
   SEARCH: { label: "搜索", description: "召回、向量路由与重排参数" },
+  REBUILD: { label: "索引重建", description: "存量回填、Embedding 批量与增量追平参数" },
   CONVERSATION: { label: "会话", description: "意图路由与传统回答兜底" },
   AGENT: { label: "Agent", description: "预算、超时和文档总结限制" },
   INGESTION: { label: "导入", description: "解析、Embedding 与 Docling 限制" },
@@ -53,6 +56,35 @@ const FIELDS: Record<RuntimeConfigType, FieldDefinition[]> = {
     field("windowMax", "最大窗口", "重排窗口最大值"),
     decimal("fusionAlpha", "召回融合权重", "RRF 分数在最终融合中的权重"),
     decimal("fusionBeta", "重排融合权重", "Rerank 分数在最终融合中的权重"),
+  ],
+  REBUILD: [
+    field("rebuildSourceBatchSize", "回填扫描批次", "旧物理索引每次 search_after 读取的文档数"),
+    boundedField(
+      "rebuildEmbeddingBatchSize",
+      "文本 Embedding 批次",
+      "单次文本请求的输入数量；图片始终每次请求一张",
+      1,
+      2048,
+    ),
+    boundedField(
+      "rebuildEmbeddingConcurrency",
+      "重建 Embedding 并发",
+      "同时请求服务商的批次数；调高前请确认账户并发配额",
+      1,
+      16,
+    ),
+    field(
+      "rebuildEmbeddingRateLimitMaxAttempts",
+      "限流最大尝试",
+      "收到服务商 429 后单个批次的最大尝试次数",
+    ),
+    field(
+      "rebuildEmbeddingRateLimitBackoffMs",
+      "限流退避基数",
+      "收到服务商 429 后指数退避的基础时间",
+      "毫秒",
+    ),
+    field("rebuildDirtyAssetLimit", "脏 Asset 上限", "超过该增量积压数量时终止本次重建"),
   ],
   CONVERSATION: [
     bool("intentRoutingEnabled", "启用意图路由", "是否调用模型判断 CHAT、KB_QUERY 或 OTHER"),
@@ -109,6 +141,23 @@ function field(
 
 function decimal(key: string, label: string, description: string): FieldDefinition {
   return { key, label, description, kind: "number", step: "0.01" };
+}
+
+function boundedField(
+  key: string,
+  label: string,
+  description: string,
+  min: number,
+  max: number,
+): FieldDefinition {
+  return {
+    key,
+    label,
+    description,
+    kind: "number",
+    min: min.toString(),
+    max: max.toString(),
+  };
 }
 
 function bool(key: string, label: string, description: string): FieldDefinition {
@@ -275,7 +324,8 @@ export function RuntimeConfigPanel({ canEdit }: { canEdit: boolean }) {
                     <input
                       className={`${FIELD_CLASS} settings-number-field`}
                       type="number"
-                      min="0"
+                      min={definition.min ?? "0"}
+                      max={definition.max}
                       step={definition.step ?? "1"}
                       value={values[definition.key] ?? ""}
                       disabled={!canEdit}

@@ -5,7 +5,6 @@ import {
   Activity,
   AlertTriangle,
   Archive,
-  ArrowLeft,
   ArrowRight,
   Check,
   CheckCircle2,
@@ -363,10 +362,6 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
     router.push(`/library?kbId=${encodeURIComponent(item.id)}`);
   };
 
-  const handleCloseKnowledgeBase = () => {
-    router.replace("/library");
-  };
-
   return (
     <PremiumConfigurationShell
       theme={theme}
@@ -374,7 +369,7 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
       ambientGlow={false}
       pageClassName="library-premium-page library-premium-entry-page"
     >
-      <div className="library-premium-content grid min-h-full min-w-0 grid-rows-[auto_minmax(0,1fr)]">
+      <div className={`library-premium-content grid min-w-0 grid-rows-[auto_minmax(0,1fr)] ${openedKnowledgeBaseId ? "h-full min-h-0 overflow-hidden" : "min-h-full"}`}>
         {actionErrorNotice ? (
           <ActionErrorNotice
             title={actionErrorNotice.title}
@@ -389,17 +384,17 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
               <div aria-hidden="true" className="ask-premium-watermark pointer-events-none absolute bottom-[-18px] right-4 text-[clamp(48px,9vw,132px)] font-black leading-[0.8] text-black/[0.05] dark:text-white/[0.045]">
                 LIBRARY
               </div>
-              <section className="ask-premium-hero-copy relative z-10 flex min-w-0 flex-col justify-center gap-2">
-                <div>
+              <section className="ask-premium-hero-copy relative z-10 flex min-w-0 items-center gap-3">
+                <div className="min-w-0">
                   <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
-                    {openedKnowledgeBaseId ? "LIBRARY / KNOWLEDGE BASE / DOCUMENTS" : "LIBRARY / KNOWLEDGE ASSET COMMAND"}
+                    {openedKnowledgeBaseId ? "LIBRARY / DOCUMENTS" : "LIBRARY / KNOWLEDGE BASE"}
                   </p>
-                  <h1 className="max-w-[720px] text-[clamp(16px,2.4vw,34px)] font-black leading-none">
-                    {openedKnowledgeBaseId ? openedKb?.name ?? "正在恢复文档界面" : "让每个知识库都能被看见、被追踪、被提问。"}
+                  <h1 className="max-w-[720px] truncate text-[clamp(16px,2.4vw,34px)] font-black leading-none">
+                    {openedKnowledgeBaseId ? openedKb?.name ?? "正在加载知识库" : "资料有序可循"}
                   </h1>
                   {openedKnowledgeBaseId ? (
                     <p className="mt-1.5 max-w-[720px] truncate text-[11px] font-bold text-[var(--premium-ink-soft)]">
-                      {openedKb?.description || "知识库文档资产与版本档案"}
+                      {openedKb?.description || "查看文档、版本和处理状态"}
                     </p>
                   ) : null}
                 </div>
@@ -422,7 +417,6 @@ export function LibraryPremiumPage({ openedKnowledgeBaseId }: { openedKnowledgeB
             {openedKnowledgeBaseId ? openedKb ? (
               <KnowledgeBaseDocumentView
                 knowledgeBase={openedKb}
-                onBack={handleCloseKnowledgeBase}
               />
             ) : (
               <main className="ask-premium-main library-no-ambient-glow grid min-h-0 place-items-center bg-[linear-gradient(90deg,rgba(255,255,255,0.82),rgba(255,255,255,0.4))] p-6">
@@ -742,10 +736,8 @@ const DOCUMENT_STATUS_FILTERS: Array<{ value: DocumentStatusFilter; label: strin
 
 function KnowledgeBaseDocumentView({
   knowledgeBase,
-  onBack,
 }: {
   knowledgeBase: KnowledgeBase;
-  onBack: () => void;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -825,9 +817,9 @@ function KnowledgeBaseDocumentView({
   const handleDocumentPageChange = (nextPage: number) => {
     setDocumentPage(nextPage);
     window.requestAnimationFrame(() => {
-      documentListRef.current?.scrollIntoView({
+      documentListRef.current?.scrollTo({
+        top: 0,
         behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-        block: "start",
       });
     });
   };
@@ -880,38 +872,9 @@ function KnowledgeBaseDocumentView({
 
   return (
     <>
-    <main className="ask-premium-main library-no-ambient-glow library-document-view min-h-0 min-w-0 overflow-auto bg-[linear-gradient(100deg,rgba(255,255,255,0.88),rgba(255,255,255,0.4))] px-4 py-4 sm:px-5 lg:px-5" aria-label={`${knowledgeBase.name} 文档`}>
-      <div className="mx-auto grid w-full max-w-[1500px] gap-4">
-        <section className="library-document-command relative overflow-hidden rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-rail)] p-4 text-white shadow-[var(--premium-tight-shadow)] sm:p-5">
-          <div aria-hidden="true" className="library-document-orbit absolute -right-12 -top-20 size-64 rounded-full border border-white/10" />
-          <div aria-hidden="true" className="library-document-orbit library-document-orbit-secondary absolute -right-3 -top-8 size-40 rounded-full border border-[rgba(187,255,102,0.28)]" />
-          <div className="relative z-10 grid items-end gap-5 lg:grid-cols-[minmax(0,1fr)_auto]">
-            <div className="min-w-0">
-              <button
-                type="button"
-                onClick={onBack}
-                className="group mb-6 inline-flex min-h-9 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 text-[11px] font-black text-white/75 transition duration-300 hover:-translate-x-1 hover:border-white/30 hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-accent)]"
-              >
-                <ArrowLeft size={15} className="transition group-hover:-translate-x-0.5" />
-                返回知识库
-              </button>
-              <p className="mb-2 text-[10px] font-black text-[#87CEEB]">
-                DOCUMENT LEDGER / LIVE ARCHIVE
-              </p>
-              <h2 className="max-w-[820px] text-[clamp(25px,4vw,54px)] font-black leading-[0.94]">
-                <span className="block">文档不只是文件</span>
-                <span className="mt-1 block text-[#89C777]">而是可追溯的知识版本</span>
-              </h2>
-            </div>
-            <div className="grid grid-cols-3 gap-2 sm:min-w-[360px]">
-              <DocumentMetric value={formatNumber(documentTotal)} label="DOCUMENTS" />
-              <DocumentMetric value={formatNumber(documentSegmentTotal)} label="SEGMENTS" />
-              <DocumentMetric value={documentStatusFilterMetric(statusFilter)} label="VIEW" accent />
-            </div>
-          </div>
-        </section>
-
-        <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]" aria-label="文档筛选">
+    <main className="ask-premium-main library-no-ambient-glow library-document-view min-h-0 min-w-0 overflow-hidden bg-[linear-gradient(100deg,rgba(255,255,255,0.88),rgba(255,255,255,0.4))] px-4 py-4 sm:px-5 lg:px-5" aria-label={`${knowledgeBase.name} 文档`}>
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1500px] flex-col gap-4">
+        <section className="grid shrink-0 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]" aria-label="文档筛选">
           <label className="library-document-search premium-focusable flex min-h-11 min-w-0 items-center gap-3 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] px-4 shadow-[0_12px_32px_rgba(17,19,21,0.07)] transition focus-within:!border-[#87CEEB]">
             <Search size={19} className="shrink-0 text-[var(--premium-muted)]" />
             <span className="sr-only">搜索文档</span>
@@ -978,10 +941,13 @@ function KnowledgeBaseDocumentView({
           </div>
         </section>
 
-        <section ref={documentListRef} aria-labelledby="document-list-title">
+        <section ref={documentListRef} className="min-h-0 flex-1 overflow-auto overscroll-contain pb-1 pr-1 [scrollbar-gutter:stable]" aria-labelledby="document-list-title">
           <div className="mb-3 flex items-end justify-between gap-4">
-            <div>
-              <h3 id="document-list-title" className="text-[clamp(19px,2.2vw,28px)] font-black leading-none">库内文档</h3>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-2">
+              <h2 id="document-list-title" className="text-[clamp(19px,2.2vw,28px)] font-black leading-none">库内文档</h2>
+              <p className="text-[11px] font-bold text-[var(--premium-muted)]">
+                {formatNumber(documentTotal)} 份文档 · {formatNumber(documentSegmentTotal)} 个分段
+              </p>
             </div>
             <p className="hidden text-right text-[11px] leading-5 text-[var(--premium-muted)] sm:block">
               点击文档进入预览<br />版本与入库时间永久留痕
@@ -1034,7 +1000,8 @@ function KnowledgeBaseDocumentView({
               </div>
             </div>
           )}
-          {!documentsQuery.isLoading && !documentsQuery.isError && documentTotal > 0 ? (
+        </section>
+        {!documentsQuery.isLoading && !documentsQuery.isError && documentTotal > 0 ? (
             <DocumentPagination
               page={activeDocumentPage}
               total={documentTotal}
@@ -1047,8 +1014,7 @@ function KnowledgeBaseDocumentView({
                 handleDocumentPageChange(1);
               }}
             />
-          ) : null}
-        </section>
+        ) : null}
       </div>
     </main>
     {deleteTarget ? (
@@ -1086,7 +1052,7 @@ function DocumentPagination({
   const visiblePages = getVisiblePages(page, totalPages);
 
   return (
-    <nav className="library-document-pagination mt-4 grid gap-3 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] p-3 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center" aria-label="文档分页">
+    <nav className="library-document-pagination grid shrink-0 gap-3 rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] p-3 shadow-[var(--premium-tight-shadow)] backdrop-blur-xl lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center" aria-label="文档分页">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-bold text-[var(--premium-muted)]">
         <span>
           共 <b className="text-[var(--premium-ink)]">{formatNumber(total)}</b> 份文档
@@ -1152,18 +1118,6 @@ function DocumentPagination({
         </button>
       </div>
     </nav>
-  );
-}
-
-function DocumentMetric({ value, label, accent = false }: { value: string; label: string; accent?: boolean }) {
-  return (
-    <div className="min-w-0 rounded-[8px] border border-white/10 bg-white/[0.07] p-3 backdrop-blur-md">
-      <strong className={[
-        "block truncate text-[clamp(16px,2vw,24px)] font-black leading-none",
-        accent ? "text-[#89C777]" : "text-white",
-      ].join(" ")}>{value}</strong>
-      <span className="mt-2 block truncate text-[9px] font-black text-white/55">{label}</span>
-    </div>
   );
 }
 
@@ -1500,15 +1454,6 @@ function documentAskTitle(document: LibraryDocumentItem) {
   return document.availabilityStatus === "FAILED"
     ? `${document.name} 入库失败，暂不可问答`
     : `${document.name} 正在入库，完成后可问答`;
-}
-
-function documentStatusFilterMetric(filter: DocumentStatusFilter) {
-  return {
-    ALL: "ALL",
-    ANSWERABLE: "READY",
-    PROCESSING: "ACTIVE",
-    FAILED: "FAILED",
-  }[filter];
 }
 
 function documentStatusFilterActiveClass() {

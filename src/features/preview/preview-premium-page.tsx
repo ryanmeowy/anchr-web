@@ -239,13 +239,13 @@ export function PreviewPremiumPage({ segmentId }: { segmentId: string }) {
                 </button>
                 <section className="min-w-0">
                   <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
-                    PREVIEW / CITATION SOURCE
+                    PREVIEW / CITATION
                   </p>
                   <h1 className="max-w-[900px] truncate text-[clamp(18px,2.6vw,36px)] font-black leading-none text-[var(--premium-ink)]">
                     {activeItem?.fileName ?? "引用预览"}
                   </h1>
                   <p className="mt-1.5 truncate text-[11px] font-bold text-[var(--premium-muted)]">
-                    {activeItem?.kbName ?? activeItem?.kbId ?? "知识库"} · 来自{from === "search" ? " Search" : from === "library" ? " Library Recent Citations" : " Ask"} 引用
+                    {activeItem?.kbName ?? activeItem?.kbId ?? "知识库"} · {from === "search" ? "搜索结果引用" : from === "library" ? "最近引用" : "回答引用"}
                   </p>
                 </section>
               </div>
@@ -1100,7 +1100,7 @@ function PreviewState({ label }: { label: string }) {
   return (
     <div className="grid min-h-[calc(100vh-112px)] place-items-center p-6 lg:min-h-[calc(100vh-160px)]">
       <div className="premium-surface grid min-h-40 w-full max-w-[420px] place-items-center rounded-[8px] p-6 text-center">
-        <Loader2 className="animate-spin text-[var(--premium-blue)]" size={26} />
+        <span className="ask-premium-spinner" aria-hidden="true" />
         <p className="mt-3 text-sm font-black text-[var(--premium-ink-soft)]">{label}</p>
       </div>
     </div>
@@ -1379,7 +1379,7 @@ function PdfContinuousPage({
     if (!isPageReady || !bboxRecords.length || !shouldAnimateBBox) return;
     const timeout = window.setTimeout(() => {
       setAnimatedBBoxSegment(segmentId);
-    }, 1150);
+    }, 1100);
     return () => window.clearTimeout(timeout);
   }, [bboxRecords.length, isPageReady, segmentId, shouldAnimateBBox]);
 
@@ -1630,12 +1630,12 @@ function BBoxOverlay({
     .map((record) => bboxToRect(record.bbox as PreviewBBox, pageHeightPt, scaleX, scaleY));
 
   return (
-    <div className="pointer-events-none absolute inset-0">
+    <div className="pointer-events-none absolute inset-0" aria-hidden="true">
       {rects.map((rect, index) => (
         <div
           key={index}
           data-citation-bbox={index === 0 ? "" : undefined}
-          className={`${animateLock ? styles.bboxLock : styles.bboxStable} absolute rounded-[8px] border-2 border-[#5B8CE0] bg-[rgba(91,140,224,0.1)]`}
+          className={`${animateLock ? styles.bboxLock : styles.bboxStable} absolute`}
           style={{
             left: rect.left,
             top: rect.top,

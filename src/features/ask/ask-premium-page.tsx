@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Copy,
   Edit3,
+  FileText,
   Folder,
   Loader2,
   MoreHorizontal,
@@ -75,6 +76,8 @@ import {
 } from "@/features/ask/preview-message-restore";
 import { recoverTraditionalTurn } from "@/features/ask/traditional-turn-recovery";
 import { useConversationAnswerStatus } from "@/features/ask/use-conversation-answer-status";
+import { TurnMaterialPicker } from "@/features/ask/turn-material-picker";
+import { resolveTurnMaterialScope, toggleTurnMaterial } from "@/features/ask/turn-material-scope";
 import { ApiError, apiClient, isAccessDeniedError } from "@/lib/api-client";
 import {
   consumeAssetScopeHandoff,
@@ -137,13 +140,14 @@ type MessageHistoryPage = {
   nextBeforeTurnId?: string | null;
 };
 type MessageHistoryPageCache = Record<string, MessageHistoryPage>;
-type ComposerMenu = "kb" | "mode" | "model" | null;
+type ComposerMenu = "kb" | "materials" | "mode" | "model" | null;
 type ActiveComposerMenu = Exclude<ComposerMenu, null>;
 type ComposerMenuPhase = "open" | "closing";
 type ComposerMenuPosition = {
   menu: ActiveComposerMenu;
   left: number;
   top: number;
+  maxHeight: number;
 };
 type ThemeMode = PremiumThemeMode;
 type PermissionNotice = {
@@ -169,6 +173,7 @@ type AskPreviewMessageOrigin = {
 type AskPremiumReturnState = {
   activeSessionId: string;
   query: string;
+  turnMaterialsBySession?: Record<string, AssetScope[]>;
   selectedKbIdsValue: string[] | null;
   selectedAnswerMode: ConversationAnswerMode;
   conversations: ConversationSession[];
@@ -435,6 +440,8 @@ export function AskPremiumPage() {
   const [traceHintVisible, setTraceHintVisible] = useState(false);
   const [agentEnabled, setAgentEnabled] = useState(false);
   const [activeAssetScope, setActiveAssetScope] = useState<AssetScope | null>(null);
+  const [turnMaterialsBySession, setTurnMaterialsBySession] = useState<Record<string, AssetScope[]>>({});
+  const turnMaterials = turnMaterialsBySession[activeSessionId] ?? [];
   const [assetNameCache, setAssetNameCache] = useState<Record<string, string>>({});
   const [scopeNotice, setScopeNotice] = useState<string | null>(null);
   const [permissionNotice, setPermissionNotice] = useState<PermissionNotice | null>(null);
@@ -489,6 +496,7 @@ export function AskPremiumPage() {
   );
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const kbButtonRef = useRef<HTMLButtonElement | null>(null);
+  const materialsButtonRef = useRef<HTMLButtonElement | null>(null);
   const modeButtonRef = useRef<HTMLButtonElement | null>(null);
   const modelButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -1529,6 +1537,9 @@ export function AskPremiumPage() {
       setActiveSessionId(restoredSessionId);
       if (handoff) setActiveAssetScope(handoff.scope);
       setQuery(state.query);
+      setTurnMaterialsBySession(handoff
+        ? { ...state.turnMaterialsBySession, [restoredSessionId]: [] }
+        : state.turnMaterialsBySession ?? {});
       setSelectedKbIdsValue(state.selectedKbIdsValue);
       setSelectedAnswerMode(state.selectedAnswerMode ?? "STRICT");
       setConversations(state.conversations);
@@ -1656,9 +1667,11 @@ export function AskPremiumPage() {
     const form = composerFormRef.current;
     const trigger = positionedComposerMenu === "kb"
       ? kbButtonRef.current
-      : positionedComposerMenu === "mode"
-        ? modeButtonRef.current
-        : modelButtonRef.current;
+      : positionedComposerMenu === "materials"
+        ? materialsButtonRef.current
+        : positionedComposerMenu === "mode"
+          ? modeButtonRef.current
+          : modelButtonRef.current;
 
     if (!form || !trigger) return;
 
@@ -1673,6 +1686,7 @@ export function AskPremiumPage() {
       menu: positionedComposerMenu,
       left: Math.min(Math.max(desiredLeft, minLeft), maxLeft),
       top: triggerRect.top - formRect.top - 10,
+      maxHeight: Math.max(120, triggerRect.top - 24),
     });
   }, [positionedComposerMenu]);
 
@@ -1688,10 +1702,13 @@ export function AskPremiumPage() {
 
     window.addEventListener("resize", updateComposerMenuPosition);
     window.addEventListener("scroll", updateComposerMenuPosition, true);
+    const observer = new ResizeObserver(updateComposerMenuPosition);
+    if (composerFormRef.current) observer.observe(composerFormRef.current);
     return () => {
       window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updateComposerMenuPosition);
       window.removeEventListener("scroll", updateComposerMenuPosition, true);
+      observer.disconnect();
     };
   }, [positionedComposerMenu, updateComposerMenuPosition]);
 
@@ -1702,9 +1719,11 @@ export function AskPremiumPage() {
       if (event.key !== "Escape") return;
       const trigger = composerMenu === "kb"
         ? kbButtonRef.current
-        : composerMenu === "mode"
-          ? modeButtonRef.current
-          : modelButtonRef.current;
+        : composerMenu === "materials"
+          ? materialsButtonRef.current
+          : composerMenu === "mode"
+            ? modeButtonRef.current
+            : modelButtonRef.current;
       setComposerMenu(null);
       trigger?.focus();
     };
@@ -2497,6 +2516,8 @@ export function AskPremiumPage() {
   };
 
   const handleNewConversation = () => {
+    setTurnMaterialsBySession((previous) => ({ ...previous, "": [] }));
+    setComposerMenu(null);
     pendingHistoryBottomSessionRef.current = null;
     cancelCompletedScrollTransition();
     releasePinnedQuestionLock();
@@ -2512,6 +2533,7 @@ export function AskPremiumPage() {
   };
 
   function handleSelectConversation(sessionId: string) {
+    setComposerMenu(null);
     pendingHistoryBottomSessionRef.current = sessionId;
     setHistoryBottomScrollRequest((current) => current + 1);
     cancelCompletedScrollTransition();
@@ -2565,6 +2587,7 @@ export function AskPremiumPage() {
       returnState: {
         activeSessionId,
         query,
+        turnMaterialsBySession,
         selectedKbIdsValue,
         selectedAnswerMode,
         conversations,
@@ -2587,6 +2610,7 @@ export function AskPremiumPage() {
   }, [
     activeSessionId,
     conversations,
+    turnMaterialsBySession,
     messagesBySession,
     historyPagesBySession,
     nextCursor,
@@ -2613,8 +2637,9 @@ export function AskPremiumPage() {
     cancelCompletedScrollTransition();
     messageSubmissionLockRef.current = true;
     setIsMessageSubmitting(true);
-    const requestAssetScope = activeAssetScope;
-    const effectiveKbIds = requestAssetScope?.kbId ? [requestAssetScope.kbId] : selectedKbIds;
+    const requestTurnMaterials = turnMaterials;
+    const { assetIds: requestAssetIds, kbIds: effectiveKbIds } = resolveTurnMaterialScope(requestTurnMaterials, activeAssetScope, selectedKbIds);
+    setComposerMenu(null);
 
     if (options.clearComposer) {
       setQuery("");
@@ -2646,6 +2671,7 @@ export function AskPremiumPage() {
         : { steps: [] });
 
       const requestId = makeMessageId("stream");
+      setTurnMaterialsBySession((previous) => ({ ...previous, [activeSessionId]: [] }));
       const userMessage: ChatMessage = {
         id: `${requestId}-user`,
         role: "user",
@@ -2664,7 +2690,7 @@ export function AskPremiumPage() {
         role: "assistant",
         content: "",
         sessionId: targetSessionId,
-        assetScope: requestAssetScope ? [requestAssetScope.assetId] : [],
+        assetScope: requestAssetIds,
         answerMode: selectedAnswerMode,
         executionMode: requestUsesAgent ? "AGENT" : "TRADITIONAL",
         pending: true,
@@ -2742,7 +2768,7 @@ export function AskPremiumPage() {
         {
           query: text,
           kbIds: effectiveKbIds.length > 0 ? effectiveKbIds : undefined,
-          assetIdList: requestAssetScope ? [requestAssetScope.assetId] : [],
+          assetIdList: requestAssetIds,
           answerMode: selectedAnswerMode,
           agentEnabled: requestUsesAgent,
         },
@@ -3093,6 +3119,12 @@ export function AskPremiumPage() {
       }
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
+      if (!acceptedTurnId && requestTurnMaterials.length) {
+        setTurnMaterialsBySession((previous) => ({
+          ...previous,
+          [targetSessionId]: previous[targetSessionId]?.length ? previous[targetSessionId] : requestTurnMaterials,
+        }));
+      }
       const accessDenied = isAccessDeniedError(error);
       if (accessDenied) {
         setPermissionNotice({
@@ -3295,6 +3327,7 @@ export function AskPremiumPage() {
     setActiveAssetScope(null);
   };
   const prepareKbScopeChange = () => {
+    setTurnMaterialsBySession((previous) => ({ ...previous, [activeSessionId]: [] }));
     if (!activeAssetScope) return;
     clearActiveAssetScope();
     setScopeNotice("已关闭“仅此资料”范围，并切换知识库");
@@ -3541,9 +3574,44 @@ export function AskPremiumPage() {
                       <AssetScopeChip scope={activeAssetScope} onClear={clearActiveAssetScope} />
                     </div>
                   ) : null}
-                  <label className="text-xs font-black text-slate-500" htmlFor="ask-premium-input">
-                    MESSAGE
-                  </label>
+                  {turnMaterials.length ? (
+                    <div className="flex max-h-24 min-w-0 flex-wrap gap-1.5 overflow-y-auto" aria-label="已选本轮资料">
+                      {turnMaterials.map((scope) => (
+                        <AssetScopeChip
+                          key={scope.assetId}
+                          scope={scope}
+                          label=""
+                          compact
+                          onClear={() => setTurnMaterialsBySession((previous) => ({
+                            ...previous,
+                            [activeSessionId]: (previous[activeSessionId] ?? []).filter((item) => item.assetId !== scope.assetId),
+                          }))}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="flex min-w-0 items-center justify-between gap-3">
+                    <label className="text-xs font-black text-slate-500" htmlFor="ask-premium-input">
+                      MESSAGE
+                    </label>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-label="Agent 模式"
+                      aria-checked={agentEnabled && agentAvailable}
+                      disabled={!agentAvailable}
+                      title={agentAvailable ? "开启后由 Agent 规划并执行回答" : "Agent 暂不可用"}
+                      onClick={toggleAgent}
+                      className="ask-premium-agent-switch inline-flex min-h-8 shrink-0 items-center gap-2 rounded-full px-1 text-xs font-semibold text-[var(--premium-ink-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-blue)] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <span>Agent</span>
+                      <span className="ask-premium-agent-switch-track" aria-hidden="true">
+                        <span className="ask-premium-agent-switch-thumb">
+                          {agentEnabled && agentAvailable ? <Check size={12} strokeWidth={2} /> : <X size={12} strokeWidth={2} />}
+                        </span>
+                      </span>
+                    </button>
+                  </div>
                   <textarea
                     id="ask-premium-input"
                     value={query}
@@ -3566,20 +3634,21 @@ export function AskPremiumPage() {
                   <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_42px] items-center gap-2.5 max-sm:block max-sm:w-full max-sm:max-w-full">
                     <div className="ask-premium-control-strip flex min-w-0 flex-wrap items-center gap-1.5 overflow-visible pr-1 max-sm:w-full max-sm:max-w-full max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overflow-y-visible max-sm:py-1 max-sm:pr-[52px] max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden" data-composer-menu>
                       <ComposerButton
-                        active={agentEnabled && agentAvailable}
-                        agent
-                        disabled={!agentAvailable}
-                        icon={<AiStarIcon />}
-                        label={agentAvailable ? `Agent · ${agentEnabled ? "开启" : "关闭"}` : "Agent · 后端未开启"}
-                        onClick={toggleAgent}
-                      />
-                      <ComposerButton
                         ref={kbButtonRef}
                         active={composerMenu === "kb"}
                         menu
                         icon={<KnowledgeControlIcon />}
                         label={`知识库 · ${selectedKbIds.length || 0} 个`}
                         onClick={() => setComposerMenu((value) => (value === "kb" ? null : "kb"))}
+                      />
+                      <ComposerButton
+                        ref={materialsButtonRef}
+                        active={composerMenu === "materials"}
+                        menu
+                        menuRole="dialog"
+                        icon={<FileText size={14} />}
+                        label={turnMaterials.length ? `资料 · ${turnMaterials.length} 份` : "选择资料"}
+                        onClick={() => setComposerMenu((value) => value === "materials" ? null : "materials")}
                       />
                       <ComposerButton
                         ref={modeButtonRef}
@@ -3645,6 +3714,32 @@ export function AskPremiumPage() {
                       ) : (
                         <div className="rounded-[8px] bg-[#f7f7f2] p-3 text-sm text-slate-500">暂无可选知识库</div>
                       )}
+                    </FloatingMenu>
+                  ) : null}
+
+                  {positionedComposerMenu === "materials" && activeComposerMenuPosition ? (
+                    <FloatingMenu key="materials" phase={composerMenu ? "open" : "closing"} position={activeComposerMenuPosition} role="dialog" label="选择本轮资料">
+                      <TurnMaterialPicker
+                        key={activeSessionId}
+                        knowledgeBases={kbOptions.filter((kb) => selectedKbIds.includes(kb.id))}
+                        selected={turnMaterials}
+                        onToggle={(scope) => {
+                          clearActiveAssetScope();
+                          setAssetNameCache(rememberAssetScopes([scope]));
+                          setTurnMaterialsBySession((previous) => {
+                            const current = previous[activeSessionId] ?? [];
+                            return {
+                              ...previous,
+                              [activeSessionId]: toggleTurnMaterial(current, scope),
+                            };
+                          });
+                        }}
+                        onClear={() => setTurnMaterialsBySession((previous) => ({ ...previous, [activeSessionId]: [] }))}
+                        onDone={() => {
+                          setComposerMenu(null);
+                          materialsButtonRef.current?.focus();
+                        }}
+                      />
                     </FloatingMenu>
                   ) : null}
 
@@ -4494,17 +4589,17 @@ function SendGlyph() {
 
 const ComposerButton = forwardRef<HTMLButtonElement, {
   active: boolean;
-  agent?: boolean;
   disabled?: boolean;
   menu?: boolean;
+  menuRole?: "listbox" | "dialog";
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
 }>(function ComposerButton({
   active,
-  agent = false,
   disabled = false,
   menu = false,
+  menuRole = "listbox",
   icon,
   label,
   onClick,
@@ -4517,13 +4612,11 @@ const ComposerButton = forwardRef<HTMLButtonElement, {
       onClick={onClick}
       className={[
         "ask-premium-control-button inline-flex h-[34px] min-h-[34px] min-w-0 shrink-0 cursor-pointer items-center gap-1.5 border px-2.5 transition disabled:cursor-not-allowed disabled:opacity-50",
-        agent ? "ask-premium-agent-control" : "",
         menu ? "" : "hover:-translate-y-px disabled:hover:translate-y-0",
         active ? "border-blue-600/30 bg-[#111315] text-white" : "border-black/10 bg-[#f7f7f2]/90 text-[#111315] hover:border-blue-600/30 hover:bg-[#111315] hover:text-white",
       ].join(" ")}
       aria-expanded={menu ? active : undefined}
-      aria-haspopup={menu ? "listbox" : undefined}
-      aria-pressed={agent ? active : undefined}
+      aria-haspopup={menu ? menuRole : undefined}
     >
       {icon}
       <span className="max-w-[154px] truncate max-sm:max-w-28">{label}</span>
@@ -4535,10 +4628,14 @@ function FloatingMenu({
   children,
   phase,
   position,
+  role = "listbox",
+  label,
 }: {
   children: React.ReactNode;
   phase: ComposerMenuPhase;
-  position: { left: number; top: number } | null;
+  position: { left: number; top: number; maxHeight: number } | null;
+  role?: "listbox" | "dialog";
+  label?: string;
 }) {
   return (
     <div
@@ -4548,8 +4645,12 @@ function FloatingMenu({
       style={{
         left: position ? `${position.left}px` : "12px",
         top: position ? `${position.top}px` : "0px",
+        maxHeight: role === "dialog" ? position?.maxHeight : undefined,
+        overflowY: role === "dialog" ? "auto" : undefined,
+        zIndex: role === "dialog" ? 70 : undefined,
       }}
-      role="listbox"
+      role={role}
+      aria-label={label}
       aria-hidden={phase === "closing" || undefined}
     >
       {children}
@@ -4837,7 +4938,7 @@ function PremiumChatBubble({
           editing ? "is-editing" : "",
         ].join(" ")}
       >
-        <div className="relative max-w-[680px]">
+        <div className={`relative min-w-0 ${editing ? "max-w-[680px]" : "max-w-[min(85%,560px)]"}`}>
           {editing ? (
             <form
               className="ask-premium-user-editor grid gap-3 rounded-[8px] px-3 py-2.5 text-[14px] font-normal leading-6 text-[#111315]"
@@ -4882,7 +4983,7 @@ function PremiumChatBubble({
             </form>
           ) : (
             <>
-              <div className="ask-premium-user-text max-w-[680px] whitespace-pre-wrap break-words text-left text-[14px] font-normal leading-6 text-[#111315]">
+              <div className="ask-premium-user-text whitespace-pre-wrap break-words text-left text-[14px] font-normal leading-6 text-[#111315]">
                 {message.content}
               </div>
               <div className="ask-premium-user-actions" aria-label="消息操作">
@@ -4993,7 +5094,7 @@ function PremiumChatBubble({
               <AssetScopeChip
                 key={assetId}
                 compact
-                label="本轮资料"
+                label=""
                 scope={{
                   assetId,
                   fileName: assetNameCache[assetId]
