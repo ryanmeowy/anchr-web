@@ -590,10 +590,10 @@ export function SearchPremiumPage() {
               <section className="premium-page-header-content relative z-10 flex min-w-0 flex-col justify-center gap-2">
                 <div>
                   <p className="ask-premium-kicker ask-premium-mode-kicker mb-1.5 text-[10px] font-black">
-                    SEARCH / EVIDENCE RADAR
+                    SEARCH / RETRIEVAL
                   </p>
                   <h1 className="max-w-[720px] text-[clamp(16px,2.4vw,34px)] font-black leading-none">
-                    从一条问题，抵达可验证的证据链。
+                    沿着线索查阅
                   </h1>
                 </div>
               </section>

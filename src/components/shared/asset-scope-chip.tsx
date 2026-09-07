@@ -23,7 +23,7 @@ export function AssetScopeChip({
       ].join(" ")}
     >
       <FileText size={compact ? 12 : 14} aria-hidden="true" />
-      <span className="shrink-0">{label}</span>
+      {label ? <span className="shrink-0">{label}</span> : null}
       <span className="max-w-[220px] truncate font-bold opacity-75">{scope.fileName || scope.assetId}</span>
       {onClear ? (
         <button

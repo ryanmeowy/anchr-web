@@ -12,25 +12,28 @@
 
 .bboxLock,
 .bboxStable {
-  isolation: isolate;
+  border: 0 solid transparent;
+  border-radius: 2px;
+  outline: 1px solid rgba(64, 115, 198, 0.75);
+  outline-offset: 3px;
+  background: rgba(91, 140, 224, 0.1);
   box-shadow:
     0 0 0 1px rgba(91, 140, 224, 0.14),
     0 12px 34px rgba(91, 140, 224, 0.18);
 }
 
 .bboxLock {
-  animation: previewPremiumBBoxLock 1100ms cubic-bezier(0.19, 1, 0.22, 1) both;
+  animation: previewPremiumBBoxLock 1000ms ease-in-out both;
 }
 
-.bboxLock::before {
+.bboxLock::after {
   position: absolute;
-  inset: 0;
+  inset: -4px;
   border: 2px solid #5b8ce0;
   border-radius: inherit;
   pointer-events: none;
   content: "";
-  transform-origin: center;
-  animation: previewPremiumBBoxFrameLock 1000ms cubic-bezier(0.19, 1, 0.22, 1) both;
+  animation: previewPremiumBBoxSettle 1000ms ease-in-out both;
 }
 
 @keyframes previewPremiumReveal {
@@ -71,46 +74,24 @@
 }
 
 @keyframes previewPremiumBBoxLock {
-  0% {
-    border-color: transparent;
-    box-shadow:
-      0 0 0 12px rgba(91, 140, 224, 0),
-      0 12px 34px rgba(91, 140, 224, 0);
+  from {
+    border-radius: 8px;
+    outline-color: transparent;
   }
 
-  72% {
-    border-color: rgba(91, 140, 224, 0.55);
-    box-shadow:
-      0 0 0 5px rgba(91, 140, 224, 0.18),
-      0 18px 44px rgba(91, 140, 224, 0.26);
-  }
-
-  100% {
-    border-color: #5b8ce0;
-    box-shadow:
-      0 0 0 1px rgba(91, 140, 224, 0.14),
-      0 12px 34px rgba(91, 140, 224, 0.18);
+  to {
+    border-radius: 2px;
+    outline-color: rgba(64, 115, 198, 0.75);
   }
 }
 
-@keyframes previewPremiumBBoxFrameLock {
-  0% {
-    opacity: 0.16;
-    transform: scale(1.42);
-  }
-
-  36% {
-    opacity: 0.86;
-  }
-
-  82% {
+@keyframes previewPremiumBBoxSettle {
+  from {
     opacity: 1;
-    transform: scale(1);
   }
 
-  100% {
+  to {
     opacity: 0;
-    transform: scale(1);
   }
 }
 
@@ -119,7 +100,7 @@
   .pulse,
   .highlight,
   .bboxLock,
-  .bboxLock::before {
+  .bboxLock::after {
     animation-duration: 1ms;
     animation-iteration-count: 1;
   }
