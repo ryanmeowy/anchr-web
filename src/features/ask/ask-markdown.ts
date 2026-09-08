@@ -48,7 +48,9 @@ function transformCitationTextNodes(parent: MarkdownAstNode) {
 
 function splitCitationText(value: string) {
   const nodes: MarkdownAstNode[] = [];
-  const citationPattern = /(?<![A-Za-z0-9_])\[(\d+(?:-\d+)?)]/g;
+  // Hierarchical labels can follow identifiers (e.g. metadata[2-1]).
+  // Keep the legacy single-number boundary so arr[1] remains ordinary text.
+  const citationPattern = /\[(\d+-\d+)]|(?<![A-Za-z0-9_])\[(\d+)]/g;
   let cursor = 0;
   let match = citationPattern.exec(value);
 
@@ -56,7 +58,7 @@ function splitCitationText(value: string) {
     if (match.index > cursor) nodes.push({ type: "text", value: value.slice(cursor, match.index) });
     nodes.push({
       type: "link",
-      url: `#anchr-citation-${match[1]}`,
+      url: `#anchr-citation-${match[1] ?? match[2]}`,
       children: [{ type: "text", value: match[0] }],
     });
     cursor = match.index + match[0].length;

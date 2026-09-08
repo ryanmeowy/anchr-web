@@ -68,3 +68,39 @@ test("keeps the rest of the answer visible when a LaTeX command is invalid", () 
   assert.match(html, /definitelyNotACommand/);
   assert.match(html, /after\./);
 });
+
+
+test("renders adjacent and repeated hierarchical citations after English identifiers", () => {
+  const html = renderMarkdown("dimensions[1-1][2-1]。API Key 写入 metadata[2-1]。");
+  assert.equal((html.match(/href="#anchr-citation-1-1"/g) ?? []).length, 1);
+  assert.equal((html.match(/href="#anchr-citation-2-1"/g) ?? []).length, 2);
+  assert.match(html, /dimensions<a href="#anchr-citation-1-1"/);
+  assert.match(html, /metadata<a href="#anchr-citation-2-1"/);
+});
+
+test("hierarchical citations also follow digits and underscores without consuming text", () => {
+  const html = renderMarkdown("版本2[1-1] field_[2-1]，中文[3-1]。");
+  for (const label of ["1-1", "2-1", "3-1"]) assert.ok(html.includes(`href="#anchr-citation-${label}"`));
+  assert.match(html, /版本2<a/);
+  assert.match(html, /field_<a/);
+});
+
+test("does not transform hierarchical citations inside code, math or existing links", () => {
+  const html = renderMarkdown([
+    "`metadata[2-1]` and $x_{[2-1]}$.",
+    "",
+    "```text",
+    "dimensions[1-1][2-1]",
+    "```",
+    "",
+    "[source[2-1]](https://example.com) and actual source[2-1].",
+  ].join("\n"));
+  assert.equal((html.match(/href="#anchr-citation-2-1"/g) ?? []).length, 1);
+  assert.doesNotMatch(html, /href="#anchr-citation-1-1"/);
+  assert.match(html, /<code>metadata\[2-1\]<\/code>/);
+});
+
+test("incomplete hierarchical markers remain text until closed", () => {
+  assert.doesNotMatch(renderMarkdown("metadata[2-"), /href="#anchr-citation/);
+  assert.match(renderMarkdown("metadata[2-1]"), /href="#anchr-citation-2-1"/);
+});

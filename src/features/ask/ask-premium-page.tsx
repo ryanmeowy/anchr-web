@@ -32,6 +32,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
+import { TraditionalCitationStrip } from "@/features/ask/traditional-citation-strip";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { useBackgroundTasks, type TrackedAgentTask } from "@/components/app/background-task-provider";
 import {
@@ -4872,6 +4873,7 @@ function PremiumChatBubble({
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
+  const [citationNotice, setCitationNotice] = useState<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -5111,8 +5113,10 @@ function PremiumChatBubble({
               content={normalizeMarkdownAnswer(stripTraceText(message.content), Boolean(message.agentTask))}
               citationLabels={conversationCitationLabels(message.citations)}
               onCitation={(citationLabel) => {
-                const resolved = resolveConversationCitation(message.citations, citationLabel);
+                const resolved = resolveConversationCitation(message.citations, citationLabel, message.executionMode !== "AGENT");
+                if (!resolved) setCitationNotice("无法定位该引用片段，请刷新回答后重试。");
                 if (resolved) {
+                  setCitationNotice(null);
                   onPreviewCitation(
                     message,
                     resolved.citation,
@@ -5139,10 +5143,15 @@ function PremiumChatBubble({
           && stripTraceText(message.content).trim() !== GENERATION_FAILED_MESSAGE ? (
           <div className="mt-2 text-xs font-semibold text-rose-700 dark:text-rose-200">{GENERATION_FAILED_MESSAGE}</div>
         ) : null}
+        {citationNotice ? <div role="status" className="mt-2 text-xs text-amber-700">{citationNotice}</div> : null}
         {message.error ? <div className="mt-3 text-sm text-rose-600">{message.error}</div> : null}
         {message.answerStatus !== "NO_EVIDENCE"
           && message.answerStatus !== "GENERATION_FAILED"
           && message.citations?.length ? (
+          message.executionMode !== "AGENT" ? (
+            <TraditionalCitationStrip citations={message.citations} assetNames={assetNameCache}
+              onPreview={(citation, index, chunk, label) => onPreviewCitation(message, citation, index, question, chunk, label)} />
+          ) : (
           <div className="mt-4 flex flex-wrap gap-2" aria-label="引用来源">
             {message.citations.map((citation, index) => {
               const citationFileName = citation.fileName?.trim()
@@ -5165,6 +5174,7 @@ function PremiumChatBubble({
               );
             })}
           </div>
+          )
         ) : null}
       </div>
     </article>
