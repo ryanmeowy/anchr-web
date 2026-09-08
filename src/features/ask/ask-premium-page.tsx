@@ -3606,9 +3606,7 @@ export function AskPremiumPage() {
                     >
                       <span>Agent</span>
                       <span className="ask-premium-agent-switch-track" aria-hidden="true">
-                        <span className="ask-premium-agent-switch-thumb">
-                          {agentEnabled && agentAvailable ? <Check size={12} strokeWidth={2} /> : <X size={12} strokeWidth={2} />}
-                        </span>
+                        <span className="ask-premium-agent-switch-thumb" />
                       </span>
                     </button>
                   </div>
