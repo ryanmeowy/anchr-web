@@ -27,6 +27,7 @@ export function conversationCitationLabels(citations: ConversationCitation[] | u
 export function resolveConversationCitation(
   citations: ConversationCitation[] | undefined,
   label: CitationLabel,
+  requireExactSegment = false,
 ): ResolvedConversationCitation | undefined {
   const values = citations ?? [];
   for (let citationPosition = 0; citationPosition < values.length; citationPosition += 1) {
@@ -34,6 +35,7 @@ export function resolveConversationCitation(
     const chunk = citation.chunks?.find((item) => item.citationLabel === label);
     if (chunk) return { citation, citationPosition, chunk, label };
   }
+  if (requireExactSegment && label.includes("-")) return undefined;
   const assetIndex = parseAssetCitationIndex(label);
   const citationPosition = values.findIndex(
     (citation, index) => (citation.citationIndex ?? index + 1) === assetIndex,
