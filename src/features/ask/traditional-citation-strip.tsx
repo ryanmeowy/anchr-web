@@ -114,7 +114,7 @@ export function TraditionalCitationStrip({ citations, assetNames, onPreview }: P
                 onClick={() => preview(selected, active, chunk)}
                 className="block w-full rounded-xl border border-current/10 p-3 text-left hover:bg-black/5 dark:hover:bg-white/5">
                 <span className="text-xs font-semibold">[{chunk.citationLabel ?? selected.citationIndex ?? active + 1}]{chunk.pageNo != null ? ` · 第 ${chunk.pageNo} 页` : ""}</span>
-                <span className="mt-1 block line-clamp-3 break-words text-xs leading-5 opacity-70">{chunk.snippet || chunk.title || "查看原文片段"}</span>
+                <span className="mt-1 block line-clamp-3 break-words text-xs leading-5 opacity-70">{(chunk.snippet || chunk.title || "查看原文片段").replace(/<\/?em\b[^>]*>/gi, "")}</span>
               </button>
             ))}
           </div>
