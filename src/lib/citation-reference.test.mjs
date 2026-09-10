@@ -41,13 +41,23 @@ test("deduplicates hierarchical labels without exposing a mixed group fallback",
 });
 
 
-test("traditional hierarchical references require the exact segment while legacy and Agent behavior remain compatible", () => {
+test("hierarchical references require exact segments across traditional, Agent and task results; legacy labels remain readable", () => {
   const citations = [{ citationIndex: 1, chunks: [
     { segmentId: "seg-1", citationLabel: "1-1" },
     { segmentId: "seg-2", citationLabel: "1-2" },
   ] }];
-  assert.equal(resolveConversationCitation(citations, "1-2", true)?.chunk.segmentId, "seg-2");
-  assert.equal(resolveConversationCitation(citations, "1-9", true), undefined);
-  assert.equal(resolveConversationCitation(citations, "1", true)?.chunk.segmentId, "seg-1");
-  assert.equal(resolveConversationCitation(citations, "1-9")?.chunk.segmentId, "seg-1");
+  assert.equal(resolveConversationCitation(citations, "1-2")?.chunk.segmentId, "seg-2");
+  assert.equal(resolveConversationCitation(citations, "1-9"), undefined);
+  assert.equal(resolveConversationCitation(citations, "1")?.chunk.segmentId, "seg-1");
+  assert.equal(resolveConversationCitation(citations, "1-9"), undefined);
+});
+
+
+test("all historical or asynchronous sources remain addressable beyond five documents", () => {
+  const citations = Array.from({ length: 8 }, (_, index) => ({
+    citationIndex: index + 1,
+    chunks: [{ segmentId: `s${index}`, citationLabel: `${index + 1}-1` }],
+  }));
+  assert.equal(resolveConversationCitation(citations, "8-1")?.chunk.segmentId, "s7");
+  assert.equal(conversationCitationLabels(citations).length, 8);
 });

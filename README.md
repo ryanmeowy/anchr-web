@@ -42,6 +42,9 @@ Built with the Next.js App Router and React, the application is designed around 
 ## Design principles
 
 - **Evidence first** — answers, search results, and citations stay connected to their source documents.
+
+Traditional RAG, Agent and asynchronous summaries share document-level source cards in one horizontally scrollable row, with overflow controls and edge hints. Cards count cited segments; multiple segments open in a separate dialog. Hierarchical body references locate the exact segment and report a missing target instead of opening the first segment. Synchronous answers have up to five sources; the UI preserves all sources in asynchronous and historical results. Legacy single-level references keep their original numbering.
+
 - **Built for long-running work** — imports and Agent runs expose background state, recovery, and cancellation.
 - **Clear trust boundaries** — guest, user, and administrator permissions are handled consistently, with identity-scoped client state.
 - **Observable interactions** — Agent Activity, model calls, latency, tokens, and index health remain visible.

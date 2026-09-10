@@ -32,7 +32,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
-import { TraditionalCitationStrip } from "@/features/ask/traditional-citation-strip";
+import { CitationStrip } from "@/features/ask/citation-strip";
 import { PremiumRail } from "@/components/app/premium-rail";
 import { useBackgroundTasks, type TrackedAgentTask } from "@/components/app/background-task-provider";
 import {
@@ -5113,7 +5113,7 @@ function PremiumChatBubble({
               content={normalizeMarkdownAnswer(stripTraceText(message.content), Boolean(message.agentTask))}
               citationLabels={conversationCitationLabels(message.citations)}
               onCitation={(citationLabel) => {
-                const resolved = resolveConversationCitation(message.citations, citationLabel, message.executionMode !== "AGENT");
+                const resolved = resolveConversationCitation(message.citations, citationLabel);
                 if (!resolved) setCitationNotice("无法定位该引用片段，请刷新回答后重试。");
                 if (resolved) {
                   setCitationNotice(null);
@@ -5148,33 +5148,8 @@ function PremiumChatBubble({
         {message.answerStatus !== "NO_EVIDENCE"
           && message.answerStatus !== "GENERATION_FAILED"
           && message.citations?.length ? (
-          message.executionMode !== "AGENT" ? (
-            <TraditionalCitationStrip citations={message.citations} assetNames={assetNameCache}
+            <CitationStrip citations={message.citations} assetNames={assetNameCache}
               onPreview={(citation, index, chunk, label) => onPreviewCitation(message, citation, index, question, chunk, label)} />
-          ) : (
-          <div className="mt-4 flex flex-wrap gap-2" aria-label="引用来源">
-            {message.citations.map((citation, index) => {
-              const citationFileName = citation.fileName?.trim()
-                || (citation.assetId ? assetNameCache[citation.assetId]?.trim() : undefined)
-                || "引用来源";
-              return (
-                <button
-                  type="button"
-                  key={`${citation.assetId ?? citationFileName ?? index}-${index}`}
-                  onClick={() => onPreviewCitation(message, citation, index, question)}
-                  disabled={!citation.chunks?.length}
-                  className="ask-premium-citation inline-flex min-h-[30px] items-center gap-2 rounded-full border border-black/10 bg-[#f7f7f2]/85 px-2.5 text-[11px] font-normal text-[#111315] transition hover:-translate-y-0.5 hover:bg-[#111315] hover:text-white disabled:opacity-60"
-                  title={`[${citation.citationIndex ?? index + 1}] ${citationFileName}${citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}`}
-                >
-                  <span className="min-w-0 truncate">
-                    [{citation.citationIndex ?? index + 1}] {citationFileName}
-                    {citation.chunks?.length > 1 ? ` · ${citation.chunks.length} 处` : ""}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          )
         ) : null}
       </div>
     </article>

@@ -11,14 +11,14 @@ type Props = {
   onPreview: (citation: ConversationCitation, index: number, chunk: CitationChunk, label: string) => void;
 };
 
-/** Traditional answers only. Agent keeps its existing citation interaction. */
-export function TraditionalCitationStrip({ citations, assetNames, onPreview }: Props) {
+/** Shared citation navigation for synchronous answers, task results and history. */
+export function CitationStrip({ citations, assetNames, onPreview }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const [edges, setEdges] = useState({ left: false, right: false });
   const [active, setActive] = useState<number | null>(null);
-  const visible = citations.slice(0, 5);
+  const visible = citations;
   const selected = active === null ? null : visible[active];
   const fileName = (citation: ConversationCitation) => citation.fileName?.trim()
     || (citation.assetId ? assetNames[citation.assetId]?.trim() : undefined) || "引用来源";
