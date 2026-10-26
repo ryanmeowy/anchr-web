@@ -28,7 +28,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import { apiClient } from "@/lib/api-client";
+import {hasConfiguredAccessToken, apiClient} from "@/lib/api-client";
 import { formatNumber } from "@/lib/format";
 import type { PremiumThemeMode } from "@/lib/premium-theme";
 import { saveRecentCitationPreviewNavigation } from "@/lib/preview-context";
@@ -107,6 +107,9 @@ export function PremiumHeaderUtilities({
 
   const knowledgeBasesQuery = useQuery({
     queryKey: ["kbs"],
+    // A guest has no token: listing knowledge bases can only answer 401, which would surface as
+    // an auth error the visitor cannot act on.
+    enabled: hasConfiguredAccessToken(),
     queryFn: () => apiClient.listKnowledgeBases(1, 50),
     staleTime: 30_000,
     refetchInterval: 30_000,

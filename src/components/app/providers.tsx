@@ -41,6 +41,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             retry: 1,
             staleTime: 20_000,
+            // A guest browsing without a token gets 401 from every protected endpoint. Those are
+            // "not available yet", not failures, and surfacing them put an auth error in front
+            // of someone who simply had not claimed a trial.
+            throwOnError: false,
           },
         },
       }),

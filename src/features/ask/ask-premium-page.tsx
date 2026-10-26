@@ -79,7 +79,7 @@ import { recoverTraditionalTurn } from "@/features/ask/traditional-turn-recovery
 import { useConversationAnswerStatus } from "@/features/ask/use-conversation-answer-status";
 import { TurnMaterialPicker } from "@/features/ask/turn-material-picker";
 import { resolveTurnMaterialScope, toggleTurnMaterial } from "@/features/ask/turn-material-scope";
-import { ApiError, apiClient, getConfiguredAccessToken, isAccessDeniedError } from "@/lib/api-client";
+import {hasConfiguredAccessToken, ApiError, apiClient, getConfiguredAccessToken, isAccessDeniedError} from "@/lib/api-client";
 import {
   consumeAssetScopeHandoff,
   readAskAssetScope,
@@ -595,6 +595,9 @@ export function AskPremiumPage() {
 
   const kbsQuery = useQuery({
     queryKey: ["kbs"],
+    // A guest has no token: listing knowledge bases can only answer 401, which would surface as
+    // an auth error the visitor cannot act on.
+    enabled: hasConfiguredAccessToken(),
     queryFn: () => apiClient.listKnowledgeBases(1, 50),
   });
 

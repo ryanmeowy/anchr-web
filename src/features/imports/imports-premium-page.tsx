@@ -34,7 +34,7 @@ import {
 import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
 import { ActionErrorNotice } from "@/components/shared/action-error-notice";
 import { FileTypeIcon, normalizeExtension } from "@/components/shared/file-type-icon";
-import { apiClient, isAccessDeniedError } from "@/lib/api-client";
+import {hasConfiguredAccessToken, apiClient, isAccessDeniedError} from "@/lib/api-client";
 import { formatFileSize, formatNumber, statusText } from "@/lib/format";
 import {
   isIngestionCreatePersistenceError,
@@ -107,6 +107,9 @@ export function ImportsPremiumPage({
 
   const kbsQuery = useQuery({
     queryKey: ["kbs"],
+    // A guest has no token: listing knowledge bases can only answer 401, which would surface as
+    // an auth error the visitor cannot act on.
+    enabled: hasConfiguredAccessToken(),
     queryFn: () => apiClient.listKnowledgeBases(1, 50),
     refetchOnWindowFocus: false,
   });

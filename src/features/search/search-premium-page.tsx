@@ -36,7 +36,7 @@ import { PremiumRail } from "@/components/app/premium-rail";
 import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
-import { apiClient } from "@/lib/api-client";
+import {hasConfiguredAccessToken, apiClient} from "@/lib/api-client";
 import {
   consumeAssetScopeHandoff,
   readSearchAssetScope,
@@ -208,6 +208,9 @@ export function SearchPremiumPage() {
 
   const kbsQuery = useQuery({
     queryKey: ["kbs"],
+    // A guest has no token: listing knowledge bases can only answer 401, which would surface as
+    // an auth error the visitor cannot act on.
+    enabled: hasConfiguredAccessToken(),
     queryFn: () => apiClient.listKnowledgeBases(1, 50),
     refetchOnWindowFocus: false,
   });

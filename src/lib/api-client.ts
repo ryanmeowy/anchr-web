@@ -201,6 +201,15 @@ export function isDemoQuotaExhausted(error: unknown) {
   return code === "DEMO_QUOTA_EXHAUSTED" || code === "DEMO_DAILY_LIMIT_REACHED";
 }
 
+/**
+ * Synchronous check for "is there a token right now". Query `enabled` flags use this so a guest
+ * never issues a call that can only answer 401.
+ */
+export function hasConfiguredAccessToken() {
+  if (typeof window === "undefined") return false;
+  return Boolean(getConfiguredAccessToken());
+}
+
 export function getConfiguredAccessToken() {
   if (typeof window === "undefined") {
     return "";
