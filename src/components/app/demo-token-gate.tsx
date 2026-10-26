@@ -232,6 +232,31 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
         {state.kind === "closed" || state.kind === "blocked" ? (
           <p className="mt-6 rounded-[8px] bg-amber-500/15 px-3 py-2 text-[13px] text-amber-200">
             {state.reason}
+            <button
+              type="button"
+              className="ml-2 underline"
+              onClick={() => {
+                // Re-ask the server: the quota resets on a boundary the client cannot see, and
+                // an operator may have flipped the switch back on.
+                setState({ kind: "checking" });
+                setWidgetError(null);
+                void apiClient
+                  .demoStatus()
+                  .then((value) => {
+                    setStatus(value);
+                    if (!value.enabled || value.closed) {
+                      setState({ kind: "closed", reason: "演示环境暂时关闭，请稍后再试。" });
+                    } else {
+                      setState({ kind: "entry" });
+                    }
+                  })
+                  .catch(() => {
+                    setState({ kind: "blocked", reason: "无法连接演示服务，请稍后重试。" });
+                  });
+              }}
+            >
+              重新检查
+            </button>
           </p>
         ) : null}
 
