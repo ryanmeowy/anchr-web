@@ -21,10 +21,8 @@ import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilitie
 import {
   ACCESS_TOKEN_CHANGED_EVENT,
   apiClient,
-  clearAccessToken,
   getConfiguredAccessToken,
   getConfiguredAccessTokenRole,
-  saveAccessToken,
   type AccessTokenRole,
 } from "@/lib/api-client";
 import {
@@ -703,7 +701,7 @@ export function SettingsPremiumPage() {
                       restricted={!hasOwnerAccess}
                       restrictedMessage={configuredAccessToken == null ? "正在检查访问权限" : "访客状态无法查看"}
                     />
-                    <SecurityPanel />
+                    <div />
                   </div>
                 </section>
               </div>
@@ -1893,112 +1891,3 @@ function StoragePanel({
   );
 }
 
-function maskToken(t: string): string {
-  if (t.length <= 12) return "******";
-  return t.slice(0, 6) + "******" + t.slice(-6);
-}
-
-function SecurityPanel() {
-  const storedToken = useAccessTokenSnapshot();
-  const [tokenDraft, setTokenDraft] = useState<string | null>(null);
-  const [savingToken, setSavingToken] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const token = tokenDraft ?? storedToken ?? "";
-  const displayToken = tokenDraft !== null ? tokenDraft : storedToken ? maskToken(storedToken) : "";
-
-  return (
-    <article className={`${PANEL_CLASS} min-w-0`} aria-label="访问令牌">
-      <div className="mb-4 flex items-start gap-3">
-        <div>
-          <h2 className="text-[clamp(18px,2vw,24px)] font-black leading-none text-[var(--premium-ink)]">访问令牌</h2>
-          <p className="mt-1 text-[11px] leading-normal text-[var(--premium-muted)]">用于接口访问认证</p>
-        </div>
-        {saved ? <span className={`${SUCCESS_PILL_CLASS} settings-token-success-pill ml-auto`}>保存成功</span> : null}
-      </div>
-
-      <label className={FORM_FIELD_CLASS}>
-        <span>配置 Token</span>
-        <input
-          className={`${FIELD_CLASS} settings-token-input`}
-          value={displayToken}
-          placeholder="粘贴 X-Access-Token"
-          onChange={(event) => {
-            setTokenDraft(event.target.value);
-            setSaved(false);
-            setSaveError(null);
-          }}
-        />
-      </label>
-
-      {saveError ? (
-        <div className="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-rose-50 px-3 py-2 text-[11px] font-black leading-[1.55] text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
-          <AlertCircle size={16} />
-          保存失败：{saveError}
-        </div>
-      ) : null}
-
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={savingToken}
-          onClick={async () => {
-            const normalizedToken = token.trim();
-            setSavingToken(true);
-            try {
-              if (!normalizedToken) {
-                clearAccessToken();
-                setTokenDraft("");
-                setSaveError(null);
-                setSaved(true);
-                window.setTimeout(() => setSaved(false), 2000);
-                return;
-              }
-
-              const validation = await apiClient.validateAccessToken(normalizedToken);
-              if (!validation.valid || validation.role === "GUEST") {
-                throw new Error(validation.role === "GUEST" ? "访客 Token 不会保存" : "Token 无效");
-              }
-              if (validation.role !== "ADMIN" && validation.role !== "USER") {
-                throw new Error("Token 角色无效");
-              }
-
-              saveAccessToken(normalizedToken, validation.role);
-              setTokenDraft(null);
-              setSaveError(null);
-              setSaved(true);
-              window.setTimeout(() => setSaved(false), 2000);
-            } catch (error) {
-              setSaved(false);
-              setSaveError(getErrorMessage(error, "Token 校验失败，请稍后重试"));
-            } finally {
-              setSavingToken(false);
-            }
-          }}
-          className={BUTTON_PRIMARY_CLASS}
-        >
-          {savingToken ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
-          <span className={ACTION_BUTTON_LABEL_CLASS}>{savingToken ? "校验中" : "保存"}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            try {
-              clearAccessToken();
-              setTokenDraft("");
-              setSaveError(null);
-              setSaved(true);
-              window.setTimeout(() => setSaved(false), 2000);
-            } catch (error) {
-              setSaved(false);
-              setSaveError(getErrorMessage(error, "请稍后重试"));
-            }
-          }}
-          className={BUTTON_SECONDARY_CLASS}
-        >
-          <span className={ACTION_BUTTON_LABEL_CLASS}>清除</span>
-        </button>
-      </div>
-    </article>
-  );
-}

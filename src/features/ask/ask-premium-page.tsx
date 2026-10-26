@@ -615,7 +615,8 @@ export function AskPremiumPage() {
     const frame = window.requestAnimationFrame(() => {
       setAssetNameCache(readAssetNameCache());
       try {
-        setAgentEnabled(window.localStorage.getItem(ASK_AGENT_ENABLED_KEY) === "1");
+        // Demo default: Agent mode is on unless the visitor explicitly turned it off.
+        setAgentEnabled(window.localStorage.getItem(ASK_AGENT_ENABLED_KEY) !== "0");
         setHistoryCollapsed(window.localStorage.getItem(ASK_HISTORY_COLLAPSED_KEY) === "1");
         setTraceCollapsed(window.localStorage.getItem(ASK_TRACE_COLLAPSED_KEY) === "1");
       } catch { /* ignore */ }

@@ -58,11 +58,18 @@ export const ACCESS_TOKEN_STORAGE_KEY = "anchr.accessToken";
 export const ACCESS_TOKEN_ROLE_STORAGE_KEY = "anchr.accessTokenRole";
 const TOKEN_KEY = ACCESS_TOKEN_STORAGE_KEY;
 const TOKEN_ROLE_KEY = ACCESS_TOKEN_ROLE_STORAGE_KEY;
-const DEFAULT_GUEST_ACCESS_TOKEN = "xIu-ZTIfGSjRcWZpw23Le0c7SwAv1sjI";
 export const ACCESS_TOKEN_CHANGED_EVENT = "anchr:access-token-changed";
 
 export type AccessTokenRole = "ADMIN" | "USER" | "GUEST";
 export type TokenValidationResult = { valid: boolean; role: AccessTokenRole };
+export type DemoStatus = { enabled: boolean; closed: boolean; tokenQuota: number; siteKey: string };
+export type DemoToken = {
+  token: string;
+  role: AccessTokenRole;
+  userId: string;
+  expiresAt: number;
+  turnstileSiteKey: string;
+};
 
 type ApiErrorMetadata = {
   traceId?: string;
@@ -165,25 +172,17 @@ export function isAuthenticationError(error: unknown) {
   return error.status === 401 || code === "AUTH_TOKEN_INVALID";
 }
 
-function isBuiltinGuestAccessToken(token: string) {
-  return token.trim() === DEFAULT_GUEST_ACCESS_TOKEN;
-}
-
 export function getConfiguredAccessToken() {
   if (typeof window === "undefined") {
     return "";
   }
 
-  const storedToken = window.localStorage.getItem(TOKEN_KEY)?.trim() ?? "";
-  if (isBuiltinGuestAccessToken(storedToken)) {
-    return "";
-  }
-
-  return storedToken;
+  return window.localStorage.getItem(TOKEN_KEY)?.trim() ?? "";
 }
 
 export function getAccessToken() {
-  return getConfiguredAccessToken() || DEFAULT_GUEST_ACCESS_TOKEN;
+  // No built-in fallback: a visitor must obtain a demo token before any API call.
+  return getConfiguredAccessToken();
 }
 
 export function getConfiguredAccessTokenRole(): AccessTokenRole {
@@ -207,7 +206,7 @@ export function getAccessTokenIdentityKey(token: string | null | undefined) {
 
 export function saveAccessToken(token: string, role: AccessTokenRole) {
   const normalizedToken = token.trim();
-  if (!normalizedToken || isBuiltinGuestAccessToken(normalizedToken) || role === "GUEST") {
+  if (!normalizedToken || role === "GUEST") {
     clearAccessToken();
     return;
   }
@@ -464,6 +463,13 @@ function consumeAgentTaskSseChunk(
 export const apiClient = {
   validateAccessToken: (token: string) =>
     request<TokenValidationResult>("/api/v1/auth/validate-token", { token }),
+  demoStatus: () => request<DemoStatus>("/api/v1/auth/demo/status", { token: null }),
+  issueDemoToken: (turnstileToken: string) =>
+    request<DemoToken>("/api/v1/auth/demo", {
+      method: "POST",
+      body: { turnstileToken },
+      token: null,
+    }),
   recentQuestions: (limit = 10, cursor?: string | null) =>
     request<RecentQuestionList>(`/api/v1/activity/recent-questions?${activityQuery(limit, cursor)}`),
   recentCitations: (limit = 10, cursor?: string | null) =>
