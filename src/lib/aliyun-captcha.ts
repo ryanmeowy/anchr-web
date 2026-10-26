@@ -15,9 +15,12 @@ const SDK_URL = "https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptc
 type InitOptions = {
   SceneId: string;
   mode: "popup" | "embed";
-  /** Required: container the widget renders into. */
+  /**
+   * Required: a CSS selector beginning with "#". The SDK only resolves values that start with
+   * "#", so a bare id or an element reference fails validation.
+   */
   element: string;
-  /** Required: element whose click opens the popup. */
+  /** Required: same selector rule as element. */
   button: string;
   /** Called with the parameter that must be verified server-side. */
   success: (captchaVerifyParam: string) => void;

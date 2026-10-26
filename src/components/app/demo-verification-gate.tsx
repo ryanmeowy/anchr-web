@@ -25,11 +25,17 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
   const [attempt, setAttempt] = useState(0);
   const instanceRef = useRef<{ show?: () => void } | null>(null);
   const userClickedRef = useRef(false);
+  const initialisedRef = useRef(false);
 
   const blocked = phase.kind === "closed";
 
   useEffect(() => {
     if (verified || blocked || !sceneId) return;
+    // The SDK binds to the element/button ids once and consumes them. Re-running init on the
+    // same ids logs "element/button invalid" and can tear down a working widget, so it happens
+    // exactly once per mount; retry resets this flag.
+    if (initialisedRef.current) return;
+    initialisedRef.current = true;
     let cancelled = false;
 
     const timeout = window.setTimeout(() => {
@@ -62,11 +68,13 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
     function mountCaptcha() {
       const init = window.initAliyunCaptcha;
       if (cancelled || !init || !sceneId) return;
+      // The SDK resolves these with `t[0] === "#" ? querySelector(t) : null`, so the value must be
+      // a CSS selector starting with "#". A bare id resolves to null and fails validation.
       init({
         SceneId: sceneId,
         mode: "popup",
-        element: ELEMENT_ID,
-        button: TRIGGER_ID,
+        element: `#${ELEMENT_ID}`,
+        button: `#${TRIGGER_ID}`,
         // Documented callback names: success receives the parameter to verify server-side.
         success: (captchaVerifyParam: string) => {
           // Logged because the SDK has been observed invoking success without any interaction,
@@ -159,6 +167,7 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
               onClick={() => {
                 setWidgetError(null);
                 setReady(false);
+                initialisedRef.current = false;
                 setAttempt((value) => value + 1);
                 retryVerify(null);
               }}
