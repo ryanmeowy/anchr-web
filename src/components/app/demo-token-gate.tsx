@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   ACCESS_TOKEN_CHANGED_EVENT,
+  DEMO_EXHAUSTED_EVENT,
   apiClient,
+  clearAccessToken,
   getConfiguredAccessToken,
   saveAccessToken,
   type DemoStatus,
@@ -91,6 +93,18 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [token]);
+
+  // An ordinary workspace call can exhaust the credits or lose the token; return to the entry
+  // card instead of leaving the visitor on a workspace that only produces errors.
+  useEffect(() => {
+    const onExhausted = () => {
+      clearAccessToken();
+      handledTokenRef.current = null;
+      setState({ kind: "blocked", reason: "本次试用次数已用完。" });
+    };
+    window.addEventListener(DEMO_EXHAUSTED_EVENT, onExhausted);
+    return () => window.removeEventListener(DEMO_EXHAUSTED_EVENT, onExhausted);
+  }, []);
 
   const issue = useCallback(async (turnstileToken: string) => {
     setIssuing(true);

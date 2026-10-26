@@ -59,6 +59,7 @@ export const ACCESS_TOKEN_ROLE_STORAGE_KEY = "anchr.accessTokenRole";
 const TOKEN_KEY = ACCESS_TOKEN_STORAGE_KEY;
 const TOKEN_ROLE_KEY = ACCESS_TOKEN_ROLE_STORAGE_KEY;
 export const ACCESS_TOKEN_CHANGED_EVENT = "anchr:access-token-changed";
+export const DEMO_EXHAUSTED_EVENT = "anchr:demo-exhausted";
 
 export type AccessTokenRole = "ADMIN" | "USER" | "GUEST";
 export type TokenValidationResult = { valid: boolean; role: AccessTokenRole };
@@ -172,6 +173,18 @@ export function isAuthenticationError(error: unknown) {
   return error.status === 401 || code === "AUTH_TOKEN_INVALID";
 }
 
+/**
+ * True when the caller has no usable demo credit left.
+ *
+ * The backend answers 429 with a specific code; treating it as an ordinary failure would leave
+ * the visitor staring at an error with no way back to the entry card.
+ */
+export function isDemoQuotaExhausted(error: unknown) {
+  if (!(error instanceof ApiError)) return false;
+  const code = error.code?.toUpperCase();
+  return code === "DEMO_QUOTA_EXHAUSTED" || code === "DEMO_DAILY_LIMIT_REACHED";
+}
+
 export function getConfiguredAccessToken() {
   if (typeof window === "undefined") {
     return "";
@@ -231,6 +244,17 @@ function emitAccessTokenChanged() {
   window.dispatchEvent(new Event(ACCESS_TOKEN_CHANGED_EVENT));
 }
 
+/**
+ * Signals that the visitor has no usable credentials left.
+ *
+ * A quota rejection happens on an ordinary workspace call, far from the gate that can recover,
+ * so the request layer announces it rather than every call site handling the code.
+ */
+function emitDemoExhausted() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(DEMO_EXHAUSTED_EVENT));
+}
+
 async function request<T>(path: string, options: RequestOptions = {}) {
   const basePath = process.env.NEXT_PUBLIC_API_BASE_PATH ?? "/backend";
   // An explicit token (including null, meaning "send none") wins over the stored one.
@@ -249,7 +273,12 @@ async function request<T>(path: string, options: RequestOptions = {}) {
   const payload = (await response.json().catch(() => null)) as ApiResult<T> | null;
 
   if (!response.ok || !payload || payload.code < 200 || payload.code >= 300) {
-    throw apiErrorFromPayload(payload, response.status, `请求失败：${response.status}`);
+    const error = apiErrorFromPayload(payload, response.status, `请求失败：${response.status}`);
+    if (isDemoQuotaExhausted(error) || isAuthenticationError(error)) {
+      // The gate owns recovery, so it must hear about this without every caller knowing.
+      emitDemoExhausted();
+    }
+    throw error;
   }
 
   return payload.data;
