@@ -69,7 +69,6 @@ export type DemoToken = {
   role: AccessTokenRole;
   userId: string;
   expiresAt: number;
-  turnstileSiteKey: string;
 };
 
 type ApiErrorMetadata = {
