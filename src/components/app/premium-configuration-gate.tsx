@@ -4,8 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
-import { apiClient } from "@/lib/api-client";
+import { useSyncExternalStore, type ReactNode } from "react";
+import { apiClient, getConfiguredAccessToken } from "@/lib/api-client";
 import { PREMIUM_THEME, type PremiumThemeMode } from "@/lib/premium-theme";
 import {
   getIndexCompatibilityIssue,
@@ -21,40 +21,63 @@ const PREMIUM_CONFIGURATION_FONT_STACK =
 const SETTINGS_BUTTON_CLASS =
   "imports-primary-action inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#111315] px-3.5 text-[12px] font-black text-white shadow-[0_16px_38px_rgba(17,19,21,0.2)] transition hover:-translate-y-0.5 dark:bg-white dark:text-[#111315]";
 
+function subscribeToken(callback: () => void) {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+}
+
+/**
+ * These checks ask the server what an operator has configured. A visitor without a token gets
+ * 401 on every one of them, which used to freeze the page on "index status unknown" even though
+ * nothing it could do needed those answers. Without a token the checks are skipped and the page
+ * renders; the individual actions still require a token and will say so.
+ */
 export function usePremiumSystemConfiguration() {
+  const hasToken = Boolean(useSyncExternalStore(
+    subscribeToken,
+    getConfiguredAccessToken,
+    () => "",
+  ));
+
   const storageQuery = useQuery({
     queryKey: ["settings", "storage"],
     queryFn: () => apiClient.getStorageConfig(),
+    enabled: hasToken,
     retry: false,
     refetchOnWindowFocus: false,
   });
   const rerankQuery = useQuery({
     queryKey: ["settings", "rerank"],
     queryFn: () => apiClient.getCapabilityConfig("RERANK"),
+    enabled: hasToken,
     retry: false,
     refetchOnWindowFocus: false,
   });
   const embeddingQuery = useQuery({
     queryKey: ["settings", "embedding"],
     queryFn: () => apiClient.getCapabilityConfig("EMBEDDING"),
+    enabled: hasToken,
     retry: false,
     refetchOnWindowFocus: false,
   });
   const multiEmbeddingQuery = useQuery({
     queryKey: ["settings", "multi-embedding"],
     queryFn: () => apiClient.getCapabilityConfig("MULTI_EMBEDDING"),
+    enabled: hasToken,
     retry: false,
     refetchOnWindowFocus: false,
   });
   const generationQuery = useQuery({
     queryKey: ["settings", "generation"],
     queryFn: () => apiClient.getCapabilityConfig("GENERATION"),
+    enabled: hasToken,
     retry: false,
     refetchOnWindowFocus: false,
   });
   const indexStatusQuery = useQuery({
     queryKey: ["index", "status"],
     queryFn: () => apiClient.getIndexStatus(),
+    enabled: hasToken,
     retry: false,
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
@@ -65,13 +88,14 @@ export function usePremiumSystemConfiguration() {
     },
   });
 
-  const isLoading =
+  // Without a token nothing is queried, so "still loading" must not be inferred from the queries.
+  const isLoading = hasToken && (
     storageQuery.isPending ||
     rerankQuery.isPending ||
     embeddingQuery.isPending ||
     multiEmbeddingQuery.isPending ||
     generationQuery.isPending ||
-    indexStatusQuery.isPending;
+    indexStatusQuery.isPending);
 
   const hasStorage = storageQuery.isSuccess && storageQuery.data != null;
   const hasRerank = rerankQuery.isSuccess && (rerankQuery.data?.length ?? 0) > 0;
@@ -86,11 +110,13 @@ export function usePremiumSystemConfiguration() {
   const indexReady = isIndexFullyOperational(indexStatus);
 
   return {
+    hasToken,
     isLoading,
     missingAny,
     indexReady,
     indexStatus,
-    indexStatusError: indexStatusQuery.isError,
+    // Only a real failure counts; a skipped query is not an error.
+    indexStatusError: hasToken && indexStatusQuery.isError,
     refetchIndexStatus: indexStatusQuery.refetch,
   };
 }
@@ -103,6 +129,11 @@ export function usePremiumSystemConfiguration() {
 export function PremiumSystemConfigurationBoundary({ children }: { children: ReactNode }) {
   const theme = PREMIUM_THEME;
   const systemConfig = usePremiumSystemConfiguration();
+
+  // A visitor without a token may still browse; the operator-only checks below are skipped.
+  if (!systemConfig.hasToken) {
+    return <>{children}</>;
+  }
 
   if (systemConfig.isLoading) {
     return (
