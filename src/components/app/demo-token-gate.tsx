@@ -211,6 +211,12 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  // A missing sitekey is a deployment mistake, not a visitor problem: say so instead of showing
+  // an endless blank card.
+  const visibleError = status && !status.siteKey
+    ? "演示站点配置缺失（sitekey），请联系维护者。"
+    : widgetError;
+
   return (
     <div className="grid min-h-screen place-items-center bg-[#111315] px-6 text-white">
       <div className="w-full max-w-[440px] rounded-[12px] border border-white/10 bg-white/5 p-8">
@@ -231,9 +237,9 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
 
         <div className="mt-6 min-h-[70px]" ref={containerRef} />
 
-        {widgetError ? (
+        {visibleError ? (
           <p className="mt-3 rounded-[8px] bg-rose-500/15 px-3 py-2 text-[12px] leading-relaxed text-rose-200">
-            {widgetError}
+            {visibleError}
             <button
               type="button"
               className="ml-2 underline"
