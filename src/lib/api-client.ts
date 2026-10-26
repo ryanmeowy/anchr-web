@@ -233,7 +233,8 @@ function emitAccessTokenChanged() {
 
 async function request<T>(path: string, options: RequestOptions = {}) {
   const basePath = process.env.NEXT_PUBLIC_API_BASE_PATH ?? "/backend";
-  const token = options.token ?? getAccessToken();
+  // An explicit token (including null, meaning "send none") wins over the stored one.
+  const token = Object.hasOwn(options, "token") ? options.token : getAccessToken();
   const response = await fetch(`${basePath}${path}`, {
     method: options.method ?? "GET",
     headers: {
