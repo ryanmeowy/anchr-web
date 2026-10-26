@@ -1,7 +1,8 @@
 "use client";
 
+import { DemoTokenButton } from "@/components/app/demo-token-button";
 import { useQuery } from "@tanstack/react-query";
-import { Download, MessageSquare, Search, Settings, User } from "lucide-react";
+import { Download, MessageSquare, Search, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useSyncExternalStore, type ComponentType, type SVGProps } from "react";
@@ -11,8 +12,7 @@ import {
   clearAccessToken,
   getAccessTokenIdentityKey,
   getConfiguredAccessToken,
-  getConfiguredAccessTokenRole,
-  isAuthenticationError,
+    isAuthenticationError,
   saveAccessToken,
 } from "@/lib/api-client";
 
@@ -47,10 +47,6 @@ function getServerConfiguredAccessToken() {
   return null;
 }
 
-function getServerAccessTokenRole() {
-  return "GUEST" as const;
-}
-
 export function PremiumRail() {
   const pathname = usePathname();
   const configuredAccessToken = useSyncExternalStore(
@@ -58,18 +54,6 @@ export function PremiumRail() {
     getConfiguredAccessToken,
     getServerConfiguredAccessToken,
   );
-  const configuredRole = useSyncExternalStore(
-    subscribeConfiguredAccessToken,
-    getConfiguredAccessTokenRole,
-    getServerAccessTokenRole,
-  );
-  const userStatus = configuredRole === "ADMIN" ? "admin" : configuredRole === "USER" ? "user" : "guest";
-  const statusConfig = {
-    guest: { label: "访客", detail: "浏览权限", tone: "guest" },
-    admin: { label: "管理员", detail: "所有权限", tone: "admin" },
-    user: { label: "用户", detail: "部分权限", tone: "user" },
-  }[userStatus];
-
   const tokenValidationQuery = useQuery({
     queryKey: ["auth", "validate-token", getAccessTokenIdentityKey(configuredAccessToken)],
     queryFn: () => apiClient.validateAccessToken(configuredAccessToken ?? ""),
@@ -121,14 +105,10 @@ export function PremiumRail() {
         })}
       </nav>
       <div className="ml-auto flex shrink-0 items-center gap-2 lg:mt-auto lg:ml-0 lg:grid">
-        <div
-          className={`premium-user-status is-${statusConfig.tone} flex min-h-11 w-10 shrink-0 flex-col items-center justify-center gap-1 border-0 bg-transparent p-0 text-[9px] font-bold leading-none transition`}
-          aria-label={`${statusConfig.label}，${statusConfig.detail}`}
-          title={`${statusConfig.label} · ${statusConfig.detail}`}
-        >
-          <User size={17} strokeWidth={1.7} aria-hidden="true" />
-          <span className="whitespace-nowrap">{statusConfig.label}</span>
-        </div>
+        {/* The role badge is replaced by the demo entry point: a visitor who cannot see how to
+            claim a token has no way into the demo at all, and the readout doubles as the only
+            place showing credits and expiry. */}
+        <DemoTokenButton />
       </div>
     </aside>
   );

@@ -64,6 +64,13 @@ export const DEMO_EXHAUSTED_EVENT = "anchr:demo-exhausted";
 export type AccessTokenRole = "ADMIN" | "USER" | "GUEST";
 export type TokenValidationResult = { valid: boolean; role: AccessTokenRole };
 export type DemoStatus = { enabled: boolean; closed: boolean; tokenQuota: number; siteKey: string };
+export type DemoUsage = {
+  quota: number;
+  used: number;
+  remaining: number;
+  expiresAt: number;
+};
+
 export type DemoToken = {
   token: string;
   role: AccessTokenRole;
@@ -499,6 +506,7 @@ export const apiClient = {
       body: { turnstileToken },
       token: null,
     }),
+  demoUsage: () => request<DemoUsage | null>("/api/v1/auth/demo/usage", {}),
   recentQuestions: (limit = 10, cursor?: string | null) =>
     request<RecentQuestionList>(`/api/v1/activity/recent-questions?${activityQuery(limit, cursor)}`),
   recentCitations: (limit = 10, cursor?: string | null) =>
