@@ -18,7 +18,7 @@ const TRIGGER_ID = "anchr-captcha-trigger";
  * Uses Alibaba Cloud CAPTCHA 2.0 (puzzle), served from mainland China.
  */
 export function DemoVerificationGate({ children }: { children: React.ReactNode }) {
-  const { verified, sceneId, encryptedSceneId, captchaPrefix, captchaRegion, phase, statusLoaded, verify, retryVerify } =
+  const { verified, sceneId, rawSceneId, encryptedSceneId, captchaPrefix, captchaRegion, phase, statusLoaded, verify, retryVerify } =
     useDemoToken();
   const [widgetError, setWidgetError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -73,9 +73,12 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
       // In encryption mode the server hands out an AES token. The SDK has a dedicated parameter
       // for it; putting the token in SceneId leaves the widget stuck at "preparing" with no
       // request ever leaving the browser.
-      const encrypted = encryptedSceneId;
+      // Both are sent together in encryption mode, per the vendor's own example:
+      // SceneId is the plain scenario and EncryptedSceneId proves it came from our server.
+      // Sending only the encrypted form leaves the SDK with no scenario and it stalls silently.
       init({
-        ...(encrypted ? { EncryptedSceneId: encrypted } : { SceneId: sceneId }),
+        SceneId: rawSceneId ?? sceneId,
+        ...(encryptedSceneId ? { EncryptedSceneId: encryptedSceneId } : {}),
         mode: "popup",
         element: `#${ELEMENT_ID}`,
         button: `#${TRIGGER_ID}`,
