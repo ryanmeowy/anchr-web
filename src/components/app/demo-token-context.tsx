@@ -226,7 +226,9 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
     verifying,
     sceneId: status?.sceneId ?? null,
     captchaPrefix: status?.prefix ?? null,
-    captchaRegion: "cn-shanghai",
+    // The client SDK accepts only cn / sgp / ga. The server-side region
+    // (cn-shanghai) is a different value and must not be passed here.
+    captchaRegion: "cn",
     verify,
     retryVerify,
     openDialog,

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDemoToken } from "@/components/app/demo-token-context";
 import { loadAliyunCaptcha } from "@/lib/aliyun-captcha";
 
 const RENDER_TIMEOUT_MS = 12_000;
+const ELEMENT_ID = "anchr-captcha-element";
+const TRIGGER_ID = "anchr-captcha-trigger";
 
 /**
  * Runs the human check on first entry, not on claim.
@@ -13,19 +15,16 @@ const RENDER_TIMEOUT_MS = 12_000;
  * touch the API, and a verified visitor can claim a token with one click instead of sitting
  * through a second challenge. The check alone issues nothing.
  *
- * Uses Alibaba Cloud CAPTCHA 2.0 (puzzle) because it is served from mainland China, unlike
- * Cloudflare Turnstile which is unreachable for visitors without a proxy.
+ * Uses Alibaba Cloud CAPTCHA 2.0 (puzzle), served from mainland China.
  */
 export function DemoVerificationGate({ children }: { children: React.ReactNode }) {
-  const {
-    verified, sceneId, captchaPrefix, captchaRegion, phase, statusLoaded, verify, retryVerify,
-  } = useDemoToken();
-  // A stable id is required by the SDK so it can bind to our button. Generated once with
-  // useId, not during render, which React 19 forbids.
-  const buttonId = useId();
+  const { verified, sceneId, captchaPrefix, captchaRegion, phase, statusLoaded, verify, retryVerify } =
+    useDemoToken();
   const [widgetError, setWidgetError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const instanceRef = useRef<{ show?: () => void } | null>(null);
+  const userClickedRef = useRef(false);
 
   const blocked = phase.kind === "closed";
 
@@ -34,30 +33,25 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
     let cancelled = false;
 
     const timeout = window.setTimeout(() => {
-      if (cancelled || ready) return;
-      setWidgetError("人机校验没有加载出来。请检查网络后重试。");
+      if (!cancelled && !ready) {
+        setWidgetError("人机校验没有加载出来。请检查网络后重试。");
+      }
     }, RENDER_TIMEOUT_MS);
 
-    void loadAliyunCaptcha(captchaRegion)
+    void loadAliyunCaptcha(captchaRegion, captchaPrefix ?? "")
       .then(() => {
-        if (cancelled || !window.initAliyunCaptcha) return;
-        window.initAliyunCaptcha({
-          SceneId: sceneId,
-          prefix: captchaPrefix ?? "",
-          mode: "popup",
-          // A hidden button is the documented way to share one instance and trigger it from our
-          // own UI; the SDK opens its popup when this element is clicked.
-          button: buttonId,
-          captchaVerifyCallback: async (captchaVerifyParam: string) => {
-            await verify(captchaVerifyParam);
-            return { captchaResult: true, bizResult: true };
-          },
-          onBizResultCallback: () => undefined,
-          // Signalled by the SDK once the instance exists.
-          getInstance: () => window.setTimeout(() => setReady(true), 0),
-          language: "zh",
-          region: captchaRegion,
-        });
+        const init = window.initAliyunCaptcha;
+        if (cancelled || !init || !sceneId) return;
+        // The SDK resolves element and button by id, so both must exist in the document before
+        // this call. They are rendered unconditionally by this component.
+        if (!document.getElementById(ELEMENT_ID) || !document.getElementById(TRIGGER_ID)) {
+          return new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+            .then(() => {
+              if (cancelled) return;
+              mountCaptcha();
+            });
+        }
+        mountCaptcha();
       })
       .catch(() => {
         if (!cancelled) {
@@ -65,14 +59,52 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
         }
       });
 
+    function mountCaptcha() {
+      const init = window.initAliyunCaptcha;
+      if (cancelled || !init || !sceneId) return;
+      init({
+        SceneId: sceneId,
+        mode: "popup",
+        element: ELEMENT_ID,
+        button: TRIGGER_ID,
+        // Documented callback names: success receives the parameter to verify server-side.
+        success: (captchaVerifyParam: string) => {
+          // Logged because the SDK has been observed invoking success without any interaction,
+          // which would let a bot through and skip the visible check.
+          // Only accept a pass that follows a real user action. The SDK fires success straight
+          // after init on some hosts, which would wave a bot through and skip the challenge.
+          if (!userClickedRef.current) {
+            return;
+          }
+          void verify(captchaVerifyParam);
+        },
+        fail: () => {
+          setWidgetError("人机校验未通过，请重试。");
+        },
+        getInstance: (instance: unknown) => {
+          instanceRef.current = instance as { show?: () => void } | null;
+          window.setTimeout(() => setReady(true), 0);
+        },
+        onError: (errorInfo: { code?: string; msg?: string }) => {
+          setWidgetError(`人机校验加载失败${errorInfo?.code ? `（${errorInfo.code}）` : ""}。请重试。`);
+        },
+        language: "cn",
+      });
+    }
+
     return () => {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [verified, blocked, sceneId, captchaPrefix, captchaRegion, verify, attempt, ready, buttonId]);
+  }, [verified, blocked, sceneId, captchaRegion, captchaPrefix, verify, attempt, ready]);
 
   const trigger = () => {
-    const button = document.getElementById(buttonId);
+    userClickedRef.current = true;
+    if (instanceRef.current?.show) {
+      instanceRef.current.show();
+      return;
+    }
+    const button = document.getElementById(TRIGGER_ID);
     if (button) {
       (button as HTMLButtonElement).click();
     } else {
@@ -94,21 +126,28 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
           <p className="mt-6 text-[13px] text-white/60">正在检查演示状态…</p>
         ) : null}
 
+        {/* Reserved containers the SDK binds to. They must exist before init runs. */}
+        <div id={ELEMENT_ID} />
+        <button type="button" id={TRIGGER_ID} aria-hidden="true" tabIndex={-1} style={{ display: "none" }} />
+
         {blocked ? (
           <p className="mt-6 rounded-[8px] bg-amber-500/15 px-3 py-2 text-[13px] text-amber-200">
             {phase.kind === "closed" ? phase.reason : ""}
           </p>
         ) : (
-          <div className="mt-6">
-            <button
-              type="button"
-              id={buttonId}
-              onClick={trigger}
-              className="w-full rounded-[8px] bg-[var(--premium-accent)] px-4 py-2.5 text-[13px] font-black text-[#111315] transition hover:brightness-110"
-            >
-              开始人机校验
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={trigger}
+            disabled={!ready}
+            className={[
+              "mt-6 w-full rounded-[8px] px-4 py-2.5 text-[13px] font-black transition",
+              ready
+                ? "bg-[#bbff66] text-[#111315] hover:brightness-110"
+                : "cursor-wait bg-white/10 text-white/45",
+            ].join(" ")}
+          >
+            {ready ? "开始人机校验" : "正在准备校验…"}
+          </button>
         )}
 
         {widgetError ? (

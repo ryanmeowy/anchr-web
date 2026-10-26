@@ -14,16 +14,21 @@ const SDK_URL = "https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptc
 
 type InitOptions = {
   SceneId: string;
-  prefix: string;
   mode: "popup" | "embed";
-  element?: string;
-  button?: string;
-  captchaVerifyCallback: (param: string) => Promise<{ captchaResult: boolean; bizResult: boolean }>;
-  onBizResultCallback?: () => void;
+  /** Required: container the widget renders into. */
+  element: string;
+  /** Required: element whose click opens the popup. */
+  button: string;
+  /** Called with the parameter that must be verified server-side. */
+  success: (captchaVerifyParam: string) => void;
+  fail?: (errorCode?: string) => void;
   getInstance?: (instance: unknown) => void;
-  slideStyle?: Record<string, string>;
+  onError?: (errorInfo: { code?: string; msg?: string }) => void;
+  onClose?: () => void;
+  slideStyle?: Record<string, unknown>;
   language?: string;
-  region?: string;
+  timeout?: number;
+  rem?: number;
 };
 
 type AliyunCaptchaGlobal = {
@@ -39,14 +44,24 @@ declare global {
 
 let loading: Promise<void> | null = null;
 
-/** Loads the SDK once per page; concurrent callers share the same promise. */
-export function loadAliyunCaptcha(region: string): Promise<void> {
+/**
+ * Loads the SDK once per page; concurrent callers share the same promise.
+ *
+ * {@code prefix} is mandatory in {@code AliyunCaptchaConfig}: without it the SDK builds request
+ * URLs against the literal host {@code undefined.captcha-open.aliyuncs.com} and the service
+ * answers IllegalUserTag, which surfaces only as a generic INIT_FAIL.
+ */
+export function loadAliyunCaptcha(region: string, prefix: string): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
   if (window.initAliyunCaptcha) return Promise.resolve();
   if (loading) return loading;
+  // A reload with a different identity must not reuse the previous global.
+  if (window.AliyunCaptchaConfig && window.AliyunCaptchaConfig.prefix !== prefix) {
+    window.AliyunCaptchaConfig = { region, prefix };
+  }
 
   // The SDK reads this global before the script runs, so it has to be set first.
-  window.AliyunCaptchaConfig = { region };
+  window.AliyunCaptchaConfig = { region, prefix };
 
   loading = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(`script[src="${SDK_URL}"]`);
