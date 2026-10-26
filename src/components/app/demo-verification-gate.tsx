@@ -111,7 +111,8 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [verified, blocked, sceneId, captchaRegion, captchaPrefix, verify, attempt, ready]);
+  }, [verified, blocked, sceneId, rawSceneId, encryptedSceneId, captchaRegion, captchaPrefix,
+      verify, attempt, ready]);
 
   const trigger = () => {
     userClickedRef.current = true;
