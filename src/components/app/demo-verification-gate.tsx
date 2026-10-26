@@ -1,22 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useState } from "react";
 import { useDemoToken } from "@/components/app/demo-token-context";
+import { loadAliyunCaptcha } from "@/lib/aliyun-captcha";
 
-const TURNSTILE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-const TURNSTILE_RENDER_TIMEOUT_MS = 10_000;
-
-type TurnstileApi = {
-  render: (container: HTMLElement, options: Record<string, unknown>) => string;
-  reset: (widgetId?: string) => void;
-  remove: (widgetId?: string) => void;
-};
-
-declare global {
-  interface Window {
-    turnstile?: TurnstileApi;
-  }
-}
+const RENDER_TIMEOUT_MS = 12_000;
 
 /**
  * Runs the human check on first entry, not on claim.
@@ -24,68 +12,73 @@ declare global {
  * The check answers "is this a person", so it belongs at the door: bots are stopped before they
  * touch the API, and a verified visitor can claim a token with one click instead of sitting
  * through a second challenge. The check alone issues nothing.
+ *
+ * Uses Alibaba Cloud CAPTCHA 2.0 (puzzle) because it is served from mainland China, unlike
+ * Cloudflare Turnstile which is unreachable for visitors without a proxy.
  */
 export function DemoVerificationGate({ children }: { children: React.ReactNode }) {
-  const { verified, verifying, siteKey, phase, statusLoaded, verify, retryVerify } = useDemoToken();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | null>(null);
+  const {
+    verified, sceneId, captchaPrefix, captchaRegion, phase, statusLoaded, verify, retryVerify,
+  } = useDemoToken();
+  // A stable id is required by the SDK so it can bind to our button. Generated once with
+  // useId, not during render, which React 19 forbids.
+  const buttonId = useId();
+  const [widgetError, setWidgetError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   const blocked = phase.kind === "closed";
 
   useEffect(() => {
-    if (verified || blocked || !siteKey) return;
+    if (verified || blocked || !sceneId) return;
     let cancelled = false;
 
     const timeout = window.setTimeout(() => {
-      if (cancelled || widgetIdRef.current) return;
-      retryVerify("人机校验没有加载出来。请关闭拦截本站的扩展后重试。");
-    }, TURNSTILE_RENDER_TIMEOUT_MS);
+      if (cancelled || ready) return;
+      setWidgetError("人机校验没有加载出来。请检查网络后重试。");
+    }, RENDER_TIMEOUT_MS);
 
-    const unmount = () => {
+    void loadAliyunCaptcha(captchaRegion)
+      .then(() => {
+        if (cancelled || !window.initAliyunCaptcha) return;
+        window.initAliyunCaptcha({
+          SceneId: sceneId,
+          prefix: captchaPrefix ?? "",
+          mode: "popup",
+          // A hidden button is the documented way to share one instance and trigger it from our
+          // own UI; the SDK opens its popup when this element is clicked.
+          button: buttonId,
+          captchaVerifyCallback: async (captchaVerifyParam: string) => {
+            await verify(captchaVerifyParam);
+            return { captchaResult: true, bizResult: true };
+          },
+          onBizResultCallback: () => undefined,
+          // Signalled by the SDK once the instance exists.
+          getInstance: () => window.setTimeout(() => setReady(true), 0),
+          language: "zh",
+          region: captchaRegion,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWidgetError("人机校验脚本被拦截或加载失败。请检查网络后重试。");
+        }
+      });
+
+    return () => {
       cancelled = true;
       window.clearTimeout(timeout);
-      if (window.turnstile && widgetIdRef.current) {
-        window.turnstile.remove(widgetIdRef.current);
-        widgetIdRef.current = null;
-      }
     };
+  }, [verified, blocked, sceneId, captchaPrefix, captchaRegion, verify, attempt, ready, buttonId]);
 
-    const mount = () => {
-      if (cancelled || !window.turnstile || !containerRef.current) return;
-      if (widgetIdRef.current) return;
-      widgetIdRef.current = window.turnstile.render(containerRef.current, {
-        sitekey: siteKey,
-        callback: (value: string) => void verify(value),
-        "error-callback": (errorCode?: string) => {
-          widgetIdRef.current = null;
-          retryVerify(errorCode
-            ? `人机校验加载失败（Cloudflare 错误码 ${errorCode}）。请关闭拦截本站的扩展后重试。`
-            : "人机校验加载失败。请关闭拦截本站的扩展后重试。");
-        },
-        "expired-callback": () => {
-          widgetIdRef.current = null;
-        },
-      });
-    };
-
-    if (window.turnstile) {
-      mount();
-      return unmount;
+  const trigger = () => {
+    const button = document.getElementById(buttonId);
+    if (button) {
+      (button as HTMLButtonElement).click();
+    } else {
+      setWidgetError("人机校验尚未就绪，请稍后重试。");
     }
-
-    const script = document.createElement("script");
-    script.src = TURNSTILE_SCRIPT;
-    script.async = true;
-    script.defer = true;
-    script.onload = mount;
-    script.onerror = () => {
-      if (!cancelled) {
-        retryVerify("人机校验脚本被拦截。请允许加载 challenges.cloudflare.com 后重试。");
-      }
-    };
-    document.head.appendChild(script);
-    return unmount;
-  }, [verified, blocked, siteKey, verify, retryVerify]);
+  };
 
   if (verified) return <>{children}</>;
 
@@ -106,20 +99,28 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
             {phase.kind === "closed" ? phase.reason : ""}
           </p>
         ) : (
-          <div className="mt-6 min-h-[70px]" ref={containerRef} />
+          <div className="mt-6">
+            <button
+              type="button"
+              id={buttonId}
+              onClick={trigger}
+              className="w-full rounded-[8px] bg-[var(--premium-accent)] px-4 py-2.5 text-[13px] font-black text-[#111315] transition hover:brightness-110"
+            >
+              开始人机校验
+            </button>
+          </div>
         )}
 
-        {phase.kind === "error" ? (
+        {widgetError ? (
           <p className="mt-3 rounded-[8px] bg-rose-500/15 px-3 py-2 text-[12px] leading-relaxed text-rose-200">
-            {phase.reason}
+            {widgetError}
             <button
               type="button"
               className="ml-2 underline"
               onClick={() => {
-                if (window.turnstile && widgetIdRef.current) {
-                  window.turnstile.remove(widgetIdRef.current);
-                }
-                widgetIdRef.current = null;
+                setWidgetError(null);
+                setReady(false);
+                setAttempt((value) => value + 1);
                 retryVerify(null);
               }}
             >
@@ -127,8 +128,6 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
             </button>
           </p>
         ) : null}
-
-        {verifying && !siteKey ? null : null}
       </div>
     </div>
   );

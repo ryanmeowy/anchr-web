@@ -40,9 +40,11 @@ type DemoContextValue = {
   /** True once the entry human check has passed. Gates the workspace, not the claim. */
   verified: boolean;
   verifying: boolean;
-  siteKey: string | null;
-  /** Records a Turnstile pass. Issues nothing. */
-  verify: (turnstileToken: string) => Promise<void>;
+  sceneId: string | null;
+  captchaPrefix: string | null;
+  captchaRegion: string;
+  /** Records a CAPTCHA pass. Issues nothing. */
+  verify: (captchaVerifyParam: string) => Promise<void>;
   retryVerify: (reason: string | null) => void;
   /** Opens the claim dialog. Requires a completed verification. */
   openDialog: () => void;
@@ -163,11 +165,11 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
    * Records the entry human check. It deliberately issues nothing: a visitor who only wants to
    * browse should not consume a trial. The token is held for the claim to spend.
    */
-  const verify = useCallback(async (turnstileToken: string) => {
+  const verify = useCallback(async (captchaVerifyParam: string) => {
     setVerifying(true);
     setPhase({ kind: "idle" });
-    // Keep the token: issuing later reuses it, so the visitor solves the check once.
-    setChallengeToken(turnstileToken);
+    // Keep the parameter: issuing later reuses it, so the visitor solves the puzzle once.
+    setChallengeToken(captchaVerifyParam);
     setVerified(true);
     setVerifying(false);
   }, []);
@@ -222,7 +224,9 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
     dialogOpen,
     verified,
     verifying,
-    siteKey: status?.siteKey ?? null,
+    sceneId: status?.sceneId ?? null,
+    captchaPrefix: status?.prefix ?? null,
+    captchaRegion: "cn-shanghai",
     verify,
     retryVerify,
     openDialog,

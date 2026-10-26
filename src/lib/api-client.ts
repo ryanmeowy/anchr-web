@@ -63,7 +63,15 @@ export const DEMO_EXHAUSTED_EVENT = "anchr:demo-exhausted";
 
 export type AccessTokenRole = "ADMIN" | "USER" | "GUEST";
 export type TokenValidationResult = { valid: boolean; role: AccessTokenRole };
-export type DemoStatus = { enabled: boolean; closed: boolean; tokenQuota: number; siteKey: string };
+export type DemoStatus = {
+  enabled: boolean;
+  closed: boolean;
+  tokenQuota: number;
+  /** Alibaba Cloud CAPTCHA scenario id; public, the browser needs it to render. */
+  sceneId: string;
+  /** CAPTCHA app prefix used by the client SDK. */
+  prefix: string;
+};
 export type DemoUsage = {
   quota: number;
   used: number;
@@ -503,10 +511,10 @@ export const apiClient = {
   validateAccessToken: (token: string) =>
     request<TokenValidationResult>("/api/v1/auth/validate-token", { token }),
   demoStatus: () => request<DemoStatus>("/api/v1/auth/demo/status", { token: null }),
-  issueDemoToken: (turnstileToken: string) =>
+  issueDemoToken: (captchaVerifyParam: string) =>
     request<DemoToken>("/api/v1/auth/demo", {
       method: "POST",
-      body: { turnstileToken },
+      body: { captchaVerifyParam },
       token: null,
     }),
   demoUsage: () => request<DemoUsage | null>("/api/v1/auth/demo/usage", {}),
