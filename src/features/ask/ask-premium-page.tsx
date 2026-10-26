@@ -79,7 +79,7 @@ import { recoverTraditionalTurn } from "@/features/ask/traditional-turn-recovery
 import { useConversationAnswerStatus } from "@/features/ask/use-conversation-answer-status";
 import { TurnMaterialPicker } from "@/features/ask/turn-material-picker";
 import { resolveTurnMaterialScope, toggleTurnMaterial } from "@/features/ask/turn-material-scope";
-import { ApiError, apiClient, isAccessDeniedError } from "@/lib/api-client";
+import { ApiError, apiClient, getConfiguredAccessToken, isAccessDeniedError } from "@/lib/api-client";
 import {
   consumeAssetScopeHandoff,
   readAskAssetScope,
@@ -1559,6 +1559,15 @@ export function AskPremiumPage() {
   }, [initialTurnId]);
 
   const loadConversations = useCallback(async (cursor?: string | null, append = false) => {
+    // No token means no history: the request would 401 and the message would look like a fault.
+    if (!getConfiguredAccessToken()) {
+      setConversations([]);
+      setNextCursor(null);
+      setConversationError(null);
+      setIsLoadingConversations(false);
+      setIsLoadingMoreConversations(false);
+      return;
+    }
     const requestedCursor = cursor?.trim() || null;
     if (append) {
       if (!requestedCursor

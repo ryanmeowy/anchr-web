@@ -19,7 +19,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { apiClient, isTerminalIngestionPollError } from "@/lib/api-client";
+import { getConfiguredAccessToken, apiClient, isTerminalIngestionPollError } from "@/lib/api-client";
 import {
   normalizePersistedIngestionCreateRequest,
   recoverIngestionCreate,
@@ -336,6 +336,8 @@ export function BackgroundTaskProvider({
 
   useEffect(() => {
     if (!hydrated) return;
+    // A visitor without a token has no runs to recover; polling would only produce 401s.
+    if (!getConfiguredAccessToken()) return;
     // Discovery repairs refresh/disconnect gaps before an Agent placeholder has a
     // runId. Once a run is known, its dedicated activity/runtime channels own
     // liveness and this global endpoint must not remain a second polling loop.
