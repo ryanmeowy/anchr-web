@@ -33,9 +33,9 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
     if (verified || blocked || !sceneId) return;
     // The SDK binds to the element/button ids once and consumes them. Re-running init on the
     // same ids logs "element/button invalid" and can tear down a working widget, so it happens
-    // exactly once per mount; retry resets this flag.
+    // exactly once per mount; retry resets this flag. Guarded here, after sceneId is known:
+    // claiming it earlier would block the real run whenever the first pass had no scene id.
     if (initialisedRef.current) return;
-    initialisedRef.current = true;
     let cancelled = false;
 
     const timeout = window.setTimeout(() => {
@@ -68,6 +68,8 @@ export function DemoVerificationGate({ children }: { children: React.ReactNode }
     function mountCaptcha() {
       const init = window.initAliyunCaptcha;
       if (cancelled || !init || !sceneId) return;
+      if (initialisedRef.current) return;
+      initialisedRef.current = true;
       // The SDK resolves these with `t[0] === "#" ? querySelector(t) : null`, so the value must be
       // a CSS selector starting with "#". A bare id resolves to null and fails validation.
       // In encryption mode the server hands out an AES token. The SDK has a dedicated parameter
