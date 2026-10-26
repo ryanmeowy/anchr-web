@@ -7622,3 +7622,49 @@ a {
 .ask-premium-markdown .katex-display > .katex {
   min-width: max-content;
 }
+
+/* ── demo claim entry ────────────────────────────────────────────────────────
+   Pulses to draw the eye without shouting: a soft ring that breathes outward,
+   plus a slow bob on the icon. Reduced-motion users get a static button. */
+@keyframes demo-claim-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55); }
+  70%  { box-shadow: 0 0 0 12px rgba(255, 255, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+
+/* A slow bounce on the whole control, so it reads as "click me" from across the room. */
+@keyframes demo-claim-bounce {
+  0%, 100% { transform: translateY(0); }
+  35%      { transform: translateY(-4px); }
+  60%      { transform: translateY(-1px); }
+}
+
+@keyframes demo-claim-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+
+@keyframes demo-hint-in {
+  from { opacity: 0; transform: translateX(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.demo-claim-cta {
+  animation: demo-claim-pulse 2.4s ease-out infinite, demo-claim-bounce 3.2s ease-in-out infinite;
+}
+
+.demo-claim-cta-icon {
+  animation: demo-claim-bob 2.4s ease-in-out infinite;
+}
+
+.demo-claim-hint {
+  animation: demo-hint-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-claim-cta,
+  .demo-claim-cta-icon,
+  .demo-claim-hint {
+    animation: none;
+  }
+}

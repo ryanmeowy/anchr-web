@@ -1,13 +1,7 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
-
-const HINT_KEY = "anchr.demo.hintSeen";
-
-function subscribeHint(callback: () => void) {
-  window.addEventListener(HINT_KEY, callback);
-  return () => window.removeEventListener(HINT_KEY, callback);
-}
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useDemoToken } from "@/components/app/demo-token-context";
 
 function useCountdown(expiresAt?: number) {
@@ -31,40 +25,25 @@ function useCountdown(expiresAt?: number) {
 /**
  * Sidebar entry point for the demo token.
  *
- * Unclaimed: an explicit button, so nobody spends a trial just by looking around.
- * Claimed: a compact readout of time left and credits left, which is otherwise invisible.
+ * Unclaimed: a call to action in the page's own palette, with a hint that reappears on every
+ * visit because the point is to be noticed, not to be dismissed forever.
+ * Claimed: a compact readout of credits left and time remaining.
  */
 export function DemoTokenButton() {
-  const { hasToken, usage, openDialog, phase } = useDemoToken();
+  const { role, usage, openDialog, phase } = useDemoToken();
+  // Every visitor holds a read-only guest token, so "has a token" is no longer the question:
+  // only a claimed USER token unlocks asking and uploading.
+  const claimed = role === "ADMIN" || role === "USER";
   const countdown = useCountdown(usage?.expiresAt);
   const [hintDismissed, setHintDismissed] = useState(false);
-  // Reading localStorage through useSyncExternalStore keeps server rendering consistent: the
-  // server snapshot is the "already seen" state, and the client value arrives without an effect.
-  const hintSeen = useSyncExternalStore(
-    subscribeHint,
-    () => {
-      try {
-        return window.localStorage.getItem(HINT_KEY) === "1";
-      } catch {
-        return true;
-      }
-    },
-    () => true,
-  );
 
-  const showHint = !hasToken && !hintSeen && !hintDismissed;
+  // Deliberately not remembered: unclaimed visitors should be told on every visit that asking
+  // and uploading need a token, because that is the only way in and it is easy to miss.
+  const showHint = !claimed && !hintDismissed;
 
-  const dismissHint = () => {
-    setHintDismissed(true);
-    try {
-      window.localStorage.setItem(HINT_KEY, "1");
-    } catch {
-      // Ignore: the hint simply shows again next time.
-    }
-    window.dispatchEvent(new Event(HINT_KEY));
-  };
+  const dismissHint = () => setHintDismissed(true);
 
-  if (!hasToken) {
+  if (!claimed) {
     const closed = phase.kind === "closed";
     return (
       <div className="relative">
@@ -78,34 +57,49 @@ export function DemoTokenButton() {
           aria-label="领取演示令牌"
           title={closed ? "演示环境暂时关闭" : "领取演示令牌"}
           className={[
-            "flex min-h-11 w-10 shrink-0 flex-col items-center justify-center gap-1 rounded-[8px] border p-1 text-[9px] font-bold leading-none transition",
+            "demo-claim-cta flex min-h-[52px] w-10 shrink-0 flex-col items-center justify-center gap-1 rounded-[8px] border text-[9px] font-bold leading-none transition",
             closed
-              ? "border-white/15 bg-transparent text-white/30"
-              : "border-[var(--premium-accent)] bg-[var(--premium-accent)]/15 text-[var(--premium-accent)] hover:bg-[var(--premium-accent)]/25",
+              ? "border-white/12 bg-transparent text-white/30"
+              : "border-white bg-white text-[#111315] hover:bg-white/90",
           ].join(" ")}
         >
-          <span className="text-[13px] leading-none" aria-hidden="true">⚡</span>
+          <span className="demo-claim-cta-icon text-[15px] leading-none" aria-hidden="true">⚡</span>
           <span className="whitespace-nowrap">{closed ? "已关闭" : "领取"}</span>
         </button>
 
-        {showHint && !closed ? (
-          <div
-            role="status"
-            className="absolute bottom-0 left-[52px] z-40 w-[210px] rounded-[10px] border border-white/15 bg-[#1d2024] p-3 text-[11px] leading-relaxed text-white/85 shadow-lg lg:bottom-auto lg:top-0"
-          >
-            <p className="font-black text-white">还没有演示令牌</p>
-            <p className="mt-1 text-white/65">
-              点击这里领取，即可搜索、提问和上传文档。
-            </p>
-            <button
-              type="button"
-              onClick={dismissHint}
-              className="mt-2 text-[10px] text-white/45 underline hover:text-white/70"
-            >
-              知道了
-            </button>
-          </div>
-        ) : null}
+        {showHint && !closed && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                role="status"
+                className="demo-claim-hint fixed bottom-[84px] left-[68px] z-[60] w-[264px] rounded-[10px] border border-white/12 bg-[#181b1e] p-4 text-white shadow-[0_18px_48px_rgba(0,0,0,0.5)]"
+              >
+                <p className="text-[13px] font-black leading-tight text-white">解锁提问与上传</p>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-white/60">
+                  领取演示令牌后可提问、上传文档。现在可以自由浏览知识库。
+                </p>
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      dismissHint();
+                      openDialog();
+                    }}
+                    className="rounded-[6px] bg-white px-3 py-1.5 text-[11px] font-black text-[#111315] transition hover:bg-white/90"
+                  >
+                    立即领取
+                  </button>
+                  <button
+                    type="button"
+                    onClick={dismissHint}
+                    className="text-[10px] text-white/40 underline hover:text-white/70"
+                  >
+                    稍后
+                  </button>
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
     );
   }
@@ -117,8 +111,8 @@ export function DemoTokenButton() {
       className={[
         "flex min-h-11 w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-[8px] border text-[8px] font-bold leading-none transition",
         empty
-          ? "border-rose-400/40 bg-rose-500/10 text-rose-300"
-          : "border-white/15 bg-white/5 text-white/75",
+          ? "border-rose-400/30 bg-rose-500/10 text-rose-300"
+          : "border-white/15 bg-white/6 text-white/75",
       ].join(" ")}
       title={empty
         ? "试用次数已用完，点击重新领取"
@@ -139,10 +133,8 @@ export function DemoTokenButton() {
         </button>
       ) : (
         <>
-          <span className="text-[11px] leading-none tabular-nums text-[var(--premium-accent)]">
-            {remaining ?? "–"}
-          </span>
-          <span className="whitespace-nowrap tabular-nums text-white/55">{countdown || "–"}</span>
+          <span className="text-[11px] leading-none tabular-nums text-white">{remaining ?? "–"}</span>
+          <span className="whitespace-nowrap tabular-nums text-white/45">{countdown || "–"}</span>
         </>
       )}
     </div>

@@ -54,6 +54,12 @@ import type {
   UploadIngestionItem,
 } from "./types";
 
+/**
+ * Read-only visitor token. Permanent (Redis TTL = -1) and grants reads only, so it is safe to
+ * ship in the bundle: the write endpoints stay restricted to USER.
+ */
+export const GUEST_ACCESS_TOKEN = "MitQc8SHMPv8nfFhZaZamZHcVEioZPXZ";
+
 export const ACCESS_TOKEN_STORAGE_KEY = "anchr.accessToken";
 export const ACCESS_TOKEN_ROLE_STORAGE_KEY = "anchr.accessTokenRole";
 const TOKEN_KEY = ACCESS_TOKEN_STORAGE_KEY;
@@ -214,12 +220,12 @@ export function getConfiguredAccessToken() {
   if (typeof window === "undefined") {
     return "";
   }
-
-  return window.localStorage.getItem(TOKEN_KEY)?.trim() ?? "";
+  // Fall back to the built-in guest token so browsing works with no setup. Claiming a demo
+  // token stores a USER token, which then takes precedence.
+  return window.localStorage.getItem(TOKEN_KEY)?.trim() || GUEST_ACCESS_TOKEN;
 }
 
 export function getAccessToken() {
-  // No built-in fallback: a visitor must obtain a demo token before any API call.
   return getConfiguredAccessToken();
 }
 
@@ -244,7 +250,9 @@ export function getAccessTokenIdentityKey(token: string | null | undefined) {
 
 export function saveAccessToken(token: string, role: AccessTokenRole) {
   const normalizedToken = token.trim();
-  if (!normalizedToken || role === "GUEST") {
+  // GUEST is a real server-issued token now, not the old hardcoded placeholder, so it is stored
+  // like any other. Only an empty value clears.
+  if (!normalizedToken) {
     clearAccessToken();
     return;
   }
@@ -522,6 +530,9 @@ export const apiClient = {
   validateAccessToken: (token: string) =>
     request<TokenValidationResult>("/api/v1/auth/validate-token", { token }),
   demoStatus: () => request<DemoStatus>("/api/v1/auth/demo/status", { token: null }),
+  /** Read-only visitor token: browsing works without claiming a trial. */
+  guestDemoToken: () =>
+    request<DemoToken>("/api/v1/auth/demo/guest", { method: "POST", token: null }),
   issueDemoToken: (captchaVerifyParam: string) =>
     request<DemoToken>("/api/v1/auth/demo", {
       method: "POST",

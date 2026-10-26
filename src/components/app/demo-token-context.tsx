@@ -38,7 +38,6 @@ type DemoContextValue = {
   phase: DemoPhase;
   dialogOpen: boolean;
   /** True once the entry human check has passed. Gates the workspace, not the claim. */
-  verified: boolean;
   verifying: boolean;
   sceneId: string | null;
   rawSceneId: string | null;
@@ -46,13 +45,11 @@ type DemoContextValue = {
   captchaPrefix: string | null;
   captchaRegion: string;
   /** Records a CAPTCHA pass. Issues nothing. */
-  verify: (captchaVerifyParam: string) => Promise<void>;
-  retryVerify: (reason: string | null) => void;
   /** Opens the claim dialog. Requires a completed verification. */
   openDialog: () => void;
   closeDialog: () => void;
   /** Claims a token using the stored verification. */
-  claim: () => Promise<void>;
+  claim: (captchaVerifyParam: string) => Promise<void>;
   refreshUsage: () => void;
   setPhase: (phase: DemoPhase) => void;
 };
@@ -84,14 +81,11 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
   const [usage, setUsage] = useState<DemoUsage | null>(null);
   const [phase, setPhase] = useState<DemoPhase>({ kind: "idle" });
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [verified, setVerified] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  // Turnstile tokens are single use. The one obtained at the door is what the claim spends,
-  // so the visitor is not asked to solve the check twice.
-  const [challengeToken, setChallengeToken] = useState<string | null>(null);
 
   const loadUsage = useCallback(() => {
-    if (!token) {
+    // Usage is a claimed-token concept; a guest token has no credits and the endpoint requires
+    // USER, so asking would only produce a 403.
+    if (!token || role === "GUEST") {
       // Scheduled rather than set inline: the caller may be an effect, and a synchronous set
       // there would cascade renders.
       queueMicrotask(() => setUsage(null));
@@ -102,11 +96,35 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
       .then((value) => setUsage(value))
       // A failed usage read must never block the workspace; the button simply shows no counts.
       .catch(() => setUsage(null));
-  }, [token]);
+  }, [token, role]);
 
   useEffect(() => {
     loadUsage();
   }, [loadUsage]);
+
+  /**
+   * A visitor gets a read-only GUEST token on arrival, so browsing never hits a 401 and never
+   * needs a claim. Claiming upgrades that token to USER, which is what unlocks asking, uploading
+   * and metering.
+   */
+  useEffect(() => {
+    // Runs before the human check completes: a guest token only grants reads, so issuing it early
+    // is harmless and means the workspace has data the moment the check passes.
+    if (token) return;
+    let cancelled = false;
+    void apiClient
+      .guestDemoToken()
+      .then((issued) => {
+        if (cancelled) return;
+        saveAccessToken(issued.token, issued.role);
+      })
+      .catch(() => {
+        // Browsing without any token is degraded but not broken; the sidebar still offers a claim.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, role]);
 
   // Status decides whether the door widget can render at all, so it is fetched on mount rather
   // than lazily when the claim dialog opens.
@@ -167,37 +185,14 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
    * Records the entry human check. It deliberately issues nothing: a visitor who only wants to
    * browse should not consume a trial. The token is held for the claim to spend.
    */
-  const verify = useCallback(async (captchaVerifyParam: string) => {
-    setVerifying(true);
-    setPhase({ kind: "idle" });
-    // Keep the parameter: issuing later reuses it, so the visitor solves the puzzle once.
-    setChallengeToken(captchaVerifyParam);
-    setVerified(true);
-    setVerifying(false);
-  }, []);
-
-  const retryVerify = useCallback((reason: string | null) => {
-    setVerified(false);
-    setChallengeToken(null);
-    setPhase(reason ? { kind: "error", reason } : { kind: "idle" });
-  }, []);
-
-  const claim = useCallback(async () => {
+  const claim = useCallback(async (captchaVerifyParam: string) => {
     setPhase({ kind: "verifying" });
     try {
-      if (!challengeToken) {
-        // The held token expired (Turnstile tokens last minutes). Ask for the check again
-        // instead of failing with an unhelpful message.
-        setVerified(false);
-        setPhase({ kind: "error", reason: "人机校验已过期，请重新完成校验。" });
-        return;
-      }
-      const issued = await apiClient.issueDemoToken(challengeToken);
+      const issued = await apiClient.issueDemoToken(captchaVerifyParam);
       saveAccessToken(issued.token, issued.role);
       setDialogOpen(false);
       setPhase({ kind: "idle" });
       loadUsage();
-      setChallengeToken(null);
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === "DEMO_QUOTA_EXHAUSTED") {
@@ -214,7 +209,7 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
         setPhase({ kind: "error", reason: "领取失败，请稍后重试。" });
       }
     }
-  }, [challengeToken, loadUsage]);
+  }, [loadUsage]);
 
   const value = useMemo<DemoContextValue>(() => ({
     hasToken: Boolean(token),
@@ -224,8 +219,7 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
     usage,
     phase,
     dialogOpen,
-    verified,
-    verifying,
+    verifying: phase.kind === "verifying",
     sceneId: status?.sceneId ?? null,
     rawSceneId: status?.sceneId ?? null,
     encryptedSceneId: status?.encryptedSceneId ?? null,
@@ -233,15 +227,12 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
     // The client SDK accepts only cn / sgp / ga. The server-side region
     // (cn-shanghai) is a different value and must not be passed here.
     captchaRegion: "cn",
-    verify,
-    retryVerify,
     openDialog,
     closeDialog,
     claim,
     refreshUsage: loadUsage,
     setPhase,
-  }), [token, role, status, statusLoaded, usage, phase, dialogOpen, verified, verifying,
-       verify, retryVerify, openDialog, closeDialog, claim, loadUsage]);
+  }), [token, role, status, statusLoaded, usage, phase, dialogOpen, openDialog, closeDialog, claim, loadUsage]);
 
   return <DemoContext.Provider value={value}>{children}</DemoContext.Provider>;
 }
