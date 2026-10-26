@@ -70,21 +70,25 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
     }
   }, [token]);
 
+  /** Maps a status response onto the gate state. One place, so the two callers cannot drift. */
+  const applyStatus = useCallback((value: DemoStatus) => {
+    setStatus(value);
+    if (!value.enabled) {
+      setState({ kind: "closed", reason: "演示环境暂未开放。" });
+    } else if (value.closed) {
+      setState({ kind: "closed", reason: "演示环境暂时关闭，请稍后再试。" });
+    } else {
+      setState({ kind: "entry" });
+    }
+  }, []);
+
   useEffect(() => {
     if (token) return;
     let cancelled = false;
     apiClient
       .demoStatus()
       .then((value) => {
-        if (cancelled) return;
-        setStatus(value);
-        if (!value.enabled) {
-          setState({ kind: "closed", reason: "演示环境暂未开放。" });
-        } else if (value.closed) {
-          setState({ kind: "closed", reason: "演示环境暂时关闭，请稍后再试。" });
-        } else {
-          setState({ kind: "entry" });
-        }
+        if (!cancelled) applyStatus(value);
       })
       .catch(() => {
         if (!cancelled) {
@@ -94,7 +98,7 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, applyStatus]);
 
   // An ordinary workspace call can exhaust the credits or lose the token; return to the entry
   // card instead of leaving the visitor on a workspace that only produces errors.
@@ -242,14 +246,7 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
                 setWidgetError(null);
                 void apiClient
                   .demoStatus()
-                  .then((value) => {
-                    setStatus(value);
-                    if (!value.enabled || value.closed) {
-                      setState({ kind: "closed", reason: "演示环境暂时关闭，请稍后再试。" });
-                    } else {
-                      setState({ kind: "entry" });
-                    }
-                  })
+                  .then(applyStatus)
                   .catch(() => {
                     setState({ kind: "blocked", reason: "无法连接演示服务，请稍后重试。" });
                   });
