@@ -12,6 +12,8 @@ import {
 } from "@/lib/api-client";
 
 const TURNSTILE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+/** How long to wait for the widget before treating it as blocked. */
+const TURNSTILE_RENDER_TIMEOUT_MS = 10_000;
 
 type TurnstileApi = {
   render: (container: HTMLElement, options: Record<string, unknown>) => string;
@@ -155,6 +157,14 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
     if ((state.kind !== "entry" && state.kind !== "blocked") || !status?.siteKey) return;
     let cancelled = false;
 
+    // An extension can let the script load but stop the widget from rendering, which would leave
+    // a blank card. Treat "nothing rendered" as a failure with a way out.
+    const timeout = window.setTimeout(() => {
+      // A rendered widget always has an id, so an id means the card is not stuck.
+      if (cancelled || widgetIdRef.current) return;
+      setWidgetError("人机校验没有加载出来。请关闭拦截本站的扩展后重试。");
+    }, TURNSTILE_RENDER_TIMEOUT_MS);
+
     const mount = () => {
       if (cancelled || !window.turnstile || !containerRef.current) return;
       if (widgetIdRef.current) return;
@@ -176,6 +186,7 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
       mount();
       return () => {
         cancelled = true;
+        window.clearTimeout(timeout);
       };
     }
 
@@ -192,6 +203,7 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
     document.head.appendChild(script);
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
     };
   }, [state.kind, status?.siteKey, issue]);
 
