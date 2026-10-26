@@ -250,9 +250,9 @@ function emitAccessTokenChanged() {
  * A quota rejection happens on an ordinary workspace call, far from the gate that can recover,
  * so the request layer announces it rather than every call site handling the code.
  */
-function emitDemoExhausted() {
+function emitDemoExhausted(reason: "quota" | "expired") {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(DEMO_EXHAUSTED_EVENT));
+  window.dispatchEvent(new CustomEvent(DEMO_EXHAUSTED_EVENT, { detail: { reason } }));
 }
 
 async function request<T>(path: string, options: RequestOptions = {}) {
@@ -276,7 +276,7 @@ async function request<T>(path: string, options: RequestOptions = {}) {
     const error = apiErrorFromPayload(payload, response.status, `请求失败：${response.status}`);
     if (isDemoQuotaExhausted(error) || isAuthenticationError(error)) {
       // The gate owns recovery, so it must hear about this without every caller knowing.
-      emitDemoExhausted();
+      emitDemoExhausted(isDemoQuotaExhausted(error) ? "quota" : "expired");
     }
     throw error;
   }

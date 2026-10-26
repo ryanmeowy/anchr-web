@@ -97,10 +97,16 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
   // An ordinary workspace call can exhaust the credits or lose the token; return to the entry
   // card instead of leaving the visitor on a workspace that only produces errors.
   useEffect(() => {
-    const onExhausted = () => {
+    const onExhausted = (event: Event) => {
+      const reason = (event as CustomEvent<{ reason?: string }>).detail?.reason;
       clearAccessToken();
       handledTokenRef.current = null;
-      setState({ kind: "blocked", reason: "本次试用次数已用完。" });
+      setState({
+        kind: "blocked",
+        reason: reason === "expired"
+          ? "访问凭证已过期，可重新领取。"
+          : "本次试用次数已用完，可重新领取。",
+      });
     };
     window.addEventListener(DEMO_EXHAUSTED_EVENT, onExhausted);
     return () => window.removeEventListener(DEMO_EXHAUSTED_EVENT, onExhausted);
@@ -114,22 +120,30 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
       saveAccessToken(issued.token, issued.role);
     } catch (error) {
       const code = (error as { code?: string }).code;
-      widgetIdRef.current = null;
+      // A Turnstile token is single use, so every failure needs a fresh challenge. Keep the
+      // widget id and reset it; discarding the id would leave the visitor without a way back.
+      const resetChallenge = () => {
+        if (window.turnstile && widgetIdRef.current) {
+          window.turnstile.reset(widgetIdRef.current);
+        }
+      };
       if (code === "DEMO_QUOTA_EXHAUSTED") {
-        setState({ kind: "blocked", reason: "本次试用次数已用完。" });
+        setWidgetError("本次试用次数已用完，可再次领取。");
+        setState({ kind: "blocked", reason: "这份凭证的试用次数已用完。" });
+        resetChallenge();
       } else if (code === "DEMO_DAILY_LIMIT_REACHED") {
         setState({ kind: "closed", reason: "今日演示额度已用完，请明天再来。" });
       } else if (code === "DEMO_ISSUE_TOO_FREQUENT") {
         setState({ kind: "blocked", reason: "刚领取过凭证，请稍后再试。" });
+        resetChallenge();
       } else if (code === "DEMO_DISABLED") {
         setState({ kind: "closed", reason: "演示环境暂时关闭，请稍后再试。" });
       } else if (code === "DEMO_VERIFICATION_FAILED") {
         setWidgetError("人机校验未通过。若安装了广告拦截扩展，请对本站放行后重试。");
-        if (window.turnstile && widgetIdRef.current) {
-          window.turnstile.reset(widgetIdRef.current);
-        }
+        resetChallenge();
       } else {
         setWidgetError("领取失败，请稍后重试。");
+        resetChallenge();
       }
     } finally {
       setIssuing(false);
@@ -138,7 +152,7 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
 
   // Render the widget only while waiting for a token.
   useEffect(() => {
-    if (state.kind !== "entry" || !status?.siteKey) return;
+    if ((state.kind !== "entry" && state.kind !== "blocked") || !status?.siteKey) return;
     let cancelled = false;
 
     const mount = () => {
