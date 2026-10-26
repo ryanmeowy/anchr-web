@@ -18,6 +18,7 @@ const TURNSTILE_RENDER_TIMEOUT_MS = 10_000;
 type TurnstileApi = {
   render: (container: HTMLElement, options: Record<string, unknown>) => string;
   reset: (widgetId?: string) => void;
+  remove: (widgetId?: string) => void;
 };
 
 declare global {
@@ -169,10 +170,21 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
       setWidgetError("人机校验没有加载出来。请关闭拦截本站的扩展后重试。");
     }, TURNSTILE_RENDER_TIMEOUT_MS);
 
+    const unmount = () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      // Hand the widget back before React removes its node. Wiping the container by hand would
+      // leave Turnstile's registry pointing at a dead element and a later reset() would log
+      // "Cannot find Widget".
+      if (window.turnstile && widgetIdRef.current) {
+        window.turnstile.remove(widgetIdRef.current);
+        widgetIdRef.current = null;
+      }
+    };
+
     const mount = () => {
       if (cancelled || !window.turnstile || !containerRef.current) return;
       if (widgetIdRef.current) return;
-      containerRef.current.innerHTML = "";
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: status.siteKey,
         callback: (value: string) => void issue(value),
@@ -188,10 +200,7 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
 
     if (window.turnstile) {
       mount();
-      return () => {
-        cancelled = true;
-        window.clearTimeout(timeout);
-      };
+      return unmount;
     }
 
     const script = document.createElement("script");
@@ -205,10 +214,7 @@ export function DemoTokenGate({ children }: { children: React.ReactNode }) {
       }
     };
     document.head.appendChild(script);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeout);
-    };
+    return unmount;
   }, [state.kind, status?.siteKey, issue]);
 
   if (state.kind === "granted") {
