@@ -258,6 +258,9 @@ function emitAccessTokenChanged() {
  */
 function emitDemoExhausted(reason: "quota" | "expired") {
   if (typeof window === "undefined") return;
+  // Only meaningful when a token was actually in play. A signed-out visitor browsing the
+  // workspace produces 401s by design, and announcing those would clear state on every request.
+  if (!getConfiguredAccessToken()) return;
   window.dispatchEvent(new CustomEvent(DEMO_EXHAUSTED_EVENT, { detail: { reason } }));
 }
 

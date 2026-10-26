@@ -33,14 +33,22 @@ type DemoContextValue = {
   hasToken: boolean;
   role: string;
   status: DemoStatus | null;
+  statusLoaded: boolean;
   usage: DemoUsage | null;
   phase: DemoPhase;
   dialogOpen: boolean;
-  /** Opens the claim dialog and asks the server what the demo currently allows. */
+  /** True once the entry human check has passed. Gates the workspace, not the claim. */
+  verified: boolean;
+  verifying: boolean;
+  siteKey: string | null;
+  /** Records a Turnstile pass. Issues nothing. */
+  verify: (turnstileToken: string) => Promise<void>;
+  retryVerify: (reason: string | null) => void;
+  /** Opens the claim dialog. Requires a completed verification. */
   openDialog: () => void;
   closeDialog: () => void;
-  /** Claims a token with a Turnstile token. Deliberately never auto-invoked. */
-  claim: (turnstileToken: string) => Promise<void>;
+  /** Claims a token using the stored verification. */
+  claim: () => Promise<void>;
   refreshUsage: () => void;
   setPhase: (phase: DemoPhase) => void;
 };
@@ -68,9 +76,15 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
     () => "",
   );
   const [status, setStatus] = useState<DemoStatus | null>(null);
+  const [statusLoaded, setStatusLoaded] = useState(false);
   const [usage, setUsage] = useState<DemoUsage | null>(null);
   const [phase, setPhase] = useState<DemoPhase>({ kind: "idle" });
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  // Turnstile tokens are single use. The one obtained at the door is what the claim spends,
+  // so the visitor is not asked to solve the check twice.
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
 
   const loadUsage = useCallback(() => {
     if (!token) {
@@ -90,17 +104,35 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
     loadUsage();
   }, [loadUsage]);
 
-  // A billable call that lost its credits or its token drops the visitor back to the unclaimed
-  // state instead of leaving a workspace that only produces errors.
+  // Status decides whether the door widget can render at all, so it is fetched on mount rather
+  // than lazily when the claim dialog opens.
   useEffect(() => {
-    const onExhausted = (event: Event) => {
-      const reason = (event as CustomEvent<{ reason?: string }>).detail?.reason;
+    void apiClient
+      .demoStatus()
+      .then((value) => {
+        setStatus(value);
+        setStatusLoaded(true);
+        if (!value.enabled) {
+          setPhase({ kind: "closed", reason: "演示环境暂未开放。" });
+        } else if (value.closed) {
+          setPhase({ kind: "closed", reason: "演示环境暂时关闭，请稍后再试。" });
+        }
+      })
+      .catch(() => {
+        setStatusLoaded(true);
+        setPhase({ kind: "error", reason: "无法连接演示服务，请刷新重试。" });
+      });
+  }, []);
+
+  // A token that expired or ran out is simply "no token": the visitor keeps working as a guest
+  // and the sidebar offers a fresh claim. Popping a dialog here interrupted browsing with an
+  // error the visitor could do nothing about at that moment.
+  useEffect(() => {
+    const onExhausted = () => {
       clearAccessToken();
       setUsage(null);
-      setPhase(reason === "expired"
-        ? { kind: "error", reason: "访问凭证已过期，可重新领取。" }
-        : { kind: "error", reason: "试用次数已用完，可重新领取。" });
-      setDialogOpen(true);
+      setPhase({ kind: "idle" });
+      setDialogOpen(false);
     };
     window.addEventListener(DEMO_EXHAUSTED_EVENT, onExhausted);
     return () => window.removeEventListener(DEMO_EXHAUSTED_EVENT, onExhausted);
@@ -127,14 +159,41 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
     setPhase({ kind: "idle" });
   }, []);
 
-  const claim = useCallback(async (turnstileToken: string) => {
+  /**
+   * Records the entry human check. It deliberately issues nothing: a visitor who only wants to
+   * browse should not consume a trial. The token is held for the claim to spend.
+   */
+  const verify = useCallback(async (turnstileToken: string) => {
+    setVerifying(true);
+    setPhase({ kind: "idle" });
+    // Keep the token: issuing later reuses it, so the visitor solves the check once.
+    setChallengeToken(turnstileToken);
+    setVerified(true);
+    setVerifying(false);
+  }, []);
+
+  const retryVerify = useCallback((reason: string | null) => {
+    setVerified(false);
+    setChallengeToken(null);
+    setPhase(reason ? { kind: "error", reason } : { kind: "idle" });
+  }, []);
+
+  const claim = useCallback(async () => {
     setPhase({ kind: "verifying" });
     try {
-      const issued = await apiClient.issueDemoToken(turnstileToken);
+      if (!challengeToken) {
+        // The held token expired (Turnstile tokens last minutes). Ask for the check again
+        // instead of failing with an unhelpful message.
+        setVerified(false);
+        setPhase({ kind: "error", reason: "人机校验已过期，请重新完成校验。" });
+        return;
+      }
+      const issued = await apiClient.issueDemoToken(challengeToken);
       saveAccessToken(issued.token, issued.role);
       setDialogOpen(false);
       setPhase({ kind: "idle" });
       loadUsage();
+      setChallengeToken(null);
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === "DEMO_QUOTA_EXHAUSTED") {
@@ -151,21 +210,28 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
         setPhase({ kind: "error", reason: "领取失败，请稍后重试。" });
       }
     }
-  }, [loadUsage]);
+  }, [challengeToken, loadUsage]);
 
   const value = useMemo<DemoContextValue>(() => ({
     hasToken: Boolean(token),
     role,
     status,
+    statusLoaded,
     usage,
     phase,
     dialogOpen,
+    verified,
+    verifying,
+    siteKey: status?.siteKey ?? null,
+    verify,
+    retryVerify,
     openDialog,
     closeDialog,
     claim,
     refreshUsage: loadUsage,
     setPhase,
-  }), [token, role, status, usage, phase, dialogOpen, openDialog, closeDialog, claim, loadUsage]);
+  }), [token, role, status, statusLoaded, usage, phase, dialogOpen, verified, verifying,
+       verify, retryVerify, openDialog, closeDialog, claim, loadUsage]);
 
   return <DemoContext.Provider value={value}>{children}</DemoContext.Provider>;
 }
