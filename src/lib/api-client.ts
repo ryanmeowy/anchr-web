@@ -71,6 +71,8 @@ export type DemoStatus = {
   sceneId: string;
   /** CAPTCHA app prefix used by the client SDK. */
   prefix: string;
+  /** True when sceneId is an AES token that must be sent as EncryptedSceneId. */
+  sceneIdEncrypted: boolean;
 };
 export type DemoUsage = {
   quota: number;

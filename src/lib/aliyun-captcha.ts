@@ -13,7 +13,13 @@
 const SDK_URL = "https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptcha.js";
 
 type InitOptions = {
-  SceneId: string;
+  /** Plain scenario id. Mutually exclusive with EncryptedSceneId. */
+  SceneId?: string;
+  /**
+   * Encryption mode: the server-side AES token. When present the SDK sends this instead of
+   * SceneId, and the service decrypts it to recover the scenario and its expiry.
+   */
+  EncryptedSceneId?: string;
   mode: "popup" | "embed";
   /**
    * Required: a CSS selector beginning with "#". The SDK only resolves values that start with

@@ -41,6 +41,7 @@ type DemoContextValue = {
   verified: boolean;
   verifying: boolean;
   sceneId: string | null;
+  encryptedSceneId: string | null;
   captchaPrefix: string | null;
   captchaRegion: string;
   /** Records a CAPTCHA pass. Issues nothing. */
@@ -225,6 +226,7 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
     verified,
     verifying,
     sceneId: status?.sceneId ?? null,
+    encryptedSceneId: status?.sceneIdEncrypted ? (status?.sceneId ?? null) : null,
     captchaPrefix: status?.prefix ?? null,
     // The client SDK accepts only cn / sgp / ga. The server-side region
     // (cn-shanghai) is a different value and must not be passed here.
