@@ -914,11 +914,8 @@ function CitationSidebar({
       {canNavigateCitations ? (
         <SidePanel>
           <PanelLabel
-            // "Adjacent" implied neighbouring passages of the same document, but these chunks can
-            // come from different files: one answer routinely cites several documents. Naming it
-            // after the evidence makes the count mean what it is.
-            label="EVIDENCE NAVIGATION"
-            value={`证据 ${currentCitationPosition + 1} / ${documentChunks.length}`}
+            label="ADJACENT CITATIONS"
+            value={`${currentCitationPosition + 1} / ${documentChunks.length}`}
           />
           <div className="mt-3.5 grid grid-cols-2 gap-2.5">
             <CitationNavigationButton
@@ -1053,7 +1050,7 @@ function CitationNavigationButton({
   onSelect: (chunk: CitationChunk) => void;
 }) {
   const isPrevious = direction === "previous";
-  const label = isPrevious ? "上一处证据" : "下一处证据";
+  const label = isPrevious ? "上一处引用" : "下一处引用";
   const pageNo = chunk?.pageNo ?? chunk?.anchor?.pageNo;
 
   return (
@@ -1074,11 +1071,8 @@ function CitationNavigationButton({
           <strong className="truncate text-xs text-[var(--premium-ink)]">
             {stripEmTags(chunk.snippet ?? chunk.content ?? "引用位置")}
           </strong>
-          <span className="truncate text-[10px] font-bold text-[var(--premium-muted)]">
-            {/* The jump may land in another file; say which one before it happens. */}
-            {/* The jump may land in another file; name its document before it happens. The
-                payload carries no fileName, so the title stands in for it. */}
-            {[chunk.title, pageNo ? `第 ${pageNo} 页` : null].filter(Boolean).join(" · ") || "页码未知"}
+          <span className="text-[10px] font-bold text-[var(--premium-muted)]">
+            {pageNo ? `第 ${pageNo} 页` : "页码未知"}
           </span>
         </span>
       ) : (
