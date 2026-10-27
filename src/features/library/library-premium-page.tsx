@@ -724,6 +724,8 @@ type LibraryDocumentItem = {
   availabilityStatus: DocumentAvailabilityStatus;
   errorCode?: string | null;
   errorMessage?: string | null;
+  /** Server-decided, mirrors the delete endpoint's own rule. */
+  deletable: boolean;
 };
 const DOCUMENT_GRID_PAGE_SIZES = [24, 48, 72] as const;
 const DOCUMENT_LIST_PAGE_SIZES = [25, 50, 100] as const;
@@ -1211,9 +1213,12 @@ function DocumentCard({
         <button
           type="button"
           onClick={onDelete}
-          className="grid size-8 place-items-center rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] shadow-sm transition hover:-translate-y-0.5 hover:border-[#DF836D] hover:bg-[rgba(223,131,109,0.12)] hover:text-[#DF836D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-focus-line)]"
-          aria-label={`删除 ${document.name}`}
-          title={`删除 ${document.name}`}
+          // The server decides this so the button and the API cannot disagree: a visitor may
+          // only remove what it uploaded, while seeded documents keep their place in the library.
+          disabled={!document.deletable}
+          className="grid size-8 place-items-center rounded-[8px] border border-[var(--premium-line)] bg-[var(--premium-panel-strong)] text-[var(--premium-ink-soft)] shadow-sm transition enabled:hover:-translate-y-0.5 enabled:hover:border-[#DF836D] enabled:hover:bg-[rgba(223,131,109,0.12)] enabled:hover:text-[#DF836D] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--premium-focus-line)]"
+          aria-label={document.deletable ? `删除 ${document.name}` : `无法删除 ${document.name}，只能删除自己上传的文档`}
+          title={document.deletable ? `删除 ${document.name}` : "只能删除自己上传的文档"}
         >
           <Trash2 size={14} />
         </button>
@@ -1291,9 +1296,10 @@ function DocumentListItem({
         <button
           type="button"
           onClick={onDelete}
-          className="grid size-8 place-items-center rounded-full border border-[var(--premium-line)] bg-transparent text-[var(--premium-ink-soft)] transition hover:-translate-y-0.5 hover:border-[#DF836D] hover:bg-[rgba(223,131,109,0.12)] hover:text-[#DF836D]"
-          aria-label={`删除 ${document.name}`}
-          title={`删除 ${document.name}`}
+          disabled={!document.deletable}
+          className="grid size-8 place-items-center rounded-full border border-[var(--premium-line)] bg-transparent text-[var(--premium-ink-soft)] transition enabled:hover:-translate-y-0.5 enabled:hover:border-[#DF836D] enabled:hover:bg-[rgba(223,131,109,0.12)] enabled:hover:text-[#DF836D] disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label={document.deletable ? `删除 ${document.name}` : `无法删除 ${document.name}，只能删除自己上传的文档`}
+          title={document.deletable ? `删除 ${document.name}` : "只能删除自己上传的文档"}
         >
           <Trash2 size={14} />
         </button>
@@ -1395,6 +1401,7 @@ function toLibraryDocumentItem(asset: KnowledgeBaseDocument): LibraryDocumentIte
     ),
     errorCode: asset.errorCode,
     errorMessage: asset.errorMessage,
+    deletable: asset.deletable ?? false,
   };
 }
 

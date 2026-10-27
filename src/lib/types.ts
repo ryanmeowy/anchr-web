@@ -66,6 +66,8 @@ export type KnowledgeBaseDocument = {
   errorMessage?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  /** Server-decided: whether the current caller may delete this document. */
+  deletable?: boolean;
 };
 
 export type KnowledgeBaseDocumentList = PagedList<KnowledgeBaseDocument> & {
