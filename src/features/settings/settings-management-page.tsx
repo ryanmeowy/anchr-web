@@ -164,11 +164,6 @@ function getServerAccessTokenSnapshot(): string | null {
   return null;
 }
 
-function maskToken(t: string): string {
-  if (t.length <= 12) return "******";
-  return t.slice(0, 6) + "******" + t.slice(-6);
-}
-
 function useAccessTokenSnapshot() {
   return useSyncExternalStore(subscribeAccessToken, getClientAccessTokenSnapshot, getServerAccessTokenSnapshot);
 }
@@ -1968,14 +1963,15 @@ function StoragePanel({
  * ever issues USER tokens.
  */
 function OwnerTokenPanel() {
-  const storedToken = useAccessTokenSnapshot();
   const [open, setOpen] = useState(false);
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
   const [savingToken, setSavingToken] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const token = tokenDraft ?? storedToken ?? "";
-  const displayToken = tokenDraft !== null ? tokenDraft : storedToken ? maskToken(storedToken) : "";
+  const token = tokenDraft ?? "";
+  // Never pre-fill from storage. This box is for pasting an admin token, and echoing whatever is
+  // currently in use puts a guest or demo token on screen where it looks like a credential.
+  const displayToken = tokenDraft ?? "";
 
   return (
     <article className={`${PANEL_CLASS} min-w-0`} aria-label="管理员登录">
