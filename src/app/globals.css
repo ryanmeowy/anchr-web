@@ -4190,11 +4190,17 @@ a {
   transform: none;
 }
 
-/* A text file is the same thing as a PDF here: a white page on a dark canvas. Without the same
-   dimming it glares against the surrounding UI. */
-.preview-premium-page[data-premium-theme="dark"] .preview-pdf-canvas,
-.preview-premium-page[data-premium-theme="dark"] .preview-text-page {
+.preview-premium-page[data-premium-theme="dark"] .preview-pdf-canvas {
   filter: brightness(0.82) contrast(0.92) sepia(0.1) saturate(0.84);
+}
+
+/* A text file is a white page on a dark canvas, same as a PDF, so it needs the same dimming.
+   It is done with a background colour rather than a filter on purpose: filter applies to every
+   descendant, and the citation highlight lives inside this card. Dimming it that way tinted the
+   blue outline sepia and made it read differently from the one drawn over a PDF. */
+.preview-premium-page[data-premium-theme="dark"] .preview-text-page {
+  background: #e7e5df;
+  border-color: rgba(0, 0, 0, 0.22);
 }
 
 .preview-premium-page[data-premium-theme="dark"] .preview-pdf-loading {

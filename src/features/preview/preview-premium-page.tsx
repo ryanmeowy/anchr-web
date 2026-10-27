@@ -1882,16 +1882,26 @@ function renderBlockWithHighlights(
   let cursor = block.start;
   for (const range of overlaps) {
     const from = Math.max(range.start, block.start);
-    const to = Math.min(range.end, block.end);
+    // Absorb the sentence's closing punctuation. Leaving it outside makes the block end mid
+    // sentence, and because the box is block-level the orphaned "。" drops onto its own line.
+    let to = Math.min(range.end, block.end);
+    // Closing punctuation and any inline-code delimiter sitting between it and the prose.
+    while (to < block.end && /[。，、；：！？）」』】…`]/.test(fullText[to])) {
+      to += 1;
+    }
     if (from > cursor) nodes.push(fullText.slice(cursor, from));
     nodes.push(
-      <span
+      // A block, not an inline span: outline on an inline element is painted once per line
+      // fragment, which turned one cited region into nine stacked boxes. As a block it draws a
+      // single rectangle, matching the box a PDF page shows. The cited ranges in this document
+      // start at line beginnings, so promoting them does not reflow the prose.
+      <div
         key={`${from}-${to}`}
         data-citation-bbox={nodes.length === 0 ? "" : undefined}
-        className={`${styles.bboxLock} box-decoration-clone`}
+        className={`${styles.bboxInline} whitespace-pre-wrap`}
       >
         {fullText.slice(from, to)}
-      </span>,
+      </div>,
     );
     cursor = to;
   }

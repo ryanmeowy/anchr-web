@@ -113,3 +113,40 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 200px;
 }
+
+/* Text highlights sit on inline spans that wrap across lines, so the shared `.bboxLock::after`
+   ring has no positioned ancestor to size itself against and lands in the wrong place. Inline
+   elements also paint `outline` per line fragment, which reads as a stack of boxes rather than
+   one region. A box-shadow ring animates identically on every fragment and needs no positioning,
+   so the settle still reads as the outline breathing outward. */
+.bboxInline {
+  border-radius: 2px;
+  outline: 1px solid rgba(64, 115, 198, 0.75);
+  outline-offset: 3px;
+  background: rgba(91, 140, 224, 0.1);
+  /* Block-level, so the ring encloses one rectangle instead of one box per line. The margin
+     keeps the offset outline from touching the prose above and below. */
+  margin: 6px 0;
+  animation: previewPremiumBBoxInline 1000ms ease-in-out both;
+}
+
+@keyframes previewPremiumBBoxInline {
+  from {
+    outline-color: transparent;
+    background: rgba(91, 140, 224, 0);
+    box-shadow: 0 0 0 7px rgba(91, 140, 224, 0.45);
+  }
+
+  to {
+    outline-color: rgba(64, 115, 198, 0.75);
+    background: rgba(91, 140, 224, 0.1);
+    box-shadow: 0 0 0 0 rgba(91, 140, 224, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bboxInline {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
+}
