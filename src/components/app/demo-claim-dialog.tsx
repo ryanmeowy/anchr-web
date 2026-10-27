@@ -41,10 +41,9 @@ export function DemoClaimDialog() {
   const exhausted = claimed && remaining === 0;
   const busy = phase.kind === "verifying" || claiming;
 
-  // Needed whenever the visitor still has something to claim: never claimed, or claimed but out
-  // of credits. Keying only on `!claimed` left the exhausted pane's button disabled forever,
-  // because the widget it waits on was never initialised.
-  const needsCheck = dialogOpen && (!claimed || exhausted) && phase.kind !== "closed";
+  // Only the guide pane can claim. An exhausted token cannot be replaced until it expires, so
+  // that pane has no widget to initialise.
+  const needsCheck = dialogOpen && !claimed && phase.kind !== "closed";
 
   useEffect(() => {
     if (!needsCheck || !rawSceneId) return;
@@ -188,21 +187,20 @@ export function DemoClaimDialog() {
       {mode === "exhausted" ? (
         <>
           <h3 className="demo-bubble-title">额度已用完</h3>
-          <p className="demo-bubble-text">重新领取一枚，就能继续提问和上传文档。</p>
+          {/* One token at a time: the credits are gone but the token is still live, so there is
+              nothing to claim until it expires. Saying "reclaim" here would promise something
+              the server refuses. */}
+          <p className="demo-bubble-text">
+            演示令牌仍然有效，有效期结束后即可重新领取一枚。
+          </p>
           <p className="demo-bubble-meta">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-              <path d="m9 12 2 2 4-4" />
+              <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
             </svg>
-            需重新完成一次人机校验
+            剩余有效期 <span className="mono">{usage?.expiresAt && now ? formatLeft(usage.expiresAt - now) : "–"}</span>
           </p>
-          <div id={ELEMENT_ID} />
-          <button type="button" id={TRIGGER_ID} aria-hidden="true" tabIndex={-1} style={{ display: "none" }} />
           <div className="demo-bubble-actions">
-            <button type="button" className="demo-btn-primary" disabled={busy || !ready} onClick={openPuzzle}>
-              {busy ? "正在领取…" : "重新领取"}
-            </button>
             <button type="button" className="demo-btn-quiet" onClick={closeDialog}>
               继续浏览
             </button>
@@ -223,7 +221,8 @@ function formatLeft(ms: number) {
 }
 
 function DemoTimebar({ expiresAt, now }: { expiresAt?: number; now: number }) {
-  const totalMs = 5 * 60 * 60 * 1000;
+  // Matches the server's token TTL; the bar is a proportion, not an absolute clock.
+  const totalMs = 2 * 60 * 60 * 1000;
   const progress = expiresAt && now ? Math.max(0, Math.min(1, (expiresAt - now) / totalMs)) : 0;
   return (
     <div className="demo-timebar" aria-hidden="true">
