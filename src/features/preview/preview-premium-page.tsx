@@ -762,7 +762,10 @@ function PreviewContent({
             />
           ) : previewType === "IMAGE" && item.previewUrl ? (
             <ImagePreview item={item} />
-          ) : assetDetails && item.previewUrl ? (
+          ) : item.previewUrl ? (
+            // Text formats render the whole file with the cited passage marked, matching what the
+            // PDF view does. Reached from a segment link as well as from the library, so it keys
+            // off the preview URL rather than on assetDetails being present.
             <AssetTextPreview item={item} />
           ) : (
             <TextPreview item={item} citationIndex={visibleCitationIndex} />
@@ -1664,10 +1667,12 @@ function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIn
       <div className="grid gap-[22px] px-[52px] pb-[58px] pt-[34px] text-[15px] leading-[1.9] text-[#3a424b] max-[860px]:px-6">
         <div
           data-preview-segment-id={item.segmentId}
-          className={`${styles.highlight} relative rounded-[8px] border-2 border-amber-400 bg-amber-300/10 p-[18px] text-[#101214]`}
+          // Same treatment as a PDF bbox: thin blue outline with a faint wash, so the cited area
+          // reads the same way whichever format the evidence came from.
+          className={`${styles.bboxLock} relative p-[18px] text-[#101214]`}
         >
           {citationIndex != null ? (
-            <span className="absolute -right-4 -top-4 grid size-[34px] place-items-center rounded-[8px] bg-amber-400 font-black text-[#1c1400]">
+            <span className="absolute -right-4 -top-4 grid size-[34px] place-items-center rounded-[8px] bg-[#5b8ce0] font-black text-white">
               {citationIndex}
             </span>
           ) : null}
@@ -1693,6 +1698,23 @@ function AssetTextPreview({ item }: { item: PreviewSegment }) {
     refetchOnWindowFocus: false,
   });
 
+  const fullText = textQuery.data ?? "";
+  // The cited segment is a substring of the file. Locating it lets the whole document show while
+  // still marking exactly what the answer used, which is what a PDF preview already does with a
+  // bbox rectangle.
+  const hit = useMemo(() => locateCitedSegment(fullText, item.content), [fullText, item.content]);
+  const firstHitRef = useRef<HTMLDivElement | null>(null);
+
+  // Arrive at the evidence rather than the document title, mirroring the PDF preview jumping to
+  // the cited page.
+  useEffect(() => {
+    if (!hit || !firstHitRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      firstHitRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [hit]);
+
   if (textQuery.isLoading) {
     return (
       <div className="mx-auto grid min-h-[520px] w-full max-w-[860px] place-items-center rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.18)]">
@@ -1705,6 +1727,18 @@ function AssetTextPreview({ item }: { item: PreviewSegment }) {
     return <ErrorBlock message={textQuery.error instanceof Error ? textQuery.error.message : "文件内容加载失败"} />;
   }
 
+  // Emit alternating plain/highlighted slices so every matched stretch gets its own box.
+  const pieces: Array<{ text: string; cited: boolean }> = [];
+  let cursor = 0;
+  for (const range of hit?.ranges ?? []) {
+    if (range.start > cursor) {
+      pieces.push({ text: fullText.slice(cursor, range.start), cited: false });
+    }
+    pieces.push({ text: fullText.slice(range.start, range.end), cited: true });
+    cursor = range.end;
+  }
+  if (cursor < fullText.length) pieces.push({ text: fullText.slice(cursor), cited: false });
+
   return (
     <article className={`${styles.reveal} mx-auto min-h-[820px] w-full max-w-[860px] overflow-hidden rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.18)]`}>
       <header className="grid grid-cols-[1fr_auto] items-start gap-5 border-b border-black/10 px-[52px] pb-6 pt-12 max-[500px]:grid-cols-1 max-[860px]:px-6">
@@ -1715,9 +1749,26 @@ function AssetTextPreview({ item }: { item: PreviewSegment }) {
           {getPreviewType(item)}
         </span>
       </header>
-      <pre className="m-0 whitespace-pre-wrap break-words px-[52px] pb-[58px] pt-[34px] font-mono text-[14px] leading-[1.85] text-[#303841] max-[860px]:px-6">
-        {textQuery.data || "当前文档为空。"}
-      </pre>
+      <div className="whitespace-pre-wrap break-words px-[52px] pb-[58px] pt-[34px] font-mono text-[14px] leading-[1.85] text-[#303841] max-[860px]:px-6">
+        {fullText ? (
+          pieces.map((piece, index) => (
+            piece.cited ? (
+              <span
+                key={index}
+                ref={index === 0 || !pieces.slice(0, index).some((p) => p.cited) ? firstHitRef : undefined}
+                data-citation-bbox={pieces.slice(0, index).some((p) => p.cited) ? undefined : ""}
+                className={`${styles.bboxLock} box-decoration-clone`}
+              >
+                {piece.text}
+              </span>
+            ) : (
+              <span key={index}>{piece.text}</span>
+            )
+          ))
+        ) : (
+          "当前文档为空。"
+        )}
+      </div>
     </article>
   );
 }
@@ -1817,6 +1868,132 @@ function bboxToRect(bbox: PreviewBBox, pageHeightPt: number, scaleX: number, sca
   };
 }
 
+/**
+ * Finds where a cited segment sits inside the whole file.
+ *
+ * The stored segment may carry <em> markers, differing whitespace, or be a truncated excerpt, so
+ * an exact indexOf is unreliable. Try progressively looser matches and give up rather than
+ * highlighting the wrong paragraph: a missing highlight is a lesser fault than a false one.
+ */
+/**
+ * Locates the cited passage inside the whole file.
+ *
+ * A stored segment is not a verbatim slice of the file: the chunker joins several places, drops
+ * markdown, and reflows spacing. Matching the whole block therefore fails on real data. Instead
+ * every sentence is located on its own, and the highlight becomes the union of the ranges that
+ * were actually found, so the reader still sees which parts of the document the answer used.
+ *
+ * Returns null when nothing matches, which is better than highlighting the wrong paragraph.
+ */
+function locateCitedSegment(
+  fullText: string,
+  cited: string | undefined,
+): { ranges: Array<{ start: number; end: number }> } | null {
+  if (!fullText || !cited) return null;
+
+  const MARK = /<\/?[a-zA-Z][^>]*>|`{1,3}|\*{1,3}/g;
+
+  const strip = (text: string) => {
+    const chars: string[] = [];
+    const map: number[] = [];
+    let cursor = 0;
+    const copy = (from: number, to: number) => {
+      for (let index = from; index < to; index += 1) {
+        chars.push(text[index]);
+        map.push(index);
+      }
+    };
+    MARK.lastIndex = 0;
+    for (let match = MARK.exec(text); match; match = MARK.exec(text)) {
+      copy(cursor, match.index);
+      cursor = match.index + match[0].length;
+    }
+    copy(cursor, text.length);
+    return { text: chars.join(""), map };
+  };
+
+  /** Collapses whitespace; keeps each survivor's original index. */
+  const squash = (text: string, map: number[]) => {
+    const chars: string[] = [];
+    const kept: number[] = [];
+    let pendingSpace = false;
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+      if (/\s/.test(char)) {
+        pendingSpace = chars.length > 0;
+        continue;
+      }
+      if (pendingSpace) {
+        chars.push(" ");
+        kept.push(map[index]);
+        pendingSpace = false;
+      }
+      chars.push(char);
+      kept.push(map[index]);
+    }
+    return { text: chars.join(""), map: kept };
+  };
+
+  const fileSquashed = squash(strip(fullText).text, strip(fullText).map);
+  const haystack = fileSquashed.text;
+
+  /** Space-insensitive search: the chunker does not preserve spacing, so only compare glyphs. */
+  const findInFile = (piece: string): { start: number; end: number } | null => {
+    const squashedPiece = squash(strip(piece).text, strip(piece).map).text;
+    const needle = squashedPiece.replace(/ /g, "");
+    if (needle.length < 8) return null;
+
+    let searchFrom = 0;
+    while (searchFrom < haystack.length) {
+      const candidate = haystack.indexOf(needle[0], searchFrom);
+      if (candidate < 0) return null;
+      let matched = 0;
+      let cursor = candidate;
+      while (cursor < haystack.length && matched < needle.length) {
+        const char = haystack[cursor];
+        if (char !== " ") {
+          if (char !== needle[matched]) break;
+          matched += 1;
+        }
+        cursor += 1;
+      }
+      if (matched === needle.length) {
+        const start = fileSquashed.map[candidate];
+        const end = fileSquashed.map[cursor - 1] + 1;
+        if (start == null || end == null) return null;
+        return { start, end: Math.min(end, fullText.length) };
+      }
+      searchFrom = candidate + 1;
+    }
+    return null;
+  };
+
+  const pieces = cited
+    .split(/[。；\n]+/)
+    .map((piece) => piece.trim())
+    .filter((piece) => piece.length >= 12);
+
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const piece of pieces) {
+    const found = findInFile(piece);
+    if (found) ranges.push(found);
+  }
+  if (ranges.length === 0) return null;
+
+  ranges.sort((left, right) => left.start - right.start);
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const range of ranges) {
+    const last = merged[merged.length - 1];
+    // Merge ranges that touch; keeps the DOM to one box per continuous stretch.
+    if (last && range.start <= last.end + 2) {
+      last.end = Math.max(last.end, range.end);
+    } else {
+      merged.push({ ...range });
+    }
+  }
+  return { ranges: merged };
+}
+
 function renderEmText(text: string) {
   const parts = text.split(/(<em>.*?<\/em>)/gi);
 
@@ -1827,7 +2004,7 @@ function renderEmText(text: string) {
     }
 
     return (
-      <mark key={index} className="rounded-[4px] bg-amber-200 px-1 text-[#101214]">
+      <mark key={index} className="rounded-[2px] bg-[rgba(91,140,224,0.18)] px-1 text-[#101214]">
         {match[1]}
       </mark>
     );
