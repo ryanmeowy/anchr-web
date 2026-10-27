@@ -119,7 +119,7 @@ export function DemoClaimDialog() {
       {mode === "guide" ? (
         <>
           <h3 className="demo-bubble-title">想直接问它？</h3>
-          <p className="demo-bubble-text">浏览知识库免费。领取一枚演示令牌，就能提问和上传文档。</p>
+          <p className="demo-bubble-text">领取一枚演示令牌，就能提问和上传文档。</p>
           <p className="demo-bubble-meta">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
