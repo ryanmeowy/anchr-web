@@ -35,6 +35,7 @@ import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilitie
 import { ActionErrorNotice } from "@/components/shared/action-error-notice";
 import { FileTypeIcon, normalizeExtension } from "@/components/shared/file-type-icon";
 import {hasConfiguredAccessToken, apiClient, isAccessDeniedError} from "@/lib/api-client";
+import { useDemoToken } from "@/components/app/demo-token-context";
 import { formatFileSize, formatNumber, statusText } from "@/lib/format";
 import {
   isIngestionCreatePersistenceError,
@@ -78,6 +79,9 @@ export function ImportsPremiumPage({
   initialKbId?: string;
   initialTaskId?: string;
 }) {
+  // Creating an ingestion task is a billed call, so the rail's credit readout must move as soon
+  // as it is accepted rather than waiting for a reload.
+  const { refreshUsage } = useDemoToken();
   const queryClient = useQueryClient();
   const router = useRouter();
   const {
@@ -265,7 +269,10 @@ export function ImportsPremiumPage({
       try {
         const task = await submitPersistedIngestionCreate(
           () => prepareImportCreate(pending, request, Date.now() + IMPORT_OWNER_LEASE_MS),
-          () => apiClient.createIngestionTask(pending.kbId, request),
+          () => apiClient.createIngestionTask(pending.kbId, request).then((task) => {
+            void Promise.resolve().then(() => refreshUsage());
+            return task;
+          }),
           () => deleteUploadedFilesFromOss(stsToken, items),
         );
         return { task, confirming: false as const };

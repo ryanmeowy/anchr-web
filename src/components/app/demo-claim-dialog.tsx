@@ -63,7 +63,12 @@ export function DemoClaimDialog() {
           if (cancelled || startedRef.current) return;
           startedRef.current = true;
           init({
+            // SceneId is always required: the SDK uses it to sign each request. Dropping it and
+            // sending only EncryptedSceneId makes every call fail with
+            // "Specified signature is not matched with our calculation".
             SceneId: rawSceneId,
+            // In encryption mode the service additionally requires this token, and rejects the
+            // call with F022 when it is absent or cannot be decrypted.
             ...(encryptedSceneId ? { EncryptedSceneId: encryptedSceneId } : {}),
             mode: "popup",
             element: `#${ELEMENT_ID}`,

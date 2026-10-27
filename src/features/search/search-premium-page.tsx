@@ -37,6 +37,7 @@ import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilitie
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
 import { apiClient, hasConfiguredAccessToken, isAccessDeniedError } from "@/lib/api-client";
+import { useDemoToken } from "@/components/app/demo-token-context";
 import {
   consumeAssetScopeHandoff,
   readSearchAssetScope,
@@ -184,6 +185,8 @@ function clearSearchSessionState() {
 }
 
 export function SearchPremiumPage() {
+  // A search is billed, so the credit readout follows it without a reload.
+  const { refreshUsage } = useDemoToken();
   const router = useRouter();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const answerScrollRef = useRef<HTMLDivElement>(null);
@@ -309,8 +312,10 @@ export function SearchPremiumPage() {
   }, []);
 
   const searchMutation = useMutation<SearchTopNResponse, Error, SearchMutationVariables>({
-    mutationFn: (variables) =>
-      apiClient.searchKnowledgeBase({
+    mutationFn: (variables) => {
+      // Charged when the server accepts the call, so read the balance back at that moment.
+      void Promise.resolve().then(() => refreshUsage());
+      return apiClient.searchKnowledgeBase({
         query: variables.query,
         limit: variables.filters.limit,
         kbIds: variables.filters.assetScope?.kbId
@@ -321,7 +326,8 @@ export function SearchPremiumPage() {
         hitTypes: variables.filters.hitType.length ? variables.filters.hitType : undefined,
         dateRange: buildDateRange(variables.filters),
         withAnswer: variables.filters.withAnswer,
-      }),
+      });
+    },
     onSuccess: (data, variables) => {
       rememberAssetScopes((data.answer?.citations ?? []).map((citation) => ({
         assetId: citation.assetId,
