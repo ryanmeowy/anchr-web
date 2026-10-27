@@ -744,6 +744,9 @@ function PreviewContent({
 
         <div
           ref={previewScrollerRef}
+          // The text preview scrolls this element, not the window, so it needs to be findable
+          // from inside the rendered article.
+          data-preview-scroller=""
           className={[
             "min-h-0 min-w-0 p-8 max-[860px]:px-3.5 max-[860px]:py-[18px]",
             previewOverflow.horizontal ? "overflow-x-auto" : "overflow-x-hidden",
@@ -1719,19 +1722,45 @@ function AssetTextPreview({ item }: { item: PreviewSegment }) {
   // Arrive at the evidence rather than the document title, mirroring the PDF preview jumping to
   // the cited page.
   useEffect(() => {
-    if (!hit || !firstHitRef.current) return;
-    // Two passes: the first scroll brings the block into the viewport, which is when
-    // content-visibility measures it for real. The second corrects the offset that the
-    // placeholder height got wrong, so the highlight really ends up centred.
-    const first = window.requestAnimationFrame(() => {
-      firstHitRef.current?.scrollIntoView({ behavior: "auto", block: "center" });
-    });
-    const second = window.setTimeout(() => {
-      firstHitRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 180);
+    const root = blocksRootRef.current;
+    if (!hit || !root) return;
+
+    let cancelled = false;
+    const timers: number[] = [];
+
+    // Target the highlighted fragment itself, not its block: a block can be several hundred pixels
+    // tall, so centring the block leaves the outline pinned to the viewport edge.
+    //
+    // content-visibility only measures a block once it enters the viewport, so the first scroll
+    // works against estimated heights above it. Re-correcting a few frames later, with real
+    // heights, is what actually lands the outline in the middle.
+    const align = (behavior: ScrollBehavior) => {
+      if (cancelled) return;
+      const target = root.querySelector<HTMLElement>("[data-citation-bbox]");
+      if (!target) return;
+      const scroller = target.closest<HTMLElement>("[data-preview-scroller]") ?? null;
+      const scrollerRect = scroller?.getBoundingClientRect();
+      const rect = target.getBoundingClientRect();
+      const viewportTop = scrollerRect?.top ?? 0;
+      const viewportHeight = scrollerRect?.height ?? window.innerHeight;
+      const delta = rect.top + rect.height / 2 - (viewportTop + viewportHeight / 2);
+      if (Math.abs(delta) < 4) return;
+      if (scroller) {
+        scroller.scrollBy({ top: delta, behavior });
+      } else {
+        window.scrollBy({ top: delta, behavior });
+      }
+    };
+
+    const frame = window.requestAnimationFrame(() => align("auto"));
+    // Two correction passes: one after layout settles, one after the smooth scroll finishes.
+    timers.push(window.setTimeout(() => align("smooth"), 120));
+    timers.push(window.setTimeout(() => align("auto"), 420));
+
     return () => {
-      window.cancelAnimationFrame(first);
-      window.clearTimeout(second);
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+      timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [hit]);
 
