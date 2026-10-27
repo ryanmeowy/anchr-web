@@ -42,9 +42,11 @@ export function DemoTokenButton() {
 
   const now = useTick(claimed && Boolean(usage?.expiresAt));
 
-  const totalMs = 5 * 60 * 60 * 1000;
   const left = usage?.expiresAt && now ? Math.max(0, usage.expiresAt - now) : 0;
-  const progress = usage?.expiresAt ? Math.max(0, Math.min(1, left / totalMs)) : 0;
+  // The ring tracks credits, not time: each question visibly eats a slice, which is the thing
+  // the visitor is spending. Expiry still shows in the bubble's countdown.
+  const quota = usage?.quota ?? 0;
+  const progress = quota > 0 ? Math.max(0, Math.min(1, (remaining ?? 0) / quota)) : 0;
 
   const label = state === "claimed"
     ? `演示令牌，剩余 ${remaining ?? 0} 次，${formatLeft(left)} 后过期`
