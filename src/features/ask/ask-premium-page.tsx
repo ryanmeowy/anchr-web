@@ -79,7 +79,8 @@ import { recoverTraditionalTurn } from "@/features/ask/traditional-turn-recovery
 import { useConversationAnswerStatus } from "@/features/ask/use-conversation-answer-status";
 import { TurnMaterialPicker } from "@/features/ask/turn-material-picker";
 import { resolveTurnMaterialScope, toggleTurnMaterial } from "@/features/ask/turn-material-scope";
-import {hasConfiguredAccessToken, ApiError, apiClient, getConfiguredAccessToken, isAccessDeniedError} from "@/lib/api-client";
+import { ApiError, apiClient, getConfiguredAccessToken, hasConfiguredAccessToken, isAccessDeniedError } from "@/lib/api-client";
+import { useDemoToken } from "@/components/app/demo-token-context";
 import {
   consumeAssetScopeHandoff,
   readAskAssetScope,
@@ -361,6 +362,9 @@ function isTerminalConversationTurn(turn: ConversationTurn) {
 }
 
 export function AskPremiumPage() {
+  // A billable call changes the caller's credit balance; refresh the readout so the rail gauge
+  // moves immediately instead of waiting for a reload.
+  const { refreshUsage } = useDemoToken();
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -2777,6 +2781,9 @@ export function AskPremiumPage() {
         totalTimeoutMs: TRADITIONAL_RECOVERY_TOTAL_TIMEOUT_MS,
       });
 
+      // The charge happens when the request is accepted, not when the answer finishes, so read
+      // the balance back now rather than at the end of the stream.
+      void Promise.resolve().then(() => refreshUsage());
       const streamRequest = apiClient.sendMessageStream(
         targetSessionId,
         {
