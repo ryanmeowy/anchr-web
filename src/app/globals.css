@@ -4190,7 +4190,10 @@ a {
   transform: none;
 }
 
-.preview-premium-page[data-premium-theme="dark"] .preview-pdf-canvas {
+/* A text file is the same thing as a PDF here: a white page on a dark canvas. Without the same
+   dimming it glares against the surrounding UI. */
+.preview-premium-page[data-premium-theme="dark"] .preview-pdf-canvas,
+.preview-premium-page[data-premium-theme="dark"] .preview-text-page {
   filter: brightness(0.82) contrast(0.92) sepia(0.1) saturate(0.84);
 }
 

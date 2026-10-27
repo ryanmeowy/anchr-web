@@ -1658,7 +1658,7 @@ function TextPreview({ item, citationIndex }: { item: PreviewSegment; citationIn
   const content = item.content || item.ocrSummary || item.title || "当前片段暂无可展示文本。";
 
   return (
-    <article className={`${styles.reveal} mx-auto min-h-[820px] w-full max-w-[760px] overflow-hidden rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.18)]`}>
+    <article className={`${styles.reveal} preview-text-page mx-auto min-h-[820px] w-full max-w-[760px] overflow-hidden rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.18)]`}>
       <header className="grid grid-cols-[1fr_auto] items-start gap-5 border-b border-black/10 px-[52px] pb-6 pt-12 max-[500px]:grid-cols-1 max-[860px]:px-6">
         <h2 className="m-0 text-[clamp(30px,4vw,62px)] font-black leading-[0.95] text-[#101214]">
           {item.title ?? item.fileName ?? "文档片段"}
@@ -1802,7 +1802,7 @@ function AssetTextPreview({ item }: { item: PreviewSegment }) {
   const highlightRanges = hit?.ranges ?? [];
 
   return (
-    <article className={`${styles.reveal} mx-auto min-h-[820px] w-full max-w-[860px] overflow-hidden rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.18)]`}>
+    <article className={`${styles.reveal} preview-text-page mx-auto min-h-[820px] w-full max-w-[860px] overflow-hidden rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.18)]`}>
       <header className="grid grid-cols-[1fr_auto] items-start gap-5 border-b border-black/10 px-[52px] pb-6 pt-12 max-[500px]:grid-cols-1 max-[860px]:px-6">
         <h2 className="m-0 break-words text-[clamp(30px,4vw,62px)] font-black leading-[0.95] text-[#101214]">
           {item.title ?? item.fileName ?? "文档"}
