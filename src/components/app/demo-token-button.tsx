@@ -57,14 +57,15 @@ export function DemoTokenButton() {
           aria-label="领取演示令牌"
           title={closed ? "演示环境暂时关闭" : "领取演示令牌"}
           className={[
-            "demo-claim-cta flex min-h-[52px] w-10 shrink-0 flex-col items-center justify-center gap-1 rounded-[8px] border text-[9px] font-bold leading-none transition",
+            // A circle, because it is the only round control in a rail of 8px-squared icons:
+            // the shape alone sets it apart from navigation without needing to shout.
+            "demo-claim-cta grid size-10 shrink-0 place-items-center rounded-full text-[10px] font-black leading-none transition",
             closed
-              ? "border-white/12 bg-transparent text-white/30"
-              : "border-white bg-white text-[#111315] hover:bg-white/90",
+              ? "cursor-not-allowed border border-white/12 bg-transparent text-white/30"
+              : "demo-claim-cta-on bg-gradient-to-b from-[#d9ffab] to-[#b8f262] text-[#12160c] hover:brightness-105",
           ].join(" ")}
         >
-          <span className="demo-claim-cta-icon text-[15px] leading-none" aria-hidden="true">⚡</span>
-          <span className="whitespace-nowrap">{closed ? "已关闭" : "领取"}</span>
+          {closed ? "关闭" : "Demo"}
         </button>
 
         {showHint && !closed && typeof document !== "undefined"
