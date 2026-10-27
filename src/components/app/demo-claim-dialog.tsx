@@ -41,8 +41,10 @@ export function DemoClaimDialog() {
   const exhausted = claimed && remaining === 0;
   const busy = phase.kind === "verifying" || claiming;
 
-  // The check is only needed while the guide pane is showing and the visitor has not claimed.
-  const needsCheck = dialogOpen && !claimed && phase.kind !== "closed";
+  // Needed whenever the visitor still has something to claim: never claimed, or claimed but out
+  // of credits. Keying only on `!claimed` left the exhausted pane's button disabled forever,
+  // because the widget it waits on was never initialised.
+  const needsCheck = dialogOpen && (!claimed || exhausted) && phase.kind !== "closed";
 
   useEffect(() => {
     if (!needsCheck || !rawSceneId) return;
