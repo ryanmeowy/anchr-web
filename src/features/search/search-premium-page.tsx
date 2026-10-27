@@ -36,7 +36,7 @@ import { PremiumRail } from "@/components/app/premium-rail";
 import { PremiumHeaderUtilities } from "@/components/app/premium-header-utilities";
 import { AssetScopeChip } from "@/components/shared/asset-scope-chip";
 import { TransientNotice } from "@/components/shared/transient-notice";
-import {hasConfiguredAccessToken, apiClient} from "@/lib/api-client";
+import { apiClient, hasConfiguredAccessToken, isAccessDeniedError } from "@/lib/api-client";
 import {
   consumeAssetScopeHandoff,
   readSearchAssetScope,
@@ -706,7 +706,15 @@ export function SearchPremiumPage() {
                     />
 
                     {searchMutation.error ? (
-                      <SearchErrorState message={searchMutation.error.message || "请稍后重新搜索。"} />
+                      <SearchErrorState
+                        message={
+                          // A guest can browse but cannot search: say what to do instead of
+                          // echoing the backend's English "Insufficient role permissions".
+                          isAccessDeniedError(searchMutation.error)
+                            ? "搜索需要演示令牌。点击侧边栏的演示按钮领取后即可使用。"
+                            : searchMutation.error.message || "请稍后重新搜索。"
+                        }
+                      />
                     ) : isSearching ? (
                       <SearchLoadingState />
                     ) : !hasSearched ? (
