@@ -105,3 +105,11 @@
     animation-iteration-count: 1;
   }
 }
+
+/* Long text files: let the browser skip layout and paint for blocks far from the viewport.
+   contain-intrinsic-size keeps the scrollbar honest so the reader is not jumped around while
+   scrolling into not-yet-measured content. */
+.previewTextBlock {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}

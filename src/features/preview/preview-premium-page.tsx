@@ -914,8 +914,11 @@ function CitationSidebar({
       {canNavigateCitations ? (
         <SidePanel>
           <PanelLabel
-            label="ADJACENT CITATIONS"
-            value={`${currentCitationPosition + 1} / ${documentChunks.length}`}
+            // "Adjacent" implied neighbouring passages of the same document, but these chunks can
+            // come from different files: one answer routinely cites several documents. Naming it
+            // after the evidence makes the count mean what it is.
+            label="EVIDENCE NAVIGATION"
+            value={`证据 ${currentCitationPosition + 1} / ${documentChunks.length}`}
           />
           <div className="mt-3.5 grid grid-cols-2 gap-2.5">
             <CitationNavigationButton
@@ -1050,7 +1053,7 @@ function CitationNavigationButton({
   onSelect: (chunk: CitationChunk) => void;
 }) {
   const isPrevious = direction === "previous";
-  const label = isPrevious ? "上一处引用" : "下一处引用";
+  const label = isPrevious ? "上一处证据" : "下一处证据";
   const pageNo = chunk?.pageNo ?? chunk?.anchor?.pageNo;
 
   return (
@@ -1071,8 +1074,11 @@ function CitationNavigationButton({
           <strong className="truncate text-xs text-[var(--premium-ink)]">
             {stripEmTags(chunk.snippet ?? chunk.content ?? "引用位置")}
           </strong>
-          <span className="text-[10px] font-bold text-[var(--premium-muted)]">
-            {pageNo ? `第 ${pageNo} 页` : "页码未知"}
+          <span className="truncate text-[10px] font-bold text-[var(--premium-muted)]">
+            {/* The jump may land in another file; say which one before it happens. */}
+            {/* The jump may land in another file; name its document before it happens. The
+                payload carries no fileName, so the title stands in for it. */}
+            {[chunk.title, pageNo ? `第 ${pageNo} 页` : null].filter(Boolean).join(" · ") || "页码未知"}
           </span>
         </span>
       ) : (
@@ -1699,21 +1705,64 @@ function AssetTextPreview({ item }: { item: PreviewSegment }) {
   });
 
   const fullText = textQuery.data ?? "";
-  // The cited segment is a substring of the file. Locating it lets the whole document show while
-  // still marking exactly what the answer used, which is what a PDF preview already does with a
-  // bbox rectangle.
+
+  // Split on blank lines so each block can be virtualised by the browser. A 10 MB text file
+  // rendered as one node stalls the tab; content-visibility skips layout and paint for blocks
+  // that are off screen, which is the PDF preview's per-page trick without the bookkeeping.
+  const blocks = useMemo(() => buildTextBlocks(fullText), [fullText]);
+
   const hit = useMemo(() => locateCitedSegment(fullText, item.content), [fullText, item.content]);
-  const firstHitRef = useRef<HTMLDivElement | null>(null);
+  const hitBlockIndex = useMemo(() => {
+    if (!hit || hit.ranges.length === 0) return -1;
+    const firstStart = hit.ranges[0].start;
+    return blocks.findIndex((block) => firstStart >= block.start && firstStart < block.end);
+  }, [blocks, hit]);
+
+  const firstHitRef = useRef<HTMLElement | null>(null);
+  const [visibleBlock, setVisibleBlock] = useState(0);
+  const blocksRootRef = useRef<HTMLDivElement | null>(null);
 
   // Arrive at the evidence rather than the document title, mirroring the PDF preview jumping to
   // the cited page.
   useEffect(() => {
     if (!hit || !firstHitRef.current) return;
-    const frame = window.requestAnimationFrame(() => {
-      firstHitRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Two passes: the first scroll brings the block into the viewport, which is when
+    // content-visibility measures it for real. The second corrects the offset that the
+    // placeholder height got wrong, so the highlight really ends up centred.
+    const first = window.requestAnimationFrame(() => {
+      firstHitRef.current?.scrollIntoView({ behavior: "auto", block: "center" });
     });
-    return () => window.cancelAnimationFrame(frame);
+    const second = window.setTimeout(() => {
+      firstHitRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 180);
+    return () => {
+      window.cancelAnimationFrame(first);
+      window.clearTimeout(second);
+    };
   }, [hit]);
+
+  // Which block the reader is on, so long files show position the way a PDF shows a page number.
+  useEffect(() => {
+    const root = blocksRootRef.current;
+    if (!root || blocks.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let bestIndex = -1;
+        let bestRatio = 0;
+        entries.forEach((entry) => {
+          const index = Number((entry.target as HTMLElement).dataset.textBlock);
+          if (Number.isFinite(index) && entry.intersectionRatio > bestRatio) {
+            bestRatio = entry.intersectionRatio;
+            bestIndex = index;
+          }
+        });
+        if (bestIndex >= 0) setVisibleBlock(bestIndex);
+      },
+      { threshold: [0, 0.25, 0.5, 0.75, 1] },
+    );
+    root.querySelectorAll<HTMLElement>("[data-text-block]").forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [blocks]);
 
   if (textQuery.isLoading) {
     return (
@@ -1727,17 +1776,7 @@ function AssetTextPreview({ item }: { item: PreviewSegment }) {
     return <ErrorBlock message={textQuery.error instanceof Error ? textQuery.error.message : "文件内容加载失败"} />;
   }
 
-  // Emit alternating plain/highlighted slices so every matched stretch gets its own box.
-  const pieces: Array<{ text: string; cited: boolean }> = [];
-  let cursor = 0;
-  for (const range of hit?.ranges ?? []) {
-    if (range.start > cursor) {
-      pieces.push({ text: fullText.slice(cursor, range.start), cited: false });
-    }
-    pieces.push({ text: fullText.slice(range.start, range.end), cited: true });
-    cursor = range.end;
-  }
-  if (cursor < fullText.length) pieces.push({ text: fullText.slice(cursor), cited: false });
+  const highlightRanges = hit?.ranges ?? [];
 
   return (
     <article className={`${styles.reveal} mx-auto min-h-[820px] w-full max-w-[860px] overflow-hidden rounded-[8px] border border-black/10 bg-white shadow-[0_28px_90px_rgba(16,18,20,0.18)]`}>
@@ -1749,21 +1788,26 @@ function AssetTextPreview({ item }: { item: PreviewSegment }) {
           {getPreviewType(item)}
         </span>
       </header>
-      <div className="whitespace-pre-wrap break-words px-[52px] pb-[58px] pt-[34px] font-mono text-[14px] leading-[1.85] text-[#303841] max-[860px]:px-6">
-        {fullText ? (
-          pieces.map((piece, index) => (
-            piece.cited ? (
-              <span
-                key={index}
-                ref={index === 0 || !pieces.slice(0, index).some((p) => p.cited) ? firstHitRef : undefined}
-                data-citation-bbox={pieces.slice(0, index).some((p) => p.cited) ? undefined : ""}
-                className={`${styles.bboxLock} box-decoration-clone`}
-              >
-                {piece.text}
-              </span>
-            ) : (
-              <span key={index}>{piece.text}</span>
-            )
+      {blocks.length > 0 ? (
+        <p className="m-0 border-b border-black/5 px-[52px] py-2 text-[11px] font-bold text-[#7a848d] max-[860px]:px-6">
+          位置 {visibleBlock + 1} / {blocks.length}
+          {hitBlockIndex >= 0 ? ` · 命中第 ${hitBlockIndex + 1} 段` : ""}
+        </p>
+      ) : null}
+      <div
+        ref={blocksRootRef}
+        className="whitespace-pre-wrap break-words px-[52px] pb-[58px] pt-[34px] font-mono text-[14px] leading-[1.85] text-[#303841] max-[860px]:px-6"
+      >
+        {blocks.length > 0 ? (
+          blocks.map((block, index) => (
+            <section
+              key={block.start}
+              data-text-block={index}
+              ref={index === hitBlockIndex ? firstHitRef : undefined}
+              className={styles.previewTextBlock}
+            >
+              {renderBlockWithHighlights(fullText, block, highlightRanges)}
+            </section>
           ))
         ) : (
           "当前文档为空。"
@@ -1771,6 +1815,65 @@ function AssetTextPreview({ item }: { item: PreviewSegment }) {
       </div>
     </article>
   );
+}
+
+/**
+ * Splits the file into blank-line separated blocks, keeping absolute offsets so highlight ranges
+ * can be mapped onto them. Falls back to fixed-size chunks when a file has no blank lines.
+ */
+function buildTextBlocks(text: string): Array<{ start: number; end: number }> {
+  if (!text) return [];
+  const blocks: Array<{ start: number; end: number }> = [];
+  const separator = /\n\s*\n/g;
+  let cursor = 0;
+  for (let match = separator.exec(text); match; match = separator.exec(text)) {
+    const end = match.index + match[0].length;
+    blocks.push({ start: cursor, end });
+    cursor = end;
+  }
+  if (cursor < text.length) blocks.push({ start: cursor, end: text.length });
+
+  // A file with no paragraph breaks would still be one giant node; slice it instead.
+  const MAX_BLOCK = 4000;
+  const bounded: Array<{ start: number; end: number }> = [];
+  for (const block of blocks) {
+    for (let offset = block.start; offset < block.end; offset += MAX_BLOCK) {
+      bounded.push({ start: offset, end: Math.min(offset + MAX_BLOCK, block.end) });
+    }
+  }
+  return bounded;
+}
+
+/** Renders one block, wrapping any overlapping highlight range in the bbox outline. */
+function renderBlockWithHighlights(
+  fullText: string,
+  block: { start: number; end: number },
+  ranges: Array<{ start: number; end: number }>,
+) {
+  const overlaps = ranges.filter((range) => range.end > block.start && range.start < block.end);
+  if (overlaps.length === 0) {
+    return fullText.slice(block.start, block.end);
+  }
+
+  const nodes: React.ReactNode[] = [];
+  let cursor = block.start;
+  for (const range of overlaps) {
+    const from = Math.max(range.start, block.start);
+    const to = Math.min(range.end, block.end);
+    if (from > cursor) nodes.push(fullText.slice(cursor, from));
+    nodes.push(
+      <span
+        key={`${from}-${to}`}
+        data-citation-bbox={nodes.length === 0 ? "" : undefined}
+        className={`${styles.bboxLock} box-decoration-clone`}
+      >
+        {fullText.slice(from, to)}
+      </span>,
+    );
+    cursor = to;
+  }
+  if (cursor < block.end) nodes.push(fullText.slice(cursor, block.end));
+  return nodes;
 }
 
 function ToolButton({
