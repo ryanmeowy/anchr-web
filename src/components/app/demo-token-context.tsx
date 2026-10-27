@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
   useSyncExternalStore,
 } from "react";
 import {
@@ -81,6 +82,7 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
   const [usage, setUsage] = useState<DemoUsage | null>(null);
   const [phase, setPhase] = useState<DemoPhase>({ kind: "idle" });
   const [dialogOpen, setDialogOpen] = useState(false);
+  const autoOpenedRef = useRef(false);
 
   const loadUsage = useCallback(() => {
     // Usage is a claimed-token concept; a guest token has no credits and the endpoint requires
@@ -101,6 +103,16 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadUsage();
   }, [loadUsage]);
+
+  // Show the guide once per mount for an unclaimed visitor; dismissing it is respected until the
+  // next visit, which is what the design asks for.
+  useEffect(() => {
+    if (autoOpenedRef.current || !statusLoaded) return;
+    if (role === "ADMIN" || role === "USER") return;
+    autoOpenedRef.current = true;
+    // Deferred: opening synchronously inside the effect cascades renders.
+    queueMicrotask(() => setDialogOpen(true));
+  }, [statusLoaded, role]);
 
   /**
    * A visitor gets a read-only GUEST token on arrival, so browsing never hits a 401 and never

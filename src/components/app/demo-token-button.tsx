@@ -1,143 +1,102 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useDemoToken } from "@/components/app/demo-token-context";
 
-function useCountdown(expiresAt?: number) {
-  const [now, setNow] = useState(() => Date.now());
+const CIRCUMFERENCE = 2 * Math.PI * 18;
+
+function formatLeft(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function useTick(active: boolean) {
+  const [now, setNow] = useState(0);
   useEffect(() => {
-    if (!expiresAt) return;
+    if (!active) return;
+    const id = window.setTimeout(() => setNow(Date.now()), 0);
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [expiresAt]);
-  if (!expiresAt) return "";
-  const left = Math.max(0, expiresAt - now);
-  const hours = Math.floor(left / 3_600_000);
-  const minutes = Math.floor((left % 3_600_000) / 60_000);
-  const seconds = Math.floor((left % 60_000) / 1000);
-  if (left === 0) return "已过期";
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
-    : `${minutes}:${String(seconds).padStart(2, "0")}`;
+    return () => {
+      window.clearTimeout(id);
+      window.clearInterval(timer);
+    };
+  }, [active]);
+  return now;
 }
 
 /**
- * Sidebar entry point for the demo token.
+ * The rail's demo instrument: a ticket glyph before claiming, a credits gauge after.
  *
- * Unclaimed: a call to action in the page's own palette, with a hint that reappears on every
- * visit because the point is to be noticed, not to be dismissed forever.
- * Claimed: a compact readout of credits left and time remaining.
+ * The gauge ring doubles as a countdown, so remaining credits and remaining time are readable
+ * without opening anything. The bubble this button opens owns the whole flow.
  */
 export function DemoTokenButton() {
-  const { role, usage, openDialog, phase } = useDemoToken();
-  // Every visitor holds a read-only guest token, so "has a token" is no longer the question:
-  // only a claimed USER token unlocks asking and uploading.
+  const { role, usage, dialogOpen, openDialog, closeDialog } = useDemoToken();
   const claimed = role === "ADMIN" || role === "USER";
-  const countdown = useCountdown(usage?.expiresAt);
-  const [hintDismissed, setHintDismissed] = useState(false);
+  const remaining = usage?.remaining ?? null;
+  const exhausted = claimed && remaining === 0;
+  const state = !claimed ? "unclaimed" : exhausted ? "exhausted" : "claimed";
 
-  // Deliberately not remembered: unclaimed visitors should be told on every visit that asking
-  // and uploading need a token, because that is the only way in and it is easy to miss.
-  const showHint = !claimed && !hintDismissed;
+  const now = useTick(claimed && Boolean(usage?.expiresAt));
 
-  const dismissHint = () => setHintDismissed(true);
+  const totalMs = 5 * 60 * 60 * 1000;
+  const left = usage?.expiresAt && now ? Math.max(0, usage.expiresAt - now) : 0;
+  const progress = usage?.expiresAt ? Math.max(0, Math.min(1, left / totalMs)) : 0;
 
-  if (!claimed) {
-    const closed = phase.kind === "closed";
-    return (
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => {
-            dismissHint();
-            openDialog();
-          }}
-          disabled={closed}
-          aria-label="领取演示令牌"
-          title={closed ? "演示环境暂时关闭" : "领取演示令牌"}
-          className={[
-            // A circle, because it is the only round control in a rail of 8px-squared icons:
-            // the shape alone sets it apart from navigation without needing to shout.
-            "demo-claim-cta grid size-10 shrink-0 place-items-center rounded-full text-[10px] font-black leading-none transition",
-            closed
-              ? "cursor-not-allowed border border-white/12 bg-transparent text-white/30"
-              : "demo-claim-cta-on bg-gradient-to-b from-[#d9ffab] to-[#b8f262] text-[#12160c] hover:brightness-105",
-          ].join(" ")}
-        >
-          {closed ? "关闭" : "Demo"}
-        </button>
+  const label = state === "claimed"
+    ? `演示令牌，剩余 ${remaining ?? 0} 次，${formatLeft(left)} 后过期`
+    : state === "exhausted"
+      ? "演示令牌已用完，重新领取"
+      : "领取演示令牌";
 
-        {showHint && !closed && typeof document !== "undefined"
-          ? createPortal(
-              <div
-                role="status"
-                className="demo-claim-hint fixed bottom-[84px] left-[68px] z-[60] w-[264px] rounded-[10px] border border-white/12 bg-[#181b1e] p-4 text-white shadow-[0_18px_48px_rgba(0,0,0,0.5)]"
-              >
-                <p className="text-[13px] font-black leading-tight text-white">解锁提问与上传</p>
-                <p className="mt-1.5 text-[11px] leading-relaxed text-white/60">
-                  领取演示令牌后可提问、上传文档。现在可以自由浏览知识库。
-                </p>
-                <div className="mt-3 flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      dismissHint();
-                      openDialog();
-                    }}
-                    className="rounded-[6px] bg-white px-3 py-1.5 text-[11px] font-black text-[#111315] transition hover:bg-white/90"
-                  >
-                    立即领取
-                  </button>
-                  <button
-                    type="button"
-                    onClick={dismissHint}
-                    className="text-[10px] text-white/40 underline hover:text-white/70"
-                  >
-                    稍后
-                  </button>
-                </div>
-              </div>,
-              document.body,
-            )
-          : null}
-      </div>
-    );
-  }
-
-  const remaining = usage?.remaining;
-  const empty = remaining === 0;
   return (
-    <div
-      className={[
-        "flex min-h-11 w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-[8px] border text-[8px] font-bold leading-none transition",
-        empty
-          ? "border-rose-400/30 bg-rose-500/10 text-rose-300"
-          : "border-white/15 bg-white/6 text-white/75",
-      ].join(" ")}
-      title={empty
-        ? "试用次数已用完，点击重新领取"
-        : `剩余 ${remaining ?? "?"} 次 · 剩余时间 ${countdown}`}
-      aria-label={empty
-        ? "试用次数已用完，点击重新领取"
-        : `剩余 ${remaining ?? "?"} 次，剩余时间 ${countdown}`}
-    >
-      {empty ? (
-        <button
-          type="button"
-          onClick={openDialog}
-          className="grid place-items-center gap-0.5"
-          aria-label="重新领取演示令牌"
-        >
-          <span className="text-[13px] leading-none" aria-hidden="true">↻</span>
-          <span className="whitespace-nowrap">重领</span>
-        </button>
-      ) : (
-        <>
-          <span className="text-[11px] leading-none tabular-nums text-white">{remaining ?? "–"}</span>
-          <span className="whitespace-nowrap tabular-nums text-white/45">{countdown || "–"}</span>
-        </>
-      )}
+    <div className="rail-demo">
+      <button
+        type="button"
+        className="demo-btn"
+        data-state={state}
+        aria-label={label}
+        aria-expanded={dialogOpen}
+        title={label}
+        onClick={() => (dialogOpen ? closeDialog() : openDialog())}
+      >
+        {state === "unclaimed" ? (
+          <span className="demo-face face-unclaimed" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z" />
+              <path d="M13 5v2" /><path d="M13 11v2" /><path d="M13 17v2" />
+            </svg>
+            <span className="demo-alert-dot" />
+          </span>
+        ) : null}
+
+        {state === "claimed" ? (
+          <span className="demo-face face-claimed" aria-hidden="true">
+            <svg className="demo-gauge" viewBox="0 0 40 40">
+              <circle className="demo-gauge-track" cx="20" cy="20" r="18" />
+              <circle className="demo-gauge-fill" cx="20" cy="20" r="18"
+                style={{ strokeDashoffset: String(CIRCUMFERENCE * (1 - progress)) }} />
+            </svg>
+            <span className="demo-count">{remaining ?? "–"}</span>
+            <span className="demo-unit">次</span>
+          </span>
+        ) : null}
+
+        {state === "exhausted" ? (
+          <span className="demo-face face-exhausted" aria-hidden="true">
+            <svg className="demo-gauge" viewBox="0 0 40 40">
+              <circle className="demo-gauge-track" cx="20" cy="20" r="18" />
+              <circle className="demo-gauge-alert" cx="20" cy="20" r="18" />
+            </svg>
+            <span className="demo-count">0</span>
+            <span className="demo-unit">次</span>
+          </span>
+        ) : null}
+      </button>
     </div>
   );
 }
