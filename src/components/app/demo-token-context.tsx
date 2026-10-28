@@ -30,17 +30,11 @@ export type DemoPhase =
   | { kind: "error"; reason: string };
 
 type DemoContextValue = {
-  /** No token yet: the visitor may still browse, but billable calls will fail. */
-  hasToken: boolean;
   role: string;
   status: DemoStatus | null;
-  statusLoaded: boolean;
   usage: DemoUsage | null;
   phase: DemoPhase;
   dialogOpen: boolean;
-  /** True once the entry human check has passed. Gates the workspace, not the claim. */
-  verifying: boolean;
-  sceneId: string | null;
   rawSceneId: string | null;
   encryptedSceneId: string | null;
   captchaPrefix: string | null;
@@ -52,7 +46,6 @@ type DemoContextValue = {
   /** Claims a token using the stored verification. */
   claim: (captchaVerifyParam: string) => Promise<void>;
   refreshUsage: () => void;
-  setPhase: (phase: DemoPhase) => void;
 };
 
 const DemoContext = createContext<DemoContextValue | null>(null);
@@ -246,15 +239,11 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
   }, [loadUsage]);
 
   const value = useMemo<DemoContextValue>(() => ({
-    hasToken: Boolean(token),
     role,
     status,
-    statusLoaded,
     usage,
     phase,
     dialogOpen,
-    verifying: phase.kind === "verifying",
-    sceneId: status?.sceneId ?? null,
     rawSceneId: status?.sceneId ?? null,
     encryptedSceneId: status?.encryptedSceneId ?? null,
     captchaPrefix: status?.prefix ?? null,
@@ -265,8 +254,7 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
     closeDialog,
     claim,
     refreshUsage: loadUsage,
-    setPhase,
-  }), [token, role, status, statusLoaded, usage, phase, dialogOpen, openDialog, closeDialog, claim, loadUsage]);
+  }), [role, status, usage, phase, dialogOpen, openDialog, closeDialog, claim, loadUsage]);
 
   return <DemoContext.Provider value={value}>{children}</DemoContext.Provider>;
 }
