@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useDemoToken } from "@/components/app/demo-token-context";
 import { loadAliyunCaptcha } from "@/lib/aliyun-captcha";
@@ -39,11 +39,13 @@ export function DemoClaimDialog() {
   const claimed = role === "ADMIN" || role === "USER";
 
   // The SDK instance is torn down with the overlay when the dialog closes, so the once-only
-  // guard has to be released too, or reopening the dialog would show a dead widget.
-  const handleClose = () => {
+  // guard and the readiness flag have to be released too, or reopening the dialog would show a
+  // widget that claims to be ready but is gone.
+  const handleClose = useCallback(() => {
     startedRef.current = false;
+    setReady(false);
     closeDialog();
-  };
+  }, [closeDialog]);
   const remaining = usage?.remaining ?? null;
   const exhausted = claimed && remaining === 0;
   const busy = phase.kind === "verifying" || claiming;

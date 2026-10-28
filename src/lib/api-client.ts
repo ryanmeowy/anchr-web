@@ -333,6 +333,9 @@ async function request<T>(path: string, options: RequestOptions = {}) {
   return payload.data;
 }
 
+/** In-flight expiry check, so a burst of 401s does not send one validation per failure. */
+let pendingExpiryCheck: Promise<void> | null = null;
+
 /**
  * Runs after an authentication error: re-validates the token before declaring it expired.
  *
@@ -344,17 +347,25 @@ async function confirmExpiry(candidateToken: string) {
     emitDemoExhausted("expired");
     return;
   }
-  try {
-    const result = await request<TokenValidationResult>("/api/v1/auth/validate-token", {
-      method: "GET",
-      token: candidateToken,
-      // The check must not recurse into its own failure handling.
-      skipExpirySignal: true,
-    });
-    if (!result?.valid) emitDemoExhausted("expired");
-  } catch {
-    // Inconclusive: leave the token in place and let the next call decide.
-  }
+  if (pendingExpiryCheck) return pendingExpiryCheck;
+
+  pendingExpiryCheck = (async () => {
+    try {
+      const result = await request<TokenValidationResult>("/api/v1/auth/validate-token", {
+        method: "GET",
+        token: candidateToken,
+        // The check must not recurse into its own failure handling.
+        skipExpirySignal: true,
+      });
+      if (!result?.valid) emitDemoExhausted("expired");
+    } catch {
+      // Inconclusive: leave the token in place and let the next call decide.
+    } finally {
+      pendingExpiryCheck = null;
+    }
+  })();
+
+  return pendingExpiryCheck;
 }
 
 function apiErrorFromPayload(

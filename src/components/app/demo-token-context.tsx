@@ -70,6 +70,20 @@ function getServerToken() {
   return "";
 }
 
+/**
+ * Removes the CAPTCHA SDK's own DOM.
+ *
+ * <p>The SDK appends a fixed-position overlay to <body>, outside React's tree, so unmounting our
+ * bubble leaves a full-screen layer that cannot be dismissed. Every path that hides the dialog
+ * has to run this, not just the close button.
+ */
+function removeCaptchaOverlay() {
+  if (typeof document === "undefined") return;
+  document
+    .querySelectorAll(".aliyunCaptcha-top, #aliyunCaptcha-window-popup")
+    .forEach((node) => node.remove());
+}
+
 export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
   const token = useSyncExternalStore(subscribe, getConfiguredAccessToken, getServerToken);
   const role = useSyncExternalStore(
@@ -167,6 +181,7 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
       setUsage(null);
       setPhase({ kind: "idle" });
       setDialogOpen(false);
+      removeCaptchaOverlay();
     };
     window.addEventListener(DEMO_EXHAUSTED_EVENT, onExhausted);
     return () => window.removeEventListener(DEMO_EXHAUSTED_EVENT, onExhausted);
@@ -191,12 +206,7 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
   const closeDialog = useCallback(() => {
     setDialogOpen(false);
     setPhase({ kind: "idle" });
-    // The CAPTCHA SDK appends its own fixed-position overlay to <body>, outside React's tree, so
-    // unmounting our bubble leaves a full-screen layer that cannot be dismissed. Drop it here;
-    // otherwise closing the dialog traps the visitor on a page they cannot click.
-    document
-      .querySelectorAll(".aliyunCaptcha-top, #aliyunCaptcha-window-popup")
-      .forEach((node) => node.remove());
+    removeCaptchaOverlay();
   }, []);
 
   /**
@@ -210,6 +220,7 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
       saveAccessToken(issued.token, issued.role);
       setDialogOpen(false);
       setPhase({ kind: "idle" });
+      removeCaptchaOverlay();
       loadUsage();
     } catch (error) {
       const code = (error as { code?: string }).code;
