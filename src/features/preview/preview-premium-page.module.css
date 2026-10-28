@@ -125,8 +125,10 @@
   outline-offset: 3px;
   background: rgba(91, 140, 224, 0.1);
   /* Block-level, so the ring encloses one rectangle instead of one box per line. The margin
-     keeps the offset outline from touching the prose above and below. */
-  margin: 6px 0;
+     reserves room for the offset outline on all four sides; without the horizontal part the
+     article's overflow:hidden (used for its own rounded corners) clips the ring away. */
+  margin: 6px 6px;
+  width: calc(100% - 12px);
   animation: previewPremiumBBoxInline 1000ms ease-in-out both;
 }
 

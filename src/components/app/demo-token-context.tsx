@@ -191,6 +191,12 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
   const closeDialog = useCallback(() => {
     setDialogOpen(false);
     setPhase({ kind: "idle" });
+    // The CAPTCHA SDK appends its own fixed-position overlay to <body>, outside React's tree, so
+    // unmounting our bubble leaves a full-screen layer that cannot be dismissed. Drop it here;
+    // otherwise closing the dialog traps the visitor on a page they cannot click.
+    document
+      .querySelectorAll(".aliyunCaptcha-top, #aliyunCaptcha-window-popup")
+      .forEach((node) => node.remove());
   }, []);
 
   /**
@@ -208,11 +214,16 @@ export function DemoTokenProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === "DEMO_QUOTA_EXHAUSTED") {
-        setPhase({ kind: "error", reason: "本次试用次数已用完，可再次领取。" });
+        // One token at a time: credits running out does not free the browser to claim again, so
+        // "claim another" would promise something the server refuses.
+        setPhase({ kind: "error", reason: "本次试用次数已用完，有效期结束后可重新领取。" });
       } else if (code === "DEMO_DAILY_LIMIT_REACHED") {
         setPhase({ kind: "closed", reason: "今日演示额度已用完，请明天再来。" });
       } else if (code === "DEMO_ISSUE_TOO_FREQUENT") {
         setPhase({ kind: "error", reason: "刚领取过凭证，请稍后再试。" });
+      } else if (code === "DEMO_TOKEN_STILL_ACTIVE") {
+        // The current token still has life in it; waiting a moment does not help, expiry does.
+        setPhase({ kind: "error", reason: "演示令牌仍然有效，有效期结束后即可重新领取。" });
       } else if (code === "DEMO_DISABLED") {
         setPhase({ kind: "closed", reason: "演示环境暂时关闭，请稍后再试。" });
       } else if (code === "DEMO_VERIFICATION_FAILED") {

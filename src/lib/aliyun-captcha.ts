@@ -75,9 +75,10 @@ export function loadAliyunCaptcha(region: string, prefix: string): Promise<void>
   loading = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(`script[src="${SDK_URL}"]`);
     if (existing) {
-      existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("captcha sdk failed")));
-      return;
+      // A tag that already failed will never fire load or error again, so attaching another
+      // listener would hang this promise forever and leave the retry button stuck on
+      // "preparing". Drop it and build a fresh one instead.
+      existing.remove();
     }
     const script = document.createElement("script");
     script.src = SDK_URL;
@@ -85,6 +86,9 @@ export function loadAliyunCaptcha(region: string, prefix: string): Promise<void>
     script.onload = () => resolve();
     script.onerror = () => {
       loading = null;
+      // Must also leave the DOM: without this the next attempt finds a dead tag and silently
+      // waits on events that already happened.
+      script.remove();
       reject(new Error("captcha sdk failed"));
     };
     document.head.appendChild(script);

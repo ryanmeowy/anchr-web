@@ -312,10 +312,8 @@ export function SearchPremiumPage() {
   }, []);
 
   const searchMutation = useMutation<SearchTopNResponse, Error, SearchMutationVariables>({
-    mutationFn: (variables) => {
-      // Charged when the server accepts the call, so read the balance back at that moment.
-      void Promise.resolve().then(() => refreshUsage());
-      return apiClient.searchKnowledgeBase({
+    mutationFn: (variables) =>
+      apiClient.searchKnowledgeBase({
         query: variables.query,
         limit: variables.filters.limit,
         kbIds: variables.filters.assetScope?.kbId
@@ -326,9 +324,10 @@ export function SearchPremiumPage() {
         hitTypes: variables.filters.hitType.length ? variables.filters.hitType : undefined,
         dateRange: buildDateRange(variables.filters),
         withAnswer: variables.filters.withAnswer,
-      });
-    },
+      }),
     onSuccess: (data, variables) => {
+      // Charge confirmed by the response; read the balance back now rather than before the call.
+      void Promise.resolve().then(() => refreshUsage());
       rememberAssetScopes((data.answer?.citations ?? []).map((citation) => ({
         assetId: citation.assetId,
         fileName: citation.fileName,

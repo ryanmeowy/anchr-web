@@ -2781,9 +2781,6 @@ export function AskPremiumPage() {
         totalTimeoutMs: TRADITIONAL_RECOVERY_TOTAL_TIMEOUT_MS,
       });
 
-      // The charge happens when the request is accepted, not when the answer finishes, so read
-      // the balance back now rather than at the end of the stream.
-      void Promise.resolve().then(() => refreshUsage());
       const streamRequest = apiClient.sendMessageStream(
         targetSessionId,
         {
@@ -2794,6 +2791,9 @@ export function AskPremiumPage() {
           agentEnabled: requestUsesAgent,
         },
         {
+          // The server charges when it accepts the request, so this is the first moment the
+          // balance reflects it. Reading before the call raced the write.
+          onResponse: () => { void refreshUsage(); },
           onTrace: (event) => {
             if (!isCurrentStream()) return;
             if (event.runId && streamRef.current) streamRef.current.runId = event.runId;

@@ -37,6 +37,13 @@ export function DemoClaimDialog() {
   }, []);
 
   const claimed = role === "ADMIN" || role === "USER";
+
+  // The SDK instance is torn down with the overlay when the dialog closes, so the once-only
+  // guard has to be released too, or reopening the dialog would show a dead widget.
+  const handleClose = () => {
+    startedRef.current = false;
+    closeDialog();
+  };
   const remaining = usage?.remaining ?? null;
   const exhausted = claimed && remaining === 0;
   const busy = phase.kind === "verifying" || claiming;
@@ -113,7 +120,7 @@ export function DemoClaimDialog() {
           <span className="demo-eyebrow-dot" aria-hidden="true" />
           演示令牌
         </span>
-        <button type="button" className="demo-bubble-close" onClick={closeDialog} aria-label="关闭">
+        <button type="button" className="demo-bubble-close" onClick={handleClose} aria-label="关闭">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="1.9" strokeLinecap="round" aria-hidden="true">
             <path d="M18 6 6 18" /><path d="m6 6 12 12" />
@@ -161,7 +168,7 @@ export function DemoClaimDialog() {
             >
               {busy ? "正在领取…" : ready ? "领取演示令牌" : "正在准备…"}
             </button>
-            <button type="button" className="demo-btn-quiet" onClick={closeDialog}>
+            <button type="button" className="demo-btn-quiet" onClick={handleClose}>
               先逛逛
             </button>
           </div>
@@ -179,10 +186,10 @@ export function DemoClaimDialog() {
           </p>
           <DemoTimebar expiresAt={usage?.expiresAt} now={now} />
           <div className="demo-bubble-actions">
-            <button type="button" className="demo-btn-primary" onClick={closeDialog}>
+            <button type="button" className="demo-btn-primary" onClick={handleClose}>
               开始提问
             </button>
-            <button type="button" className="demo-btn-quiet" onClick={closeDialog}>
+            <button type="button" className="demo-btn-quiet" onClick={handleClose}>
               收起
             </button>
           </div>
@@ -206,7 +213,7 @@ export function DemoClaimDialog() {
             剩余有效期 <span className="mono">{usage?.expiresAt && now ? formatLeft(usage.expiresAt - now) : "–"}</span>
           </p>
           <div className="demo-bubble-actions">
-            <button type="button" className="demo-btn-quiet" onClick={closeDialog}>
+            <button type="button" className="demo-btn-quiet" onClick={handleClose}>
               继续浏览
             </button>
           </div>

@@ -27,7 +27,6 @@ function getServerAccessToken() {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [authEpoch, setAuthEpoch] = useState(0);
   const authIdentity = useSyncExternalStore(
     subscribeAccessToken,
     getConfiguredAccessToken,
@@ -53,11 +52,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const resetAuthenticatedState = () => {
       void queryClient.cancelQueries();
-      queryClient.clear();
+      // Refetch instead of tearing the tree down. Remounting the workspace discarded whatever the
+      // visitor was typing, so a background token rotation looked like a crash.
+      void queryClient.invalidateQueries();
       clearAllAssetScopeState();
       clearAllPreviewNavigation();
       window.sessionStorage.removeItem("anchr.search.session-state.v1");
-      setAuthEpoch((current) => current + 1);
     };
     const handleStorage = (event: StorageEvent) => {
       if (event.key === ACCESS_TOKEN_STORAGE_KEY) {
@@ -77,7 +77,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <BackgroundTaskProvider
-        key={`${authEpoch}:${authIdentityKey ?? "pending"}`}
+        // Keyed on identity only: a token gaining or losing credits must not remount the tree.
+        key={authIdentityKey ?? "pending"}
         authIdentityKey={authIdentityKey}
       >
         <AnswerPresentationProvider>

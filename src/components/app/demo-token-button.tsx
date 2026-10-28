@@ -51,7 +51,7 @@ export function DemoTokenButton() {
   const label = state === "claimed"
     ? `演示令牌，剩余 ${remaining ?? 0} 次，${formatLeft(left)} 后过期`
     : state === "exhausted"
-      ? "演示令牌已用完，重新领取"
+      ? "额度已用完 · 有效期结束后可重新领取"
       : "领取演示令牌";
 
   return (

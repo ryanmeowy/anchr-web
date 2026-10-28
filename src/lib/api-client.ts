@@ -108,6 +108,8 @@ type RequestOptions = {
   token?: string | null;
   signal?: AbortSignal;
   cache?: RequestCache;
+  /** Set on the token re-validation call so a 401 there does not re-enter the expiry path. */
+  skipExpirySignal?: boolean;
 };
 
 export type AnswerStreamEvent = {
@@ -118,6 +120,12 @@ export type AnswerStreamEvent = {
 };
 
 type StreamMessageCallbacks = {
+  /**
+   * Fired once the server accepted the request, before any event arrives. Callers use it to read
+   * the credit balance back: that is the moment the charge lands, and reading earlier raced the
+   * write and showed the pre-charge number.
+   */
+  onResponse?: () => void;
   onTrace?: (event: { stage?: string; message?: string; runId?: string; turnId?: string; attempt?: number; answerMode?: ConversationAnswerMode | string; intentType?: ConversationIntentType; confidence?: number; details?: Record<string, unknown> }) => void;
   onDelta?: (event: AnswerStreamEvent) => void;
   onAnswerReset?: (event: AnswerStreamEvent) => void;
@@ -310,14 +318,43 @@ async function request<T>(path: string, options: RequestOptions = {}) {
 
   if (!response.ok || !payload || payload.code < 200 || payload.code >= 300) {
     const error = apiErrorFromPayload(payload, response.status, `请求失败：${response.status}`);
-    if (isDemoQuotaExhausted(error) || isAuthenticationError(error)) {
-      // The gate owns recovery, so it must hear about this without every caller knowing.
-      emitDemoExhausted(isDemoQuotaExhausted(error) ? "quota" : "expired");
+    if (isDemoQuotaExhausted(error)) {
+      emitDemoExhausted("quota");
+    } else if (isAuthenticationError(error) && !options.skipExpirySignal) {
+      // Not every 401 means the caller's token is dead: an endpoint can answer 401 for its own
+      // reasons, and a proxy can mangle one request. Clearing the token on the first 401 threw
+      // away the visitor's session — and with it any unsent draft — so confirm first and only
+      // report expiry when the token really no longer validates.
+      void confirmExpiry(token ?? "");
     }
     throw error;
   }
 
   return payload.data;
+}
+
+/**
+ * Runs after an authentication error: re-validates the token before declaring it expired.
+ *
+ * <p>Failures here are ignored — if the check itself cannot run, the next real request will
+ * surface the problem rather than the client tearing down a session on a guess.
+ */
+async function confirmExpiry(candidateToken: string) {
+  if (!candidateToken) {
+    emitDemoExhausted("expired");
+    return;
+  }
+  try {
+    const result = await request<TokenValidationResult>("/api/v1/auth/validate-token", {
+      method: "GET",
+      token: candidateToken,
+      // The check must not recurse into its own failure handling.
+      skipExpirySignal: true,
+    });
+    if (!result?.valid) emitDemoExhausted("expired");
+  } catch {
+    // Inconclusive: leave the token in place and let the next call decide.
+  }
 }
 
 function apiErrorFromPayload(
@@ -735,6 +772,7 @@ export const apiClient = {
       const payload = (await response.json().catch(() => null)) as ApiResult<null> | null;
       throw apiErrorFromPayload(payload, response.status, `请求失败：${response.status}`);
     }
+    callbacks.onResponse?.();
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
